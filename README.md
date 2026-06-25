@@ -86,7 +86,30 @@ npx http-server -p 8765
 
 部分浏览器限制 `file://` 协议的 localStorage 和 Service Worker，建议用 HTTP 协议。
 
-## 五、云端部署（CloudStudio）
+## 五、稳定部署（GitHub Pages）
+
+### 主访问地址（推荐）
+
+**访问链接**：https://wangdian19830925.github.io/wang-luo-finance/
+
+> 该地址由 GitHub Pages 托管，长期稳定，不会像 CloudStudio 沙箱那样被回收。
+>
+> 只要仓库存在，该 URL 就一直可用。
+
+### 部署方式
+
+每次更新代码后，推送到 GitHub 仓库即可自动部署：
+
+```bash
+cd /Users/wangdian/Workbuddy/2026-06-25-18-41-23/asset-management-tool
+git add .
+git commit -m "更新说明"
+git push origin main
+```
+
+GitHub Pages 会自动重新构建并发布新版本，通常 1-2 分钟内生效。
+
+## 六、云端部署（CloudStudio，备用）
 
 ### 当前在线版本
 
