@@ -51,6 +51,7 @@ const App = {
     this.setupNavigation();
     this.setupForms();
     this.loadExchangeRates();       // 先加载汇率（同步），确保 dashboard 使用正确汇率
+    this.loadTransactions();        // 先初始化现金账户默认值，确保 dashboard 计算总资产时包含现金
     this.loadDashboard();
     this.setTodayDates();
     this.checkImportStatus();
@@ -1913,6 +1914,12 @@ const App = {
 
   loadDashboard() {
     try {
+      // 确保现金账户已初始化，避免首次加载时总资产计算缺少现金
+      var cashAccounts = Storage.get(Storage.keys.cashAccounts);
+      if (!cashAccounts || cashAccounts.length === 0) {
+        this.initDefaultCashAccounts();
+      }
+
       var totalAsset = Storage.calcTotalAssets();
       var totalDebt = Storage.calcTotalDebts();
       var netWorth = Storage.calcNetWorth();
