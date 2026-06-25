@@ -1,0 +1,43 @@
+{
+  "fetchTime": "2026-06-25 15:55:44",
+  "stocks": {
+    "00992": {
+      "price": 23.9,
+      "currency": "HKD",
+      "name": "LENOVO GROUP",
+      "source": "sina"
+    },
+    "NIO": {
+      "price": 4.9,
+      "currency": "USD",
+      "name": "蔚来",
+      "source": "sina"
+    },
+    "689009": {
+      "price": 35.57,
+      "currency": "CNY",
+      "name": "九号公司",
+      "source": "sina"
+    }
+  },
+  "funds": {
+    "013126": {
+      "nav": 0.52,
+      "estNav": 0.5238,
+      "name": "华夏食品饮料ETF联接C",
+      "navDate": "2026-06-24",
+      "estTime": "2026-06-25 15:00",
+      "source": "tiantian"
+    }
+  },
+  "fxRates": {
+    "USDCNY": {
+      "rate": 6.8177,
+      "source": "er-api"
+    },
+    "HKDCNY": {
+      "rate": 0.8696,
+      "source": "er-api"
+    }
+  }
+}

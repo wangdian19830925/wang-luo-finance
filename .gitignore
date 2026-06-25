@@ -1,0 +1,16 @@
+# 排除旧版本压缩包和大文件
+asset-management-tool-v34/
+asset-management-tool-v34.tar
+*.tar
+*.tar.gz
+
+# 临时文件
+*.log
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo

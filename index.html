@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>家庭资产管理</title>
+  <!-- version: 2026-06-25-v55 -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/style.css?v=55">
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#0a0a14">
+</head>
+<body style="background:#0a0a14;">
+  <!-- 顶部导航 -->
+  <header class="header">
+    <button class="menu-btn" id="menuBtn"><svg class="icon"><use href="#icon-menu"/></svg></button>
+    <h1 class="header-title" id="headerTitle" style="background:linear-gradient(135deg,#4ade80,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">家庭资产管理</h1>
+    <div class="header-right">
+      <button class="home-btn" id="homeBtn" title="返回资产总览" style="display:none;">
+        <svg class="icon"><use href="#icon-home"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 侧边菜单 -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2>资产管理</h2>
+      <button class="sidebar-pin-btn" id="sidebarPinBtn" title="固定侧边栏">
+        <svg class="icon"><use href="#icon-pin"/></svg>
+      </button>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item active" data-page="dashboard">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>资产总览
+      </li>
+      <li class="nav-item" data-page="transactions">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-transactions"/></svg></span>现金资产
+      </li>
+      <li class="nav-item" data-page="insurance">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-insurance"/></svg></span>保险管理
+      </li>
+      <li class="nav-item" data-page="stocks">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-stocks"/></svg></span>股票管理
+      </li>
+      <li class="nav-item" data-page="funds">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-funds"/></svg></span>基金管理
+      </li>
+      <li class="nav-item" data-page="loan">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-loan"/></svg></span>房贷追踪
+      </li>
+      <li class="nav-item" data-page="annuity">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-annuity"/></svg></span>年金管理
+      </li>
+      <li class="nav-item" data-page="alerts">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>通知管理
+      </li>
+    </ul>
+  </nav>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- 主内容区 -->
+  <main class="main-content">
+    <!-- 仪表盘页面 -->
+    <section class="page active" id="page-dashboard">
+      <div id="notificationBanner" class="notification-banner" style="display:none;">
+        <div class="banner-icon"><svg class="icon"><use href="#icon-notify"/></svg></div>
+        <div class="banner-content">
+          <strong>缴费提醒</strong>
+          <div id="bannerText"></div>
+        </div>
+        <button class="banner-close" id="closeBanner"><svg class="icon"><use href="#icon-close"/></svg></button>
+      </div>
+      <div class="page-header">
+        <h2>资产总览</h2>
+        <div class="page-header-actions">
+          <button class="btn-refresh" id="refreshAllBtn" title="刷新所有数据：股票 / 汇率 / 基金 / 房贷">
+            <svg class="icon"><use href="#icon-refresh"/></svg>
+            <span>刷新</span>
+          </button>
+          <span class="update-time" id="updateTime"></span>
+        </div>
+      </div>
+      <div class="summary-cards">
+        <div class="card card-asset">
+          <div class="card-label">总资产</div>
+          <div class="card-value" id="totalAsset">¥0.00</div>
+        </div>
+        <div class="card card-debt">
+          <div class="card-label">总负债</div>
+          <div class="card-value" id="totalDebt">¥0.00</div>
+        </div>
+        <div class="card card-net">
+          <div class="card-label">净资产</div>
+          <div class="card-value" id="netWorth">¥0.00</div>
+        </div>
+      </div>
+
+      <!-- 保险三栏：资产沉淀 / 或有资产 / 或有负债 -->
+      <div class="summary-cards insurance-three-cols" id="insuranceThreeCols">
+        <div class="card card-insurance-settled">
+          <div class="card-label">保险沉淀资产</div>
+          <div class="card-value" id="insuranceSettled">¥0.00</div>
+          <div class="card-sub">已纳入总资产</div>
+        </div>
+        <div class="card card-insurance-contingent">
+          <div class="card-label">或有资产</div>
+          <div class="card-value" id="insuranceContingentAsset">¥0.00</div>
+          <div class="card-sub">触发即付</div>
+        </div>
+        <div class="card card-insurance-future">
+          <div class="card-label">或有负债</div>
+          <div class="card-value" id="insuranceFuturePremium">¥0.00</div>
+          <div class="card-sub">待缴保额</div>
+        </div>
+      </div>
+      <div class="asset-trend-section" id="assetTrendSection">
+        <div class="asset-trend-header">
+          <div class="asset-trend-title">
+            <svg class="icon"><use href="#icon-stocks"/></svg>
+            资产变化曲线
+          </div>
+          <div class="asset-trend-meta">
+            <span id="assetTrendRange"></span>
+          </div>
+        </div>
+        <div class="asset-trend-chart" id="assetTrendChart">
+          <!-- SVG 折线图由 renderAssetTrend 渲染 -->
+        </div>
+      </div>
+      <div class="dashboard-grid" id="dashboardGrid">
+        <!-- 由 loadDashboard 动态渲染 -->
+      </div>
+    </section>
+
+    <!-- 现金资产页面 -->
+    <section class="page" id="page-transactions">
+      <div class="page-header">
+        <h2>现金资产</h2>
+      </div>
+
+      <!-- 现金账户余额卡片 -->
+      <div class="cash-accounts" id="cashAccounts" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+        <!-- 动态渲染 -->
+      </div>
+
+      <!-- 余额编辑弹窗 -->
+      <div class="edit-balance-overlay" id="editBalanceOverlay" style="display:none;">
+        <div class="edit-balance-panel">
+          <h3 id="editBalanceTitle">编辑余额</h3>
+          <div class="form-group">
+            <label>金额 (¥)</label>
+            <input type="number" id="editBalanceInput" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-cancel" id="cancelEditBalanceBtn">取消</button>
+            <button class="btn btn-primary" id="confirmEditBalanceBtn">确认</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- 保险管理页面 -->
+    <section class="page" id="page-insurance">
+      <div class="page-header">
+        <h2>保险管理</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline" id="refreshInsuranceBtn" style="background:#fef3c7;color:#d97706;border:1px solid #d97706;"><svg class="icon"><use href="#icon-refresh"/></svg> 刷新缴费日期</button>
+          <button class="btn btn-primary" id="addInsuranceBtn">+ 添加保单</button>
+        </div>
+      </div>
+      <div class="form-modal" id="insuranceFormModal">
+        <div class="form-container">
+          <h3>添加保单</h3>
+          <form id="insuranceForm">
+            <div class="form-group">
+              <label>保险公司</label>
+              <input type="text" id="insuranceCompany" required placeholder="如：中国平安">
+            </div>
+            <div class="form-group">
+              <label>保险产品</label>
+              <input type="text" id="insuranceProduct" required placeholder="如：平安福">
+            </div>
+            <div class="form-group">
+              <label>被保险人</label>
+              <input type="text" id="insurancePerson" required placeholder="如：本人、配偶、子女">
+            </div>
+            <div class="form-group">
+              <label>年缴保费 (¥)</label>
+              <input type="number" id="insurancePremium" step="0.01" required placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>缴费频率</label>
+              <select id="insuranceFreq">
+                <option value="monthly">每月</option>
+                <option value="quarterly">每季度</option>
+                <option value="yearly" selected>每年</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>下次缴费日期</label>
+              <input type="date" id="insuranceNextPay" required>
+            </div>
+            <div class="form-group">
+              <label>保障期限至</label>
+              <input type="date" id="insuranceExpire">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-cancel" id="cancelInsuranceBtn">取消</button>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="reminder-section">
+        <h3><svg class="icon icon-warning"><use href="#icon-warning"/></svg>即将到期提醒</h3>
+        <div id="insuranceReminders"></div>
+      </div>
+      <div class="insurance-progress" id="insuranceProgress"></div>
+      <div class="records-list" id="insuranceList">
+        <div class="empty-tip">暂无保单记录</div>
+      </div>
+    </section>
+
+    <!-- 股票管理页面 -->
+    <section class="page" id="page-stocks">
+      <div class="page-header">
+        <h2>股票管理</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="refreshStockPriceBtn" style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);white-space:nowrap;"><svg class="icon"><use href="#icon-refresh"/></svg> 刷新</button>
+          <button class="btn btn-primary" id="addStockBtn">+ 添加股票</button>
+        </div>
+      </div>
+      <div class="form-modal" id="stockFormModal">
+        <div class="form-container">
+          <h3>添加股票</h3>
+          <form id="stockForm">
+            <div class="form-group">
+              <label>股票代码</label>
+              <input type="text" id="stockCode" required placeholder="如：600519">
+            </div>
+            <div class="form-group">
+              <label>股票名称</label>
+              <input type="text" id="stockName" required placeholder="如：贵州茅台">
+            </div>
+            <div class="form-group">
+              <label>市场</label>
+              <select id="stockMarket">
+                <option value="CN">A股 (CNY)</option>
+                <option value="HK">港股 (HKD)</option>
+                <option value="US">美股 (USD)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>持有数量 (股)</label>
+              <input type="number" id="stockShares" required placeholder="100">
+            </div>
+            <div class="form-group">
+              <label>成本价（原币种）</label>
+              <input type="number" id="stockCost" step="0.01" required placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>当前价格（原币种）</label>
+              <input type="number" id="stockCurrentPrice" step="0.01" placeholder="留空则等于成本价">
+            </div>
+            <div class="form-group">
+              <label>券商</label>
+              <input type="text" id="stockBroker" placeholder="如：中银国际">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-cancel" id="cancelStockBtn">取消</button>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="stock-summary">
+        <div class="summary-item">
+          <span class="label">持仓市值 (CNY)</span>
+          <span class="value text-green" id="stockTotalValue">¥0.00</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">持仓成本 (CNY)</span>
+          <span class="value" id="stockTotalCost">¥0.00</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">浮动盈亏 (CNY)</span>
+          <span class="value text-white" id="stockProfitLoss">¥0.00</span>
+        </div>
+      </div>
+      <div class="fx-rate-bar" id="fxRateBar" style="display:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:8px 16px;margin-bottom:12px;font-size:13px;color:#93c5fd;text-align:center;">
+        实时汇率：<span title="美元">🇺🇸</span>USD/<span title="人民币">🇨🇳</span>CNY <strong id="fxUsdCny">-</strong> | <span title="中国港币">🇭🇰</span>HKD/<span title="人民币">🇨🇳</span>CNY <strong id="fxHkdCny">-</strong>
+      </div>
+      <div class="records-list" id="stockList">
+        <div class="empty-tip">暂无股票记录</div>
+      </div>
+
+      <!-- RSU 股权激励 -->
+      <div style="margin-top:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <h3 style="font-size:16px;color:#8b5cf6;"><svg class="icon icon-purple"><use href="#icon-trophy"/></svg> 股权激励 (RSU)</h3>
+          <div style="display:flex;gap:8px;">
+            
+          </div>
+        </div>
+        <div class="stock-summary rsu-summary">
+          <div class="summary-item">
+            <span class="label">已解禁价值 (CNY)</span>
+            <span class="value text-green" id="rsuVestedValue">¥0.00</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">锁定中价值 (CNY)</span>
+            <span class="value text-white" id="rsuLockedValue">¥0.00</span>
+          </div>
+        </div>
+        <div class="records-list" id="rsuList">
+          <div class="empty-tip">暂无股权激励记录</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 基金管理页面 -->
+    <section class="page" id="page-funds">
+      <div class="page-header">
+        <h2>基金管理</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="refreshFundPriceBtn"><svg class="icon"><use href="#icon-refresh"/></svg> 刷新净值</button>
+          <button class="btn btn-primary" id="addFundBtn">+ 添加基金</button>
+        </div>
+      </div>
+      <div class="form-modal" id="fundFormModal">
+        <div class="form-container">
+          <h3>添加基金</h3>
+          <form id="fundForm">
+            <div class="form-group">
+              <label>基金代码</label>
+              <input type="text" id="fundCode" required placeholder="如：013126">
+            </div>
+            <div class="form-group">
+              <label>基金名称</label>
+              <input type="text" id="fundName" required placeholder="如：华夏食品饮料ETF发起联接C">
+            </div>
+            <div class="form-group">
+              <label>投入本金 (¥)</label>
+              <input type="number" id="fundCostValue" step="0.01" required placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>当前持仓金额 (¥)</label>
+              <input type="number" id="fundHoldValue" step="0.01" required placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>当前净值 (¥)</label>
+              <input type="number" id="fundNav" step="0.0001" placeholder="留空则自动查询">
+            </div>
+            <div class="form-group">
+              <label>持有份额</label>
+              <input type="number" id="fundShares" step="0.01" placeholder="留空则根据金额/净值自动计算">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-cancel" id="cancelFundBtn">取消</button>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="stock-summary">
+        <div class="summary-item">
+          <span class="label">持仓市值 (CNY)</span>
+          <span class="value text-green" id="fundTotalValue">¥0.00</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">投入本金 (CNY)</span>
+          <span class="value" id="fundTotalCost">¥0.00</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">持仓盈亏 (CNY)</span>
+          <span class="value" id="fundProfitLoss">¥0.00</span>
+        </div>
+      </div>
+      <div class="records-list" id="fundList">
+        <div class="empty-tip">暂无基金记录</div>
+      </div>
+
+
+      <!-- 基金市值曲线 -->
+      <div class="asset-trend-section" id="fundTrendSection" style="margin-top:16px;">
+        <div class="section-header">
+          <div class="asset-trend-change" id="fundTrendRange"></div>
+        </div>
+        <div class="asset-trend-chart" id="fundTrendChart">
+          <div class="empty-tip">加载中...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 房贷追踪页面 -->
+    <section class="page" id="page-loan">
+      <div class="page-header">
+        <h2>房贷追踪</h2>
+        <button class="btn btn-primary" id="addLoanBtn">+ 添加房贷</button>
+      </div>
+      <div class="form-modal" id="loanFormModal">
+        <div class="form-container">
+          <h3>添加房贷</h3>
+          <form id="loanForm">
+            <div class="form-group">
+              <label>贷款银行</label>
+              <input type="text" id="loanBank" required placeholder="如：中国工商银行">
+            </div>
+            <div class="form-group">
+              <label>关联房产</label>
+              <input type="text" id="loanProperty" placeholder="如：北京朝阳区房产">
+            </div>
+            <div class="form-group">
+              <label>贷款总额 (¥)</label>
+              <input type="number" id="loanTotal" step="0.01" required placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>已还本金 (¥)</label>
+              <input type="number" id="loanPaid" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>贷款利率 (%)</label>
+              <input type="number" id="loanRate" step="0.01" placeholder="如：4.2">
+            </div>
+            <div class="form-group">
+              <label>贷款期限 (年)</label>
+              <input type="number" id="loanTerm" placeholder="如：30">
+            </div>
+            <div class="form-group">
+              <label>开始日期</label>
+              <input type="date" id="loanStartDate" required>
+            </div>
+            <div class="form-group">
+              <label>还款方式</label>
+              <select id="loanMode">
+                <option value="equal-payment">等额本息（每月还一样多）</option>
+                <option value="equal-principal">等额本金（本金固定，利息递减）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>每月还款日（1-28）</label>
+              <input type="number" id="loanPayDay" min="1" max="28" value="17" placeholder="如：15">
+            </div>
+            <div class="form-group form-group-check">
+              <label class="checkbox-label">
+                <input type="checkbox" id="loanAutoProgress" checked>
+                <span>自动计算还款进度（按时间推算已还本金）</span>
+              </label>
+              <p class="form-hint">关闭后可手动输入"已还本金"，适合有提前还贷或利率重定价的情况</p>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-cancel" id="cancelLoanBtn">取消</button>
+              <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="loan-progress-section">
+        <h3>还款进度</h3>
+        <div id="loanProgressList"></div>
+      </div>
+    </section>
+
+    <!-- 年金管理页面 — 年度对账单风格 -->
+    <section class="page" id="page-annuity">
+      <div class="page-header">
+        <h2>年金管理</h2>
+      </div>
+      <!-- 环形图 + 概览 -->
+      <div class="annuity-chart-section" id="annuityChartSection">
+        <div class="annuity-chart-placeholder">加载中...</div>
+      </div>
+      <!-- 投资明细列表 -->
+      <div class="annuity-detail-section">
+        <h3 class="annuity-section-title">投资明细</h3>
+        <div id="annuityDetailList"></div>
+      </div>
+    </section>
+
+    <!-- 通知管理页面 -->
+    <section class="page" id="page-alerts">
+      <div class="page-header">
+        <h2>通知管理</h2>
+      </div>
+
+      <!-- 年历视图 -->
+      <div class="calendar-card">
+        <div class="calendar-nav">
+          <button class="cal-nav-btn" id="calPrevBtn"><svg class="icon" style="width:20px;height:20px;"><use href="#icon-chevron-left"/></svg></button>
+          <span class="cal-year-label" id="calYearLabel">2026年</span>
+          <button class="cal-nav-btn" id="calNextBtn"><svg class="icon" style="width:20px;height:20px;"><use href="#icon-chevron-right"/></svg></button>
+        </div>
+        <div class="year-grid" id="yearGrid">
+          <!-- 动态渲染 3x4 月 -->
+        </div>
+      </div>
+
+      <!-- 图例 -->
+      <div class="calendar-legend" style="display:flex;gap:16px;padding:8px 0 16px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;"></span> 保险缴费</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);"><span style="width:8px;height:8px;border-radius:50%;background:var(--cyan);flex-shrink:0;"></span> 房贷还款</span>
+        <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);"><span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0;"></span> 股票解禁</span>
+      </div>
+
+      <!-- 日期事件明细 -->
+      <div class="event-detail-card" id="eventDetailCard" style="display:none;">
+        <div class="event-detail-header">
+          <span class="event-detail-date" id="eventDetailDate"></span>
+          <button class="event-detail-close" id="eventDetailClose">&times;</button>
+        </div>
+        <div class="event-detail-list" id="eventDetailList"></div>
+      </div>
+
+      <!-- ICS 下载 -->
+      <div class="alerts-download-section">
+        <button class="btn btn-primary btn-lg" id="downloadCalendarBtn" style="width:100%;">
+          <svg class="icon"><use href="#icon-import"/></svg> 下载日历文件 (.ics)
+        </button>
+        <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:6px;">导入 iPhone/Mac 日历，到期前1天自动提醒</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 底部导航 (手机端) -->
+  <nav class="bottom-nav" id="bottomNav">
+    <div class="bottom-nav-item active" data-page="dashboard">
+      <span class="nav-icon"><svg class="icon"><use href="#icon-dashboard"/></svg></span>
+      <span class="nav-label">总览</span>
+    </div>
+    <div class="bottom-nav-item" data-page="transactions">
+      <span class="nav-icon"><svg class="icon"><use href="#icon-transactions"/></svg></span>
+      <span class="nav-label">现金</span>
+    </div>
+    <div class="bottom-nav-item" data-page="alerts">
+      <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>
+      <span class="nav-label">提醒</span>
+    </div>
+  </nav>
+
+  <!-- SVG 图标库 -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <!-- 仪表盘/总览：2×2 方块网格 -->
+    <symbol id="icon-dashboard" viewBox="0 0 24 24">
+      <rect x="2" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.9"/>
+      <rect x="13" y="2" width="9" height="9" rx="2" fill="currentColor" opacity="0.5"/>
+      <rect x="2" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.25"/>
+      <rect x="13" y="13" width="9" height="9" rx="2" fill="currentColor" opacity="0.5"/>
+    </symbol>
+
+    <!-- 收支记录：双向箭头 -->
+    <symbol id="icon-transactions" viewBox="0 0 24 24">
+      <path d="M8 3v15m-4-4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M16 21V6m4 4l-4-4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 资产：几何房屋 -->
+    <symbol id="icon-assets" viewBox="0 0 24 24">
+      <path d="M3 10L12 3l9 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="6" y="11" width="12" height="10" rx="1.5" fill="currentColor" opacity="0.25"/>
+      <rect x="10" y="15" width="4" height="6" rx="0.8" fill="currentColor" opacity="0.4"/>
+    </symbol>
+
+    <!-- 保险：几何盾牌 -->
+    <symbol id="icon-insurance" viewBox="0 0 24 24">
+      <path d="M12 2L4 6v5c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V6l-8-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 股票：K线/趋势柱 -->
+    <symbol id="icon-stocks" viewBox="0 0 24 24">
+      <rect x="3" y="11" width="3" height="10" rx="0.8" fill="currentColor" opacity="0.35"/>
+      <rect x="7" y="8" width="3" height="13" rx="0.8" fill="currentColor" opacity="0.6"/>
+      <rect x="11" y="13" width="3" height="8" rx="0.8" fill="currentColor" opacity="0.35"/>
+      <rect x="15" y="4" width="3" height="17" rx="0.8" fill="currentColor"/>
+      <rect x="19" y="10" width="3" height="11" rx="0.8" fill="currentColor" opacity="0.35"/>
+    </symbol>
+
+    <!-- 基金：重叠圆（组合投资抽象） -->
+    <symbol id="icon-funds" viewBox="0 0 24 24">
+      <circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="15" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.55"/>
+      <circle cx="12" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
+    </symbol>
+
+    <!-- 房贷：银行/机构抽象 -->
+    <symbol id="icon-loan" viewBox="0 0 24 24">
+      <rect x="3" y="5" width="18" height="4" rx="1.2" fill="currentColor" opacity="0.25"/>
+      <rect x="6" y="12" width="4" height="9" rx="1" fill="currentColor" opacity="0.55"/>
+      <rect x="14" y="12" width="4" height="9" rx="1" fill="currentColor" opacity="0.55"/>
+      <rect x="10" y="15" width="4" height="6" rx="1" fill="currentColor" opacity="0.35"/>
+    </symbol>
+
+    <!-- 年金：盾形保单 -->
+    <symbol id="icon-annuity" viewBox="0 0 24 24">
+      <path d="M12 2L4 6v6c0 5.5 3.4 10.2 8 12 4.6-1.8 8-6.5 8-12V6l-8-4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 通知：几何铃铛 -->
+    <symbol id="icon-notify" viewBox="0 0 24 24">
+      <path d="M6 9a6 6 0 0112 0v3l2.5 3.5H3.5L6 12V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="9" y1="19" x2="15" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="21" r="1.2" fill="currentColor"/>
+    </symbol>
+
+    <!-- 左箭头 -->
+    <symbol id="icon-chevron-left" viewBox="0 0 24 24">
+      <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 右箭头 -->
+    <symbol id="icon-chevron-right" viewBox="0 0 24 24">
+      <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- chevron-down -->
+    <symbol id="icon-chevron-down" viewBox="0 0 24 24">
+      <path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 现金：扁平钱包/硬币 -->
+    <symbol id="icon-cash" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <line x1="12" y1="3" x2="12" y2="8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="12" y1="16" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="3" y1="12" x2="8" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="16" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 刷新：环形箭头 -->
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M2 4v6h6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M22 20v-6h-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 12A8 8 0 0119.5 7.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M20 12A8 8 0 014.5 16.5" fill="none" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+
+    <!-- 导入/下载 -->
+    <symbol id="icon-import" viewBox="0 0 24 24">
+      <path d="M12 4v12m-5-5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="3" y="18" width="18" height="3" rx="1" fill="currentColor" opacity="0.3"/>
+    </symbol>
+
+    <!-- 添加/加号 -->
+    <symbol id="icon-plus" viewBox="0 0 24 24">
+      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 编辑/铅笔 -->
+    <symbol id="icon-edit" viewBox="0 0 24 24">
+      <path d="M15 4l5 5L8 21H3v-5L15 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="13" y1="6" x2="16" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 删除/垃圾桶 -->
+    <symbol id="icon-delete" viewBox="0 0 24 24">
+      <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M8 6V5a1 1 0 011-1h6a1 1 0 011 1v1" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 6v13a1 1 0 001 1h6a1 1 0 001-1V6" fill="none" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+
+    <!-- 搜索 -->
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+      <line x1="16" y1="16" x2="21" y2="21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 锁 -->
+    <symbol id="icon-lock" viewBox="0 0 24 24">
+      <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M8 11V7a4 4 0 018 0v4" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="15.5" r="1.5" fill="currentColor"/>
+    </symbol>
+
+    <!-- 勾选 -->
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="M4 12l5 6L20 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 关闭/叉号 -->
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 菜单/汉堡 -->
+    <symbol id="icon-menu" viewBox="0 0 24 24">
+      <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="4" y1="18" x2="20" y2="18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 返回主页：房子图标 -->
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="M3 10L12 3l9 7v10a1 1 0 01-1 1H4a1 1 0 01-1-1V10z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 21V12h6v9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 固定侧边栏：图钉图标 -->
+    <symbol id="icon-pin" viewBox="0 0 24 24">
+      <path d="M15 4.5l-3.5 3.5L8 7l-1 1 3.5 3.5L4 18v2h2l6.5-6.5L16 17l1-1-1-3.5 3.5-3.5-1-1-3.5 3.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 剪贴板 -->
+    <symbol id="icon-clipboard" viewBox="0 0 24 24">
+      <rect x="5" y="3" width="14" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <rect x="9" y="2" width="6" height="4" rx="1" fill="currentColor" opacity="0.25"/>
+      <line x1="8" y1="9" x2="16" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="8" y1="17" x2="12" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 奖杯（RSU） -->
+    <symbol id="icon-trophy" viewBox="0 0 24 24">
+      <path d="M7 4h10v3a5 5 0 01-10 0V4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M7 7a3 3 0 01-3 3 3 3 0 01-3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M17 7a3 3 0 003 3 3 3 0 003-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 警告三角 -->
+    <symbol id="icon-warning" viewBox="0 0 24 24">
+      <path d="M12 3L2 21h20L12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="12" y1="10" x2="12" y2="14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="12" cy="17.5" r="1.2" fill="currentColor"/>
+    </symbol>
+
+    <!-- 灯泡/提示 -->
+    <symbol id="icon-bulb" viewBox="0 0 24 24">
+      <path d="M12 3a6 6 0 00-2 11.7V16a1 1 0 001 1h2a1 1 0 001-1v-1.3A6 6 0 0012 3z" fill="none" stroke="currentColor" stroke-width="2"/>
+      <line x1="9" y1="18" x2="15" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="10" y1="21" x2="14" y2="21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- 日历/提醒 -->
+    <symbol id="icon-alerts" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
+      <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="15" r="1.5" fill="currentColor"/>
+    </symbol>
+  </svg>
+
+  <script src="./js/storage.js"></script>
+  <script src="./js/parser.js"></script>
+  <script src="./js/insurance-data.js"></script>
+  <script src="./js/stock-data.js"></script>
+  <script src="./js/rsu-data.js"></script>
+  <script src="./js/fund-data.js"></script>
+  <script src="./js/loan-data.js"></script>
+  <script src="./js/annuity-data.js"></script>
+  <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
+  <script src="./js/history-data.js?v=20260624"></script>
+  <script src="./js/app.js?v=55"></script>
+</body>
+</html>

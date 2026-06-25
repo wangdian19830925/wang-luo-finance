@@ -1,0 +1,11 @@
+{
+  "name": "家庭资产管理",
+  "short_name": "财务管家",
+  "description": "家庭财务资产管理工具",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#4a6cf7",
+  "orientation": "portrait",
+  "icons": []
+}

@@ -1,0 +1,327 @@
+// 数据存储层 - 使用 localStorage
+const Storage = {
+  keys: {
+    income: 'fm_income',
+    expense: 'fm_expense',
+    cashAccounts: 'fm_cash_accounts',
+    assets: 'fm_assets',
+    insurance: 'fm_insurance',
+    stocks: 'fm_stocks',
+    rsu: 'fm_rsu',
+    funds: 'fm_funds',
+    loans: 'fm_loans',
+    annuities: 'fm_annuities',
+    notifications: 'fm_notifications'
+  },
+
+  get(key) {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  set(key, data) {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  add(key, item) {
+    const data = this.get(key);
+    item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    item.createdAt = new Date().toISOString();
+    data.push(item);
+    this.set(key, data);
+    return item;
+  },
+
+  update(key, id, updates) {
+    const data = this.get(key);
+    const index = data.findIndex(item => item.id === id);
+    if (index !== -1) {
+      data[index] = { ...data[index], ...updates };
+      this.set(key, data);
+      return data[index];
+    }
+    return null;
+  },
+
+  delete(key, id) {
+    const data = this.get(key);
+    const filtered = data.filter(item => item.id !== id);
+    this.set(key, filtered);
+    return true;
+  },
+
+  // 快捷读取
+  getIncome()      { return this.get(this.keys.income); },
+  getExpense()     { return this.get(this.keys.expense); },
+  getAssets()      { return this.get(this.keys.assets); },
+  getInsurance()   { return this.get(this.keys.insurance); },
+  getStocks()      { return this.get(this.keys.stocks); },
+  getRsu()         { return this.get(this.keys.rsu); },
+  getFunds()       { return this.get(this.keys.funds); },
+  getLoans()       { return this.get(this.keys.loans); },
+  getAnnuities()   { return this.get(this.keys.annuities); },
+
+  // 获取汇率（与 app.js 保持一致）
+  _getFxRates() {
+    try {
+      var raw = localStorage.getItem("fm_exchange_rates");
+      return raw ? JSON.parse(raw) : {};
+    } catch(e) { return {}; }
+  },
+
+  // 外币 → 人民币
+  _toCNY(amount, currency) {
+    var rates = this._getFxRates();
+    var rate = 1;
+    if (currency === "USD") rate = rates.USDCNY || 7.2;
+    else if (currency === "HKD") rate = rates.HKDCNY || 0.92;
+    return (parseFloat(amount) || 0) * rate;
+  },
+
+  // 计算总资产（统一按人民币计价）
+  // 注意：RSU 未解禁部分不计入资产
+  calcTotalAssets() {
+    let total = 0;
+    this.getStocks().forEach(s => {
+      const shares = parseInt(s.shares) || 0;
+      const price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
+      const currency = s.currency || "CNY";
+      const valueCNY = this._toCNY(shares * price, currency);
+      total += valueCNY;
+    });
+    // RSU: 仅纳入已解禁部分
+    this.getRsu().forEach(r => {
+      var vested = parseInt(r.vested) || 0;
+      if (vested > 0) {
+        var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+        total += vested * price;
+      }
+    });
+    // 基金：计入持仓金额
+    this.getFunds().forEach(f => {
+      total += parseFloat(f.holdValue) || 0;
+    });
+    // 企业年金：计入各组合余额
+    this.getAnnuities().forEach(a => {
+      total += parseFloat(a.balance) || 0;
+    });
+    // 保险沉淀资产：累计已缴保费（强资产型保单: 年金/万能/两全/返还型重疾）
+    total += this.calcInsuranceSettledValue();
+    // 现金资产：各账户余额（收入-支出）
+    total += this.calcCashTotal();
+    return total;
+  },
+
+  // 计算现金资产总额（各账户余额加总）
+  calcCashTotal() {
+    var accounts = this.get(this.keys.cashAccounts);
+    var total = 0;
+    accounts.forEach(function(a) { total += parseFloat(a.balance) || 0; });
+    return total;
+  },
+
+  // 保险沉淀资产（=累计已缴保费, 纳入总资产）
+  // 复用 app.js 的 calcInsurancePaidTotal 算法: paidUntil = nextPayDate.year - 1
+  calcInsuranceSettledValue() {
+    var list = this.get(this.keys.insurance);
+    var total = 0;
+    list.forEach(function(p) {
+      var m = (p.payPeriod || "").match(/(\d{4})\s*-\s*(\d{4})/);
+      if (!m) return;
+      var startY = parseInt(m[1]);
+      var endY = parseInt(m[2]);
+      var premium = parseFloat(p.premium) || 0;
+      var paidUntil = p.nextPayDate ? parseInt(p.nextPayDate.split('-')[0]) - 1 : startY - 1;
+      for (var y = startY; y <= Math.min(endY, paidUntil); y++) {
+        total += premium;
+      }
+    });
+    return total;
+  },
+
+  // 保险沉淀资产在指定历史日期的金额
+  // 口径：遍历 16 张保单，对每张保单:
+  //   - 如果保单生效日 > targetDate → 0 (那时还没买)
+  //   - 否则在 startY..endY 中, 对每个缴费年 y, 判断 targetDate 是否 ≥ 缴费年结束日
+  //     (用次年 1 月 1 日作为缴费年结束日的代理: y 年内任一时点已缴 y 年)
+  //   - 累计 ≤ 已经结束缴费的年数 × 年缴
+  // 注意: nextPayDate 表示"下一次扣款日", 推算过去的"已缴年数" ≤ nextPayDate.year - 1
+  calcInsuranceSettledValueAt(targetDate) {
+    var list = this.get(this.keys.insurance);
+    if (!(targetDate instanceof Date)) targetDate = new Date(targetDate);
+    var targetY = targetDate.getFullYear();
+    var total = 0;
+    list.forEach(function(p) {
+      var m = (p.payPeriod || "").match(/(\d{4})\s*-\s*(\d{4})/);
+      if (!m) return;
+      var startY = parseInt(m[1]);
+      var endY = parseInt(m[2]);
+      var premium = parseFloat(p.premium) || 0;
+
+      // 1. 还没到生效年: 0
+      if (targetY < startY) return;
+
+      // 2. 已完全缴清: 全额
+      if (targetY >= endY + 1) {
+        total += premium * (endY - startY + 1);
+        return;
+      }
+
+      // 3. 中间状态: 按"已结束缴费的年数" 累加
+      // 已结束缴费的年数 = targetY - startY (targetY 这一年还没结束, 因为 nextPayDate 通常在年末)
+      // 但更准确: 已缴年数 = min(endY, paidUntil) - startY + 1
+      // 其中 paidUntil = nextPayDate.year - 1
+      var paidUntil = p.nextPayDate ? parseInt(p.nextPayDate.split('-')[0]) - 1 : startY - 1;
+
+      // 历史点: 该日已缴年数 = min(已过的年数, paidUntil - startY + 1)
+      // 简化: 假设每年内一次性扣款, 在 nextPayDate 那天发生
+      var yearsCompleted;
+      if (p.nextPayDate) {
+        var npParts = p.nextPayDate.split('-');
+        var npDate = new Date(parseInt(npParts[0]), parseInt(npParts[1]) - 1, parseInt(npParts[2]));
+        if (targetDate < npDate) {
+          // 还没到下次扣款日: 已缴年数 = (nextPayDate.year - 1) - startY + 1
+          yearsCompleted = paidUntil - startY + 1;
+        } else {
+          // 已过下次扣款日: 已缴年数 = (targetY - startY + 1), 但不超过 endY - startY + 1
+          yearsCompleted = Math.min(targetY - startY + 1, endY - startY + 1);
+        }
+      } else {
+        // 无 nextPayDate: 视为 targetY 那一年的下一年才扣, 已缴年数 = targetY - startY
+        yearsCompleted = Math.max(0, targetY - startY);
+      }
+      yearsCompleted = Math.max(0, Math.min(endY - startY + 1, yearsCompleted));
+      total += premium * yearsCompleted;
+    });
+    return total;
+  },
+
+  // 或有资产（保额/未来给付, 不纳入总资产, 仅展示）
+  // 简版: 3 张重疾保单赔付 30万×3 = 90万
+  // 识别: product 含 "重大疾病保险" 或 "重疾"
+  calcInsuranceContingentAsset() {
+    var list = this.get(this.keys.insurance);
+    var total = 0;
+    list.forEach(function(p) {
+      var name = p.product || "";
+      if (name.indexOf("重大疾病") >= 0 || name.indexOf("重疾") >= 0) {
+        total += 300000; // 30 万/张
+      }
+    });
+    return total;
+  },
+
+  // 或有负债（未来保费承诺, 不纳入总负债, 仅展示）
+  // 口径: 16 张全期合计 - 已缴沉淀
+  calcInsuranceContingentLiability() {
+    var list = this.get(this.keys.insurance);
+    var totalAll = 0, totalPaid = 0;
+    list.forEach(function(p) {
+      var m = (p.payPeriod || "").match(/(\d{4})\s*-\s*(\d{4})/);
+      if (!m) return;
+      var startY = parseInt(m[1]);
+      var endY = parseInt(m[2]);
+      var premium = parseFloat(p.premium) || 0;
+      var n = endY - startY + 1;
+      totalAll += premium * n;
+      var paidUntil = p.nextPayDate ? parseInt(p.nextPayDate.split('-')[0]) - 1 : startY - 1;
+      var paidY = Math.max(0, Math.min(endY, paidUntil) - startY + 1);
+      totalPaid += premium * paidY;
+    });
+    return Math.max(0, totalAll - totalPaid);
+  },
+
+  // RSU 已解禁价值
+  calcRsuVestedValue() {
+    let total = 0;
+    this.getRsu().forEach(r => {
+      var vested = parseInt(r.vested) || 0;
+      if (vested > 0) {
+        var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+        total += vested * price;
+      }
+    });
+    return total;
+  },
+
+  // RSU 未解禁价值（仅供参考，不计入资产）
+  calcRsuLockedValue() {
+    let total = 0;
+    this.getRsu().forEach(r => {
+      var totalShares = parseInt(r.totalShares) || 0;
+      var vested = parseInt(r.vested) || 0;
+      var locked = totalShares - vested;
+      if (locked > 0) {
+        var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+        var gp = parseFloat(r.grantPrice) || 0;
+        total += Math.max(0, locked * (price - gp));
+      }
+    });
+    return total;
+  },
+
+  // 计算总负债（优先使用 balance 字段，否则用 total - paid）
+  calcTotalDebts() {
+    let total = 0;
+    this.getLoans().forEach(l => {
+      var b = parseFloat(l.balance);
+      if (b >= 0) {
+        total += b;
+      } else {
+        const loanTotal = parseFloat(l.total) || 0;
+        const loanPaid = parseFloat(l.paid) || 0;
+        total += Math.max(0, loanTotal - loanPaid);
+      }
+    });
+    return total;
+  },
+
+  // 净资产
+  calcNetWorth() {
+    return this.calcTotalAssets() - this.calcTotalDebts();
+  },
+
+  // 年金总额
+  calcTotalAnnuities() {
+    let total = 0;
+    this.getAnnuities().forEach(a => { total += parseFloat(a.balance) || 0; });
+    return total;
+  },
+
+  // 即将到期的保险提醒（30天内）
+  getInsuranceReminders(daysAhead = 30) {
+    const insurance = this.getInsurance();
+    const now = new Date(); now.setHours(0,0,0,0);
+    const reminders = [];
+
+    insurance.forEach(item => {
+      if (!item.nextPayDate) return;
+      const parts = item.nextPayDate.split('-');
+      const nextPay = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      const diffDays = Math.ceil((nextPay - now) / 86400000);
+      if (diffDays >= 0 && diffDays <= daysAhead) {
+        reminders.push({ ...item, daysLeft: diffDays });
+      }
+    });
+
+    return reminders.sort((a, b) => a.daysLeft - b.daysLeft);
+  },
+
+  // 最近记录
+  getRecentRecords(limit = 10) {
+    const income  = this.getIncome().map(i => ({ ...i, type: 'income' }));
+    const expense = this.getExpense().map(i => ({ ...i, type: 'expense' }));
+    const all = [...income, ...expense];
+    all.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+    return all.slice(0, limit);
+  }
+};
