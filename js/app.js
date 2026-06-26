@@ -268,14 +268,19 @@ const App = {
 
   // 刷新所有页面数据（同步后调用）
   refreshAllPages() {
-    this.loadDashboard();
-    this.loadTransactions();
-    this.loadInsurance();
-    this.loadStocks();
-    this.loadFunds();
-    this.loadLoans();
-    this.loadAnnuities();
-    this.loadAlerts();
+    try {
+      this.loadDashboard();
+      this.loadTransactions();
+      this.loadInsuranceList();
+      this.loadStockList();
+      this.loadRsuList();
+      this.loadFundList();
+      this.loadLoanList();
+      this.loadAnnuityList();
+      this.loadAlertsPage();
+    } catch (e) {
+      console.error('[App] refreshAllPages 异常:', e);
+    }
   },
 
   // 顶部刷新按钮：依次拉取最新数据
