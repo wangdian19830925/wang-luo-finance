@@ -2482,6 +2482,7 @@ const App = {
       this.renderDashboardGrid();
       this.checkNotifications();
       this.renderAssetTrend();   // 6 个月净资产变化曲线（异步加载历史价）
+      this.renderDailyChangeBrief(); // 上一日资产变化简报（异步加载历史价）
     } catch(e) {
       console.error('[App] loadDashboard 异常:', e);
     }
@@ -2612,6 +2613,212 @@ const App = {
 
       // 渲染
       self._drawAssetTrendChart(chartEl, rangeEl, data, todayNetWorth);
+    });
+  },
+
+  // ===== 上一日资产变化简报 =====
+  // 找到上一个有资产变化意义的日期（默认昨天；若昨天是周末则回退到上周五）
+  _getPreviousAssetDate() {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 1);
+    // 跳过周末（周六=6, 周日=0），因为股票/基金价格在周末无变化
+    while (d.getDay() === 0 || d.getDay() === 6) {
+      d.setDate(d.getDate() - 1);
+    }
+    return d;
+  },
+
+  // 估算指定日期各资产分类的价值（用于上一日变化简报）
+  // 返回 { stocks, funds, rsu, annuity, insurance, cash, totalAssets, totalDebts }
+  _estimateCategoryValuesAt(targetDate, historyData) {
+    var self = this;
+    var result = { stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0, totalAssets: 0, totalDebts: 0 };
+
+    // 1. 股票
+    var stocks = Storage.get(Storage.keys.stocks) || [];
+    stocks.forEach(function(s) {
+      var shares = parseInt(s.shares) || 0;
+      if (shares <= 0) return;
+      var currency = s.currency || "CNY";
+      var price = 0;
+      if (historyData && historyData[s.code]) {
+        price = self._findClosestClose(historyData[s.code], targetDate);
+      }
+      if (!price) price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
+      result.stocks += self.toCNY(shares * price, currency);
+    });
+
+    // 2. RSU：已解禁部分
+    var rsuList = Storage.get(Storage.keys.rsu) || [];
+    rsuList.forEach(function(r) {
+      var vested = parseInt(r.vested) || 0;
+      if (vested > 0) {
+        var price = 0;
+        if (historyData && historyData[r.code]) {
+          price = self._findClosestClose(historyData[r.code], targetDate);
+        }
+        if (!price) price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+        result.rsu += vested * price;
+      }
+    });
+
+    // 3. 基金（复用母基金映射逻辑）
+    var parentMap = { "013126": "515170", "001513": "510500" };
+    var funds = Storage.get(Storage.keys.funds) || [];
+    funds.forEach(function(f) {
+      var priceCode = f.parentCode || parentMap[f.code] || f.code;
+      var currentNav = parseFloat(f.nav) || 0;
+      var shares = parseFloat(f.shares) || 0;
+      if (historyData && historyData[priceCode] && shares > 0 && currentNav > 0) {
+        var etfArr = historyData[priceCode];
+        var currentEtf = etfArr.length > 0 ? etfArr[etfArr.length - 1].close : 0;
+        var histEtf = self._findClosestClose(etfArr, targetDate) || currentEtf;
+        if (currentEtf > 0) {
+          var estNav = currentNav * (histEtf / currentEtf);
+          result.funds += shares * estNav;
+        } else {
+          result.funds += parseFloat(f.holdValue) || 0;
+        }
+      } else {
+        result.funds += parseFloat(f.holdValue) || 0;
+      }
+    });
+
+    // 4. 年金（按当前值常量）
+    var annuities = Storage.get(Storage.keys.annuities) || [];
+    annuities.forEach(function(a) { result.annuity += parseFloat(a.balance) || 0; });
+
+    // 5. 保险沉淀资产
+    result.insurance = Storage.calcInsuranceSettledValueAt(targetDate);
+
+    // 6. 现金资产（快照，无历史波动）
+    var cashAccounts = Storage.get(Storage.keys.cashAccounts) || [];
+    cashAccounts.forEach(function(a) { result.cash += parseFloat(a.balance) || 0; });
+
+    // 7. 总负债
+    result.totalDebts = self._estimateDebtsAt(targetDate);
+
+    result.totalAssets = result.stocks + result.funds + result.rsu + result.annuity + result.insurance + result.cash;
+    return result;
+  },
+
+  // 渲染上一日资产变化简报
+  renderDailyChangeBrief() {
+    var self = this;
+    var section = document.getElementById("dailyChangeSection");
+    var summaryEl = document.getElementById("dailyChangeSummary");
+    var listEl = document.getElementById("dailyChangeList");
+    var dateEl = document.getElementById("dailyChangeDate");
+    if (!section || !summaryEl || !listEl) return;
+
+    var prevDate = this._getPreviousAssetDate();
+    var dateStr = prevDate.toISOString().slice(0, 10);
+    if (dateEl) {
+      dateEl.textContent = "对比日期 " + dateStr;
+    }
+
+    // 今日各分类价值
+    var todayValues = {
+      stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0,
+      totalAssets: Storage.calcTotalAssets(),
+      totalDebts: Storage.calcTotalDebts()
+    };
+
+    // 股票今日
+    var stocks = Storage.get(Storage.keys.stocks) || [];
+    stocks.forEach(function(s) {
+      var shares = parseInt(s.shares) || 0;
+      var price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
+      todayValues.stocks += self.toCNY(shares * price, s.currency || "CNY");
+    });
+
+    // 基金今日
+    var funds = Storage.get(Storage.keys.funds) || [];
+    funds.forEach(function(f) { todayValues.funds += parseFloat(f.holdValue) || 0; });
+
+    // RSU今日
+    var rsuList = Storage.get(Storage.keys.rsu) || [];
+    rsuList.forEach(function(r) {
+      var vested = parseInt(r.vested) || 0;
+      var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+      todayValues.rsu += vested * price;
+    });
+
+    // 年金今日
+    var annuities = Storage.get(Storage.keys.annuities) || [];
+    annuities.forEach(function(a) { todayValues.annuity += parseFloat(a.balance) || 0; });
+
+    // 保险今日
+    todayValues.insurance = Storage.calcInsuranceSettledValue();
+
+    // 现金今日
+    todayValues.cash = Storage.calcCashTotal();
+
+    // 加载历史数据并计算上一日
+    this._loadAllHistoryData(function(historyData) {
+      var prevValues = self._estimateCategoryValuesAt(prevDate, historyData);
+
+      var netChange = (todayValues.totalAssets - todayValues.totalDebts) - (prevValues.totalAssets - prevValues.totalDebts);
+
+      // 汇总区
+      var netClass = netChange >= 0 ? "trend-up" : "trend-down";
+      var netSign = netChange >= 0 ? "+" : "";
+      summaryEl.innerHTML =
+        '<div class="daily-change-total">' +
+          '<div class="daily-change-total-label">净资产变化</div>' +
+          '<div class="daily-change-total-value ' + netClass + '">' + netSign + self.formatMoney(netChange) + '</div>' +
+        '</div>' +
+        '<div class="daily-change-sub">' +
+          '<span>今日净资产 <b>' + self.formatMoney(todayValues.totalAssets - todayValues.totalDebts) + '</b></span>' +
+          '<span>昨日净资产 <b>' + self.formatMoney(prevValues.totalAssets - prevValues.totalDebts) + '</b></span>' +
+        '</div>';
+
+      // 明细条目
+      var items = [
+        { key: 'stocks', label: '股票持仓', icon: 'stocks', today: todayValues.stocks, prev: prevValues.stocks },
+        { key: 'funds', label: '基金理财', icon: 'funds', today: todayValues.funds, prev: prevValues.funds },
+        { key: 'rsu', label: 'RSU 已解禁', icon: 'trophy', today: todayValues.rsu, prev: prevValues.rsu },
+        { key: 'cash', label: '现金资产', icon: 'transactions', today: todayValues.cash, prev: prevValues.cash },
+        { key: 'insurance', label: '保险沉淀', icon: 'insurance', today: todayValues.insurance, prev: prevValues.insurance },
+        { key: 'annuity', label: '企业年金', icon: 'annuity', today: todayValues.annuity, prev: prevValues.annuity },
+        { key: 'debt', label: '房贷剩余本金', icon: 'loan', today: todayValues.totalDebts, prev: prevValues.totalDebts, isDebt: true }
+      ];
+
+      var html = '';
+      items.forEach(function(item) {
+        var change = item.isDebt ? (item.prev - item.today) : (item.today - item.prev);
+        var absChange = Math.abs(change);
+        var pct = item.prev > 0 ? (change / item.prev * 100) : 0;
+        var isZero = Math.abs(change) < 0.01;
+
+        // 资产：涨=红（增加），跌=绿（减少）；负债：减少=红（改善），增加=绿（恶化）
+        var changeClass;
+        if (item.isDebt) {
+          changeClass = change > 0 ? "trend-up" : "trend-down";
+        } else {
+          changeClass = change >= 0 ? "trend-up" : "trend-down";
+        }
+        var sign = change > 0 ? "+" : "";
+
+        html += '<div class="daily-change-item">' +
+          '<div class="daily-change-item-left">' +
+            '<div class="daily-change-icon">' + self.icon(item.icon) + '</div>' +
+            '<div class="daily-change-info">' +
+              '<div class="daily-change-name">' + item.label + '</div>' +
+              '<div class="daily-change-sub">' + self.formatMoney(item.today) + ' / 昨 ' + self.formatMoney(item.prev) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="daily-change-item-right">' +
+            (isZero
+              ? '<div class="daily-change-value flat">—</div>'
+              : '<div class="daily-change-value ' + changeClass + '">' + sign + self.formatMoney(change) + '</div>' +
+                '<div class="daily-change-pct ' + changeClass + '">(' + sign + pct.toFixed(2) + '%)</div>') +
+          '</div>' +
+        '</div>';
+      });
+
+      listEl.innerHTML = html;
     });
   },
 

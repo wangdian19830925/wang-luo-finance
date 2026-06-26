@@ -2202,6 +2202,202 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
+   上一日资产变化简报
+   ============================================ */
+.daily-change-section {
+  background: var(--bg-card, #13132a);
+  border: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow, 0 2px 12px rgba(0,0,0,0.3));
+}
+
+.daily-change-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.daily-change-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.daily-change-title .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--accent, #4ade80);
+}
+
+.daily-change-date {
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-change-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+
+.daily-change-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.daily-change-total-label {
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.daily-change-total-value {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-change-total-value.trend-up { color: #ef4444; }
+.daily-change-total-value.trend-down { color: #22c55e; }
+
+.daily-change-sub {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  flex-wrap: wrap;
+}
+
+.daily-change-sub b {
+  color: var(--text-primary, #f1f5f9);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.daily-change-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.daily-change-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.daily-change-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-change-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.daily-change-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.daily-change-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-change-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  margin-bottom: 2px;
+}
+
+.daily-change-info .daily-change-sub {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+
+.daily-change-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.daily-change-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-change-value.trend-up { color: #ef4444; }
+.daily-change-value.trend-down { color: #22c55e; }
+.daily-change-value.flat { color: var(--text-muted, #64748b); }
+
+.daily-change-pct {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-change-pct.trend-up { color: #ef4444; }
+.daily-change-pct.trend-down { color: #22c55e; }
+
+@media (max-width: 600px) {
+  .daily-change-section {
+    padding: 14px;
+  }
+  .daily-change-total-value {
+    font-size: 20px;
+  }
+  .daily-change-sub {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .daily-change-item {
+    padding: 10px 12px;
+  }
+  .daily-change-value {
+    font-size: 14px;
+  }
+}
+
+/* ============================================
    CSV 导入面板
    ============================================ */
 
