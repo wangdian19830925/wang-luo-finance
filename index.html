@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v69 -->
+  <!-- version: 2026-06-26-v77 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=69">
+  <link rel="stylesheet" href="./css/style.css?v=77">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -23,13 +23,7 @@
       <button class="home-btn" id="homeBtn" title="返回资产总览" style="display:none;">
         <svg class="icon"><use href="#icon-home"/></svg>
       </button>
-      <button class="sync-btn" id="syncBtn" title="云端同步状态">
-        <svg class="icon" id="syncIcon"><use href="#icon-sync"/></svg>
-        <span class="sync-dot" id="syncDot"></span>
-      </button>
-      <button class="settings-btn" id="settingsBtn" title="数据同步与设置">
-        <svg class="icon"><use href="#icon-settings"/></svg>
-      </button>
+      <span class="version-badge" id="versionBadge">v: 77</span>
     </div>
   </header>
 
@@ -65,6 +59,9 @@
       </li>
       <li class="nav-item" data-page="alerts">
         <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>通知管理
+      </li>
+      <li class="nav-item nav-item-settings" data-page="settings">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>设置
       </li>
     </ul>
   </nav>
@@ -570,15 +567,17 @@
 
   </main>
 
-  <!-- 设置与数据同步弹窗 -->
-  <div class="edit-balance-overlay" id="settingsOverlay" style="display:none;">
-    <div class="settings-panel">
-      <div class="settings-header">
+  <!-- 设置与数据同步 - 右侧边栏 -->
+  <div class="right-sidebar-overlay" id="settingsOverlay" style="display:none;">
+    <aside class="right-sidebar" id="rightSidebar">
+      <div class="right-sidebar-header">
         <h3>设置与数据同步</h3>
         <button class="btn-icon" id="closeSettingsBtn" title="关闭">
           <svg class="icon"><use href="#icon-close"/></svg>
         </button>
       </div>
+      <div class="right-sidebar-body">
+        <div class="settings-panel">
 
       <div class="settings-section">
         <h4>云端同步状态</h4>
@@ -659,6 +658,7 @@
         </button>
       </div>
     </div>
+    </aside>
   </div>
 
   <!-- 底部导航 (手机端) -->
@@ -674,6 +674,10 @@
     <div class="bottom-nav-item" data-page="alerts">
       <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>
       <span class="nav-label">提醒</span>
+    </div>
+    <div class="bottom-nav-item" data-page="settings">
+      <span class="nav-icon"><svg class="icon"><use href="#icon-settings"/></svg></span>
+      <span class="nav-label">设置</span>
     </div>
   </nav>
 
@@ -897,7 +901,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=72"></script>
+  <script src="./js/storage.js?v=77"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -907,6 +911,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=72"></script>
+  <script src="./js/app.js?v=77"></script>
 </body>
 </html>

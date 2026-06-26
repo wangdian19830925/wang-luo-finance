@@ -401,6 +401,7 @@ const App = {
     var settingsBtn = document.getElementById("settingsBtn");
     var closeBtn = document.getElementById("closeSettingsBtn");
     var overlay = document.getElementById("settingsOverlay");
+    var rightSidebar = document.getElementById("rightSidebar");
     var exportBtn = document.getElementById("exportDataBtn");
     var importFile = document.getElementById("importDataFile");
     var clearBtn = document.getElementById("clearLocalDataBtn");
@@ -409,6 +410,10 @@ const App = {
     if (closeBtn) closeBtn.addEventListener("click", function() { self.closeSettings(); });
     if (overlay) overlay.addEventListener("click", function(e) {
       if (e.target === overlay) self.closeSettings();
+    });
+    // ESC 关闭右侧设置边栏
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") self.closeSettings();
     });
 
     if (exportBtn) exportBtn.addEventListener("click", function() { self.exportDataToFile(); });
@@ -424,7 +429,14 @@ const App = {
 
   openSettings() {
     var overlay = document.getElementById("settingsOverlay");
-    if (overlay) overlay.style.display = "flex";
+    var rightSidebar = document.getElementById("rightSidebar");
+    if (overlay) {
+      overlay.style.display = "block";
+      // 强制重排确保 transition 生效
+      void overlay.offsetWidth;
+      overlay.classList.add("show");
+    }
+    if (rightSidebar) rightSidebar.classList.add("open");
     // 如果之前没有待验证的注册流程，重置验证码输入框状态
     if (!Storage._pendingVerifyOtp) {
       var verifyCodeGroup = document.getElementById('cloudVerifyCodeGroup');
@@ -442,7 +454,14 @@ const App = {
 
   closeSettings() {
     var overlay = document.getElementById("settingsOverlay");
-    if (overlay) overlay.style.display = "none";
+    var rightSidebar = document.getElementById("rightSidebar");
+    if (rightSidebar) rightSidebar.classList.remove("open");
+    if (overlay) {
+      overlay.classList.remove("show");
+      setTimeout(function() {
+        if (!overlay.classList.contains("show")) overlay.style.display = "none";
+      }, 300);
+    }
   },
 
   exportDataToFile() {
@@ -2211,10 +2230,24 @@ const App = {
   setupNavigation() {
     try {
       document.querySelectorAll(".nav-item").forEach(item => {
-        item.addEventListener("click", () => { this.navigateTo(item.dataset.page); this.closeSidebar(); });
+        item.addEventListener("click", () => {
+          if (item.dataset.page === 'settings') {
+            this.openSettings();
+            this.closeSidebar();
+            return;
+          }
+          this.navigateTo(item.dataset.page);
+          this.closeSidebar();
+        });
       });
       document.querySelectorAll(".bottom-nav-item").forEach(item => {
-        item.addEventListener("click", () => this.navigateTo(item.dataset.page));
+        item.addEventListener("click", () => {
+          if (item.dataset.page === 'settings') {
+            this.openSettings();
+            return;
+          }
+          this.navigateTo(item.dataset.page);
+        });
       });
       var menuBtn = document.getElementById("menuBtn"); if (menuBtn) menuBtn.addEventListener("click", () => this.openSidebar());
       var overlay = document.getElementById("sidebarOverlay"); if (overlay) overlay.addEventListener("click", () => this.closeSidebar());
@@ -2272,6 +2305,10 @@ const App = {
   },
 
   navigateTo(page) {
+    if (page === 'settings') {
+      this.openSettings();
+      return;
+    }
     this.currentPage = page;
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     const target = document.getElementById("page-" + page);
