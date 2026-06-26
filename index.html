@@ -4,13 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v66 -->
+  <!-- version: 2026-06-26-v67 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=66">
-  <!-- CloudBase SDK：核心 + 认证 + 数据库，必须按顺序引入 -->
-  <script src="https://static.cloudbase.net/cloudbase-js-sdk/1.7.2/cloudbase.js"></script>
-  <script src="https://static.cloudbase.net/cloudbase-js-sdk/1.7.2/cloudbase.auth.js"></script>
-  <script src="https://static.cloudbase.net/cloudbase-js-sdk/1.7.2/cloudbase.database.js"></script>
+  <link rel="stylesheet" href="./css/style.css?v=67">
+  <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
+  <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -888,7 +886,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js"></script>
+  <script src="./js/storage.js?v=67"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -898,6 +896,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=66"></script>
+  <script src="./js/app.js?v=67"></script>
 </body>
 </html>

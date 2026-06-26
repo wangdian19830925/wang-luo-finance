@@ -50,6 +50,32 @@ const Storage = {
     });
   },
 
+  // 获取 Auth 实例（兼容 SDK v2 对象式与 v1 函数式）
+  _getAuth() {
+    if (!this.cloudApp) return null;
+    // v2: app.auth 是对象，直接暴露 signInAnonymously 等方法
+    if (this.cloudApp.auth && typeof this.cloudApp.auth === 'object') {
+      return this.cloudApp.auth;
+    }
+    // v1: app.auth() 返回 auth 实例
+    if (typeof this.cloudApp.auth === 'function') {
+      return this.cloudApp.auth();
+    }
+    return null;
+  },
+
+  // 获取 Database 实例（兼容 SDK v2 / v1）
+  _getDb() {
+    if (!this.cloudApp) return null;
+    if (typeof this.cloudApp.database === 'function') {
+      return this.cloudApp.database();
+    }
+    if (this.cloudApp.database && typeof this.cloudApp.database === 'object') {
+      return this.cloudApp.database;
+    }
+    return null;
+  },
+
   // 初始化 CloudBase
   async initCloudbase(config) {
     config = config || {};
@@ -65,15 +91,17 @@ const Storage = {
       this.cloudConfig.env = config.env;
       this.cloudApp = cloudbase.init({ env: config.env });
 
-      // 检查 auth 与 database 模块是否已通过 CDN 自动注册
-      if (typeof this.cloudApp.auth !== 'function') {
-        throw new Error('CloudBase Auth 模块未加载，请确认已引入 cloudbase.auth.js');
+      // 验证 Auth / Database 模块可用（兼容 v2 对象式与 v1 函数式）
+      const auth = this._getAuth();
+      const db = this._getDb();
+      if (!auth) {
+        throw new Error('CloudBase Auth 模块未加载，请确认已引入 cloudbase.full.js (v2)');
       }
-      if (typeof this.cloudApp.database !== 'function') {
-        throw new Error('CloudBase Database 模块未加载，请确认已引入 cloudbase.database.js');
+      if (!db) {
+        throw new Error('CloudBase Database 模块未加载，请确认已引入 cloudbase.full.js (v2)');
       }
 
-      this.cloudDb = this.cloudApp.database();
+      this.cloudDb = db;
       this.cloudSyncEnabled = true;
       console.log('[CloudBase] 初始化成功，环境:', config.env);
       this._emitSyncStatus();
@@ -87,18 +115,37 @@ const Storage = {
     }
   },
 
-  // 匿名登录（兼容 CloudBase SDK 1.7.x 的 Provider 模式）
+  // 匿名登录（CloudBase SDK v2: auth.signInAnonymously）
   async loginAnonymously() {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
       this.cloudLastSyncError = null;
       this._emitSyncStatus();
-      const auth = this.cloudApp.auth();
-      const state = await this._tryAnonymousSignIn(auth);
-      this.cloudUser = (state && state.user) ? state.user : state;
-      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId)) || 'anonymous';
+      const auth = this._getAuth();
+      if (!auth) throw new Error('Auth 模块不可用');
+
+      let user = null;
+      // v2 API: { data: { user, session }, error }
+      if (typeof auth.signInAnonymously === 'function') {
+        const { data, error } = await auth.signInAnonymously();
+        if (error) throw error;
+        user = (data && data.user) ? data.user : data;
+      } else {
+        // v1 兜底：anonymousAuthProvider().signIn()
+        const provider = auth.anonymousAuthProvider ? auth.anonymousAuthProvider() : null;
+        if (provider && typeof provider.signIn === 'function') {
+          const state = await provider.signIn();
+          user = (state && state.user) ? state.user : state;
+        } else {
+          throw new Error('未找到可用的匿名登录方法');
+        }
+      }
+
+      this.cloudUser = user || { is_anonymous: true };
+      const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.openid || this.cloudUser.userId) || 'anonymous';
       console.log('[CloudBase] 匿名登录成功:', uid);
+
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
         throw new Error(syncResult.error || '同步失败');
@@ -115,42 +162,32 @@ const Storage = {
     }
   },
 
-  // 尝试多种匿名登录方式，兼容不同 SDK 版本
-  async _tryAnonymousSignIn(auth) {
-    const methods = [];
-    if (typeof auth.anonymousAuthProvider === 'function') {
-      try {
-        const provider = auth.anonymousAuthProvider();
-        if (provider && typeof provider.signIn === 'function') {
-          return await provider.signIn();
-        }
-      } catch (e) {
-        methods.push('anonymousAuthProvider().signIn(): ' + (e.message || String(e)));
-      }
-    }
-    if (typeof auth.signInAnonymously === 'function') {
-      try {
-        return await auth.signInAnonymously();
-      } catch (e) {
-        methods.push('signInAnonymously(): ' + (e.message || String(e)));
-      }
-    }
-    // 输出 auth 对象可用方法，方便调试
-    const available = Object.keys(auth).filter(k => typeof auth[k] === 'function').sort().join(', ');
-    throw new Error('未找到可用的匿名登录方法。已尝试: ' + methods.join('; ') + '。auth 方法: ' + available);
-  },
-
-  // 邮箱登录
+  // 邮箱登录（CloudBase SDK v2: auth.signInWithPassword）
   async loginWithEmail(email, password) {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
       this.cloudLastSyncError = null;
       this._emitSyncStatus();
-      const auth = this.cloudApp.auth();
-      const state = await auth.signInWithEmailAndPassword(email, password);
-      this.cloudUser = (state && state.user) ? state.user : state;
-      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId || this.cloudUser.email)) || 'email';
+      const auth = this._getAuth();
+      if (!auth) throw new Error('Auth 模块不可用');
+
+      let user = null;
+      // v2 API
+      if (typeof auth.signInWithPassword === 'function') {
+        const { data, error } = await auth.signInWithPassword({ email: email, password: password });
+        if (error) throw error;
+        user = (data && data.user) ? data.user : data;
+      } else if (typeof auth.signInWithEmailAndPassword === 'function') {
+        // v1 兜底
+        const state = await auth.signInWithEmailAndPassword(email, password);
+        user = (state && state.user) ? state.user : state;
+      } else {
+        throw new Error('未找到可用的邮箱登录方法');
+      }
+
+      this.cloudUser = user || { email: email };
+      const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
       console.log('[CloudBase] 邮箱登录成功:', uid);
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
@@ -168,17 +205,33 @@ const Storage = {
     }
   },
 
-  // 邮箱注册
+  // 邮箱注册（CloudBase SDK v2: auth.signUp，需邮箱验证码）
   async registerWithEmail(email, password) {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
       this.cloudLastSyncError = null;
       this._emitSyncStatus();
-      const auth = this.cloudApp.auth();
-      const state = await auth.signUpWithEmailAndPassword(email, password);
-      this.cloudUser = (state && state.user) ? state.user : state;
-      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId || this.cloudUser.email)) || 'email';
+      const auth = this._getAuth();
+      if (!auth) throw new Error('Auth 模块不可用');
+
+      if (typeof auth.signUp === 'function') {
+        // v2: signUp 返回 { data: { verifyOtp }, error }，需要邮箱验证码
+        const { data, error } = await auth.signUp({ email: email, password: password });
+        if (error) throw error;
+        if (data && typeof data.verifyOtp === 'function') {
+          throw new Error('注册需要邮箱验证码，当前暂不支持自动注册。请使用匿名登录，或在云开发控制台配置邮箱验证后手动完成注册。');
+        }
+        this.cloudUser = (data && data.user) ? data.user : data;
+      } else if (typeof auth.signUpWithEmailAndPassword === 'function') {
+        // v1 兜底
+        const state = await auth.signUpWithEmailAndPassword(email, password);
+        this.cloudUser = (state && state.user) ? state.user : state;
+      } else {
+        throw new Error('未找到可用的注册方法');
+      }
+
+      const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
       console.log('[CloudBase] 邮箱注册成功:', uid);
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
@@ -198,9 +251,14 @@ const Storage = {
 
   // 登出
   async logout() {
-    if (!this.cloudApp || !this.cloudApp.auth) return;
+    if (!this.cloudApp) return;
     try {
-      await this.cloudApp.auth().signOut();
+      const auth = this._getAuth();
+      if (auth && typeof auth.signOut === 'function') {
+        await auth.signOut();
+      } else if (auth && typeof auth.signOut === 'function') {
+        await auth.signOut();
+      }
       this.cloudUser = null;
       this.cloudDocId = null;
       this.cloudLastSync = null;
@@ -219,7 +277,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v66'
+      clientVersion: 'v67'
     };
   },
 
@@ -240,7 +298,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，更新时间较新的优先）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v66' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v67' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -290,18 +348,19 @@ const Storage = {
     if (!pkg) pkg = this._getLocalDataPackage();
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     try {
+      const docData = {
+        data: pkg.data,
+        updatedAt: pkg.updatedAt,
+        clientVersion: pkg.clientVersion
+      };
       if (this.cloudDocId) {
-        await collection.doc(this.cloudDocId).update({
-          data: {
-            data: pkg.data,
-            updatedAt: pkg.updatedAt,
-            clientVersion: pkg.clientVersion
-          }
-        });
+        // v2: update 直接传入字段（非 { data: {...} } 包裹）
+        await collection.doc(this.cloudDocId).update(docData);
         console.log('[CloudBase] 更新云端数据成功');
       } else {
-        const res = await collection.add({ data: pkg });
-        this.cloudDocId = res._id || res.id;
+        // v2: add 直接传入字段
+        const res = await collection.add(docData);
+        this.cloudDocId = res._id || res.id || (res.data && (res.data._id || res.data.id));
         console.log('[CloudBase] 新增云端数据成功，docId:', this.cloudDocId);
       }
       this.cloudLastSync = new Date().toISOString();
