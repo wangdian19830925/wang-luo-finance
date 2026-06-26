@@ -50,7 +50,52 @@ const Storage = {
     });
   },
 
-  // 获取 Auth 实例（兼容 SDK v2 对象式与 v1 函数式）
+  // 登录模式持久化
+  _LOGIN_MODE_KEY: 'fm_cloud_login_mode',
+  _getLoginMode() {
+    try { return localStorage.getItem(this._LOGIN_MODE_KEY); } catch (e) { return null; }
+  },
+  _setLoginMode(mode) {
+    try { localStorage.setItem(this._LOGIN_MODE_KEY, mode || ''); } catch (e) {}
+  },
+
+  // 恢复已有会话（页面刷新后）
+  async restoreSession() {
+    if (!this.cloudSyncEnabled || !this.cloudApp) return { success: false, reason: 'not-ready' };
+    const auth = this._getAuth();
+    if (!auth) return { success: false, reason: 'no-auth' };
+
+    try {
+      // 优先检查 CloudBase 是否已有有效会话
+      if (typeof auth.getSession === 'function') {
+        const { data, error } = await auth.getSession();
+        if (!error && data && data.session && data.session.user) {
+          this.cloudUser = data.session.user;
+          const uid = this._getUserId();
+          console.log('[CloudBase] 会话已恢复:', uid || this.cloudUser.email || 'anonymous');
+          this._emitSyncStatus();
+          const syncResult = await this.syncWithCloud();
+          return { success: syncResult.success, source: 'session-restored', reason: syncResult.error || syncResult.reason };
+        }
+      }
+
+      // 无会话时根据上次登录模式处理
+      const mode = this._getLoginMode();
+      if (mode === 'anonymous') {
+        console.log('[CloudBase] 上次为匿名登录，尝试自动匿名登录');
+        const ok = await this.loginAnonymously();
+        return { success: ok, source: 'anonymous-login' };
+      }
+      if (mode === 'email') {
+        console.log('[CloudBase] 上次为邮箱登录，但会话已过期，等待用户手动登录');
+        return { success: false, reason: 'needs-login' };
+      }
+      return { success: false, reason: 'no-session' };
+    } catch (e) {
+      console.error('[CloudBase] 恢复会话失败:', e);
+      return { success: false, reason: e.message || String(e) };
+    }
+  },
   _getAuth() {
     if (!this.cloudApp) return null;
     // v2: app.auth 是对象，直接暴露 signInAnonymously 等方法
@@ -145,6 +190,7 @@ const Storage = {
       this.cloudUser = user || { is_anonymous: true };
       const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.openid || this.cloudUser.userId) || 'anonymous';
       console.log('[CloudBase] 匿名登录成功:', uid);
+      this._setLoginMode('anonymous');
 
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
@@ -189,6 +235,7 @@ const Storage = {
       this.cloudUser = user || { email: email };
       const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
       console.log('[CloudBase] 邮箱登录成功:', uid);
+      this._setLoginMode('email');
       // 释放同步锁，避免 syncWithCloud 因自己持有锁而返回 syncing
       this.cloudSyncing = false;
       this._emitSyncStatus();
@@ -244,6 +291,7 @@ const Storage = {
 
       const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
       console.log('[CloudBase] 邮箱注册成功:', uid);
+      this._setLoginMode('email');
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
         throw new Error(syncResult.error || '同步失败');
@@ -297,6 +345,7 @@ const Storage = {
       this._pendingVerifyOtp = null;
       this._pendingEmail = null;
       this._pendingPassword = null;
+      this._setLoginMode('email');
       const uid = this._getUserId();
       console.log('[CloudBase] 邮箱验证成功:', uid || this.cloudUser.email);
 
@@ -347,6 +396,7 @@ const Storage = {
       this._pendingVerifyOtp = null;
       this._pendingEmail = null;
       this._pendingPassword = null;
+      this._setLoginMode(null);
       this._emitSyncStatus();
     } catch (e) {
       console.error('[CloudBase] 登出失败:', e);
@@ -362,7 +412,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v77'
+      clientVersion: 'v78'
     };
   },
 
@@ -389,9 +439,18 @@ const Storage = {
     return isNaN(t) ? 0 : t;
   },
 
+  // 业务稳定键：用于跨设备去重（同一业务记录在不同设备可能生成不同随机 ID）
+  _getStableBusinessKey(item, key) {
+    if (!item) return null;
+    if (key === 'insurance') return item.contractNo || null;
+    if (key === 'stocks' || key === 'funds' || key === 'rsu' || key === 'annuities') return item.code || null;
+    if (key === 'loans') return item.contractNo || item.accountNo || null;
+    return null;
+  },
+
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v77' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v78' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -422,7 +481,45 @@ const Storage = {
         }
       });
 
-      merged.data[k] = Object.values(map);
+      let list = Object.values(map);
+
+      // 二次去重：按业务稳定键（合同号/股票代码/基金代码等）合并跨设备重复记录
+      // 场景：不同设备导入同一默认数据时生成不同随机 ID，导致同步后出现双份
+      const groups = {};
+      const toRemove = new Set();
+      list.forEach(item => {
+        const bk = this._getStableBusinessKey(item, k);
+        if (!bk) return;
+        if (!groups[bk]) {
+          groups[bk] = item;
+        } else {
+          const a = groups[bk];
+          const b = item;
+          const aTime = this._itemTimestamp(a);
+          const bTime = this._itemTimestamp(b);
+          let winner = a;
+          let loser = b;
+          if (bTime > aTime) {
+            winner = b; loser = a;
+          } else if (bTime === aTime) {
+            // 时间相同：优先保留 ID 等于业务键的记录（更稳定）
+            if (b.id === bk) { winner = b; loser = a; }
+          }
+          // 统一使用业务稳定键作为 ID，确保后续同步一致
+          if (winner.id !== bk) {
+            winner.id = bk;
+            winner.updatedAt = new Date().toISOString();
+          }
+          groups[bk] = winner;
+          toRemove.add(loser.id);
+        }
+      });
+      if (toRemove.size > 0) {
+        list = list.filter(item => !toRemove.has(item.id));
+        console.log(`[CloudBase] 按业务键去重 ${k}: 合并 ${toRemove.size} 条重复记录`);
+      }
+
+      merged.data[k] = list;
       if (addedFromCloud > 0 || conflictWinCloud > 0 || conflictWinLocal > 0) {
         console.log(`[CloudBase] 合并 ${k}: 云端新增 ${addedFromCloud}, 云端覆盖 ${conflictWinCloud}, 本地保留 ${conflictWinLocal}`);
       }

@@ -90,10 +90,13 @@ const App = {
         console.warn('[App] CloudBase 未初始化:', Storage.cloudInitError || '未知原因');
         return;
       }
-      console.log('[App] CloudBase 初始化完成，尝试匿名登录');
-      const anonymousOk = await Storage.loginAnonymously();
-      if (!anonymousOk) {
-        console.warn('[App] 匿名登录未成功，请点击右上角设置面板登录');
+      console.log('[App] CloudBase 初始化完成，尝试恢复会话');
+      const restoreResult = await Storage.restoreSession();
+      console.log('[App] 会话恢复结果:', restoreResult);
+      if (!restoreResult.success && restoreResult.reason === 'needs-login') {
+        console.warn('[App] 上次为邮箱登录，请手动登录以启用同步');
+      } else if (!restoreResult.success) {
+        console.warn('[App] 会话未恢复:', restoreResult.reason);
       }
     } catch (e) {
       console.error('[App] CloudBase 初始化异常:', e);
@@ -398,23 +401,9 @@ const App = {
   // 设置与数据同步：导出/导入/清空
   setupSettings() {
     var self = this;
-    var settingsBtn = document.getElementById("settingsBtn");
-    var closeBtn = document.getElementById("closeSettingsBtn");
-    var overlay = document.getElementById("settingsOverlay");
-    var rightSidebar = document.getElementById("rightSidebar");
     var exportBtn = document.getElementById("exportDataBtn");
     var importFile = document.getElementById("importDataFile");
     var clearBtn = document.getElementById("clearLocalDataBtn");
-
-    if (settingsBtn) settingsBtn.addEventListener("click", function() { self.openSettings(); });
-    if (closeBtn) closeBtn.addEventListener("click", function() { self.closeSettings(); });
-    if (overlay) overlay.addEventListener("click", function(e) {
-      if (e.target === overlay) self.closeSettings();
-    });
-    // ESC 关闭右侧设置边栏
-    document.addEventListener("keydown", function(e) {
-      if (e.key === "Escape") self.closeSettings();
-    });
 
     if (exportBtn) exportBtn.addEventListener("click", function() { self.exportDataToFile(); });
 
@@ -428,40 +417,11 @@ const App = {
   },
 
   openSettings() {
-    var overlay = document.getElementById("settingsOverlay");
-    var rightSidebar = document.getElementById("rightSidebar");
-    if (overlay) {
-      overlay.style.display = "block";
-      // 强制重排确保 transition 生效
-      void overlay.offsetWidth;
-      overlay.classList.add("show");
-    }
-    if (rightSidebar) rightSidebar.classList.add("open");
-    // 如果之前没有待验证的注册流程，重置验证码输入框状态
-    if (!Storage._pendingVerifyOtp) {
-      var verifyCodeGroup = document.getElementById('cloudVerifyCodeGroup');
-      var verifyBtn = document.getElementById('cloudVerifyBtn');
-      var registerBtn = document.getElementById('cloudRegisterBtn');
-      var loginBtn = document.getElementById('cloudLoginBtn');
-      var verificationCodeInput = document.getElementById('cloudVerificationCode');
-      if (verifyCodeGroup) verifyCodeGroup.style.display = 'none';
-      if (verifyBtn) verifyBtn.style.display = 'none';
-      if (registerBtn) registerBtn.style.display = 'inline-flex';
-      if (loginBtn) loginBtn.style.display = 'inline-flex';
-      if (verificationCodeInput) verificationCodeInput.value = '';
-    }
+    this.navigateTo('settings');
   },
 
   closeSettings() {
-    var overlay = document.getElementById("settingsOverlay");
-    var rightSidebar = document.getElementById("rightSidebar");
-    if (rightSidebar) rightSidebar.classList.remove("open");
-    if (overlay) {
-      overlay.classList.remove("show");
-      setTimeout(function() {
-        if (!overlay.classList.contains("show")) overlay.style.display = "none";
-      }, 300);
-    }
+    this.navigateTo('dashboard');
   },
 
   exportDataToFile() {
@@ -775,7 +735,7 @@ const App = {
     }
 
     try {
-      var existing = Storage.get(Storage.keys.insurance);
+      var existing = Storage.get(Storage.keys.insurance, true); // 包含已删除，便于修复旧 ID
       var existingContracts = new Set();
       var existingMap = {};
       existing.forEach(function(p) { if (p && p.contractNo) { existingContracts.add(p.contractNo); existingMap[p.contractNo] = p; } });
@@ -783,8 +743,10 @@ const App = {
       
       var added = 0;
       var updated = 0;
+      var idFixed = 0;
       var self = this;
       policies.forEach(function(p) {
+        var stableId = p.contractNo;
         if (existingContracts.has(p.contractNo)) {
           // 已有记录：与数据源比对，更新变更的字段
           var ex = existingMap[p.contractNo];
@@ -797,13 +759,29 @@ const App = {
           // 当数据源明确标记为无下次缴费（nextPayDate=null）时，清除旧记录中的日期
           if (p.nextPayDate === null && ex.nextPayDate) merge.nextPayDate = null;
           if (p.baseNextPayDate === null && ex.baseNextPayDate) merge.baseNextPayDate = null;
+          // 修复旧记录 ID 为稳定键（合同号），避免跨设备同步后出现双份
+          if (ex.id !== stableId) {
+            var all = Storage.get(Storage.keys.insurance, true);
+            var idx = all.findIndex(function(x) { return x.id === ex.id; });
+            if (idx !== -1) {
+              all[idx].id = stableId;
+              all[idx].updatedAt = new Date().toISOString();
+              Storage.set(Storage.keys.insurance, all);
+              idFixed++;
+              console.log('[App] 修复保单 ID:', ex.id, '→', stableId);
+            }
+            ex.id = stableId;
+            existingMap[p.contractNo] = ex;
+          }
           if (Object.keys(merge).length > 0) {
-            Storage.update(Storage.keys.insurance, ex.id, merge);
+            Storage.update(Storage.keys.insurance, stableId, merge);
             updated++;
             console.log('[App] 更新已存在保单字段:', p.contractNo, Object.keys(merge).join(','));
           }
           return;
         }
+        // 新增：使用合同号作为稳定 ID
+        p.id = stableId;
         // 自动调整下次缴费日期（将过期日期推进到未来）
         p.nextPayDate = self.adjustNextPayDate(p);
         Storage.add(Storage.keys.insurance, p);
@@ -811,17 +789,19 @@ const App = {
         console.log('[App] 添加保单:', p.product.substring(0,20), '|', p.person, '| 缴费日:', p.nextPayDate);
       });
 
-      console.log('[App] 导入完成，新增:', added, '更新:', updated, '总保单数:', Storage.get(Storage.keys.insurance).length);
+      console.log('[App] 导入完成，新增:', added, '更新:', updated, '修复ID:', idFixed, '总保单数:', Storage.get(Storage.keys.insurance).length);
       localStorage.setItem("fm_insurance_imported", "true");
       
       if (!silent) {
         var msg = "操作完成！";
         if (added > 0) msg += " 新增 " + added + " 条保单。";
         if (updated > 0) msg += " 更新 " + updated + " 条保单字段。";
+        if (idFixed > 0) msg += " 修复 " + idFixed + " 条保单 ID。";
         alert(msg);
       } else {
         if (added > 0) console.log('[App] 已自动导入 ' + added + ' 条保单');
         if (updated > 0) console.log('[App] 已自动更新 ' + updated + ' 条保单字段');
+        if (idFixed > 0) console.log('[App] 已自动修复 ' + idFixed + ' 条保单 ID');
       }
       this.loadDashboard();
     } catch(e) {
@@ -893,15 +873,17 @@ const App = {
       return;
     }
     try {
-      var existing = Storage.get(Storage.keys.stocks);
+      var existing = Storage.get(Storage.keys.stocks, true); // 包含已删除，便于修复旧 ID
       console.log('[App] 导入前 stock 数量:', existing.length);
       var existingCodes = new Set();
-      existing.forEach(function(s) { if (s && s.code) existingCodes.add(s.code); });
+      var existingMap = {};
+      existing.forEach(function(s) { if (s && s.code) { existingCodes.add(s.code); existingMap[s.code] = s; } });
       console.log('[App] 已有代码:', Array.from(existingCodes).join(', '));
-      var added = 0, merged = 0;
+      var added = 0, merged = 0, idFixed = 0;
 
       holdings.forEach(function(h) {
         var stockData = {
+          id: h.code,
           code: h.code,
           name: h.name,
           shares: h.shares,
@@ -918,12 +900,25 @@ const App = {
           var idx = existing.findIndex(function(s) { return s.code === h.code; });
           if (idx >= 0) {
             var exist = existing[idx];
+            // 修复旧 ID 为稳定键（股票代码）
+            if (exist.id !== h.code) {
+              var all = Storage.get(Storage.keys.stocks, true);
+              var aidx = all.findIndex(function(x) { return x.id === exist.id; });
+              if (aidx !== -1) {
+                all[aidx].id = h.code;
+                all[aidx].updatedAt = new Date().toISOString();
+                Storage.set(Storage.keys.stocks, all);
+                idFixed++;
+                console.log('[App] 修复股票 ID:', exist.id, '→', h.code);
+              }
+              exist.id = h.code;
+            }
             // 如果源数据 currentPrice 为占位(0)，保留已获取的实时价格
             if (!stockData.currentPrice && exist.currentPrice) {
               stockData.currentPrice = exist.currentPrice;
               console.log('[App] 保护已获取价格:', h.code, '保持', exist.currentPrice);
             }
-            Storage.update(Storage.keys.stocks, exist.id, stockData);
+            Storage.update(Storage.keys.stocks, h.code, stockData);
             merged++;
             console.log('[App] 合并更新股票:', h.code, h.name, '| 现价:', stockData.currentPrice);
           }
@@ -935,12 +930,13 @@ const App = {
         }
       });
 
-      console.log('[App] 股票导入完成，新增:', added, '合并:', merged, '总数:', Storage.get(Storage.keys.stocks).length);
-      if (added > 0 || merged > 0) {
+      console.log('[App] 股票导入完成，新增:', added, '合并:', merged, '修复ID:', idFixed, '总数:', Storage.get(Storage.keys.stocks).length);
+      if (added > 0 || merged > 0 || idFixed > 0) {
         this.loadStockList();
         this.loadDashboard();    // 刷新 Dashboard 总资产
         var msg = added > 0 ? ("已导入 " + added + " 只股票") : "";
         msg += merged > 0 ? (msg ? "，" : "") + "已更新 " + merged + " 只" : "";
+        msg += idFixed > 0 ? (msg ? "，" : "") + "已修复 " + idFixed + " 只 ID" : "";
         this.showToast(msg);
       }
     } catch(e) {
@@ -1022,7 +1018,7 @@ const App = {
     if (grants.length === 0) return;
 
     try {
-      var existing = Storage.get(Storage.keys.rsu);
+      var existing = Storage.get(Storage.keys.rsu, true); // 包含已删除，便于修复旧 ID
       var today = new Date(); today.setHours(0,0,0,0);
 
       grants.forEach(function(g) {
@@ -1039,6 +1035,7 @@ const App = {
         var locked = Math.max(0, totalShares - vested);
 
         var rsuData = {
+          id: g.code,
           code: g.code,
           name: g.name,
           totalShares: totalShares,
@@ -1058,10 +1055,21 @@ const App = {
         var idx = existing.findIndex(function(ex) { return ex.code === g.code; });
         if (idx >= 0) {
           var exist = existing[idx];
+          if (exist.id !== g.code) {
+            var all = Storage.get(Storage.keys.rsu, true);
+            var aidx = all.findIndex(function(x) { return x.id === exist.id; });
+            if (aidx !== -1) {
+              all[aidx].id = g.code;
+              all[aidx].updatedAt = new Date().toISOString();
+              Storage.set(Storage.keys.rsu, all);
+              console.log('[App] 修复 RSU ID:', exist.id, '→', g.code);
+            }
+            exist.id = g.code;
+          }
           if (!rsuData.currentPrice && exist.currentPrice) {
             rsuData.currentPrice = exist.currentPrice;
           }
-          Storage.update(Storage.keys.rsu, exist.id, rsuData);
+          Storage.update(Storage.keys.rsu, g.code, rsuData);
           console.log('[App] 合并更新 RSU:', g.code, g.name, '| 已解禁:', vested, '锁定:', locked);
         } else {
           Storage.add(Storage.keys.rsu, rsuData);
@@ -1373,13 +1381,15 @@ const App = {
     var holdings = (typeof FUND_HOLDINGS !== 'undefined') ? FUND_HOLDINGS : [];
     if (holdings.length === 0) return;
     try {
-      var existing = Storage.get(Storage.keys.funds);
+      var existing = Storage.get(Storage.keys.funds, true); // 包含已删除，便于修复旧 ID
       var existingCodes = new Set();
-      existing.forEach(function(f) { if (f && f.code) existingCodes.add(f.code); });
-      var added = 0, merged = 0;
+      var existingMap = {};
+      existing.forEach(function(f) { if (f && f.code) { existingCodes.add(f.code); existingMap[f.code] = f; } });
+      var added = 0, merged = 0, idFixed = 0;
 
       holdings.forEach(function(h) {
         var fundData = {
+          id: h.code,
           code: h.code, name: h.name,
           holdValue: h.holdValue || 0, costValue: h.costValue || 0,
           nav: h.nav || 0, shares: h.shares || 0,
@@ -1389,10 +1399,23 @@ const App = {
         if (existingCodes.has(h.code)) {
           var idx = existing.findIndex(function(f) { return f.code === h.code; });
           if (idx >= 0) {
-            // 保护已有的净值
             var exist = existing[idx];
+            // 修复旧 ID 为稳定键（基金代码）
+            if (exist.id !== h.code) {
+              var all = Storage.get(Storage.keys.funds, true);
+              var aidx = all.findIndex(function(x) { return x.id === exist.id; });
+              if (aidx !== -1) {
+                all[aidx].id = h.code;
+                all[aidx].updatedAt = new Date().toISOString();
+                Storage.set(Storage.keys.funds, all);
+                idFixed++;
+                console.log('[App] 修复基金 ID:', exist.id, '→', h.code);
+              }
+              exist.id = h.code;
+            }
+            // 保护已有的净值
             if (!fundData.nav && exist.nav) { fundData.nav = exist.nav; fundData.shares = exist.shares; fundData.holdValue = exist.holdValue; }
-            Storage.update(Storage.keys.funds, exist.id, fundData);
+            Storage.update(Storage.keys.funds, h.code, fundData);
             merged++;
           }
         } else {
@@ -1401,11 +1424,12 @@ const App = {
         }
       });
 
-      if (added > 0 || merged > 0) {
+      if (added > 0 || merged > 0 || idFixed > 0) {
         this.loadFundList();
         this.loadDashboard();    // 刷新 Dashboard 总资产
         var msg = added > 0 ? ("已导入 " + added + " 只基金") : "";
         msg += merged > 0 ? (msg ? "，" : "") + "已更新 " + merged + " 只" : "";
+        msg += idFixed > 0 ? (msg ? "，" : "") + "已修复 " + idFixed + " 只 ID" : "";
         this.showToast(msg);
       }
     } catch(e) { console.error('[App] importFundData 异常:', e); }
@@ -1488,6 +1512,7 @@ const App = {
       shares = holdValue / nav;
     }
     Storage.add(Storage.keys.funds, {
+      id: document.getElementById("fundCode").value,
       code: document.getElementById("fundCode").value,
       name: document.getElementById("fundName").value,
       holdValue: holdValue,
@@ -2230,24 +2255,10 @@ const App = {
   setupNavigation() {
     try {
       document.querySelectorAll(".nav-item").forEach(item => {
-        item.addEventListener("click", () => {
-          if (item.dataset.page === 'settings') {
-            this.openSettings();
-            this.closeSidebar();
-            return;
-          }
-          this.navigateTo(item.dataset.page);
-          this.closeSidebar();
-        });
+        item.addEventListener("click", () => { this.navigateTo(item.dataset.page); this.closeSidebar(); });
       });
       document.querySelectorAll(".bottom-nav-item").forEach(item => {
-        item.addEventListener("click", () => {
-          if (item.dataset.page === 'settings') {
-            this.openSettings();
-            return;
-          }
-          this.navigateTo(item.dataset.page);
-        });
+        item.addEventListener("click", () => this.navigateTo(item.dataset.page));
       });
       var menuBtn = document.getElementById("menuBtn"); if (menuBtn) menuBtn.addEventListener("click", () => this.openSidebar());
       var overlay = document.getElementById("sidebarOverlay"); if (overlay) overlay.addEventListener("click", () => this.closeSidebar());
@@ -2305,17 +2316,13 @@ const App = {
   },
 
   navigateTo(page) {
-    if (page === 'settings') {
-      this.openSettings();
-      return;
-    }
     this.currentPage = page;
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     const target = document.getElementById("page-" + page);
     if (target) target.classList.add("active");
     document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
     document.querySelectorAll(".bottom-nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
-    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", alerts:"通知管理" };
+    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", alerts:"通知管理", settings:"设置与数据同步" };
     document.getElementById("headerTitle").textContent = titles[page] || "家庭资产管理";
     // 非 Dashboard 页面显示返回按钮
     var homeBtn = document.getElementById("homeBtn");
@@ -2324,8 +2331,24 @@ const App = {
   },
 
   loadPageData(page) {
-    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), alerts:()=>this.loadAlertsPage() };
+    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), alerts:()=>this.loadAlertsPage(), settings:()=>this.onSettingsPageShow() };
     if (f[page]) f[page]();
+  },
+
+  onSettingsPageShow() {
+    // 如果之前没有待验证的注册流程，重置验证码输入框状态
+    if (!Storage._pendingVerifyOtp) {
+      var verifyCodeGroup = document.getElementById('cloudVerifyCodeGroup');
+      var verifyBtn = document.getElementById('cloudVerifyBtn');
+      var registerBtn = document.getElementById('cloudRegisterBtn');
+      var loginBtn = document.getElementById('cloudLoginBtn');
+      var verificationCodeInput = document.getElementById('cloudVerificationCode');
+      if (verifyCodeGroup) verifyCodeGroup.style.display = 'none';
+      if (verifyBtn) verifyBtn.style.display = 'none';
+      if (registerBtn) registerBtn.style.display = 'inline-flex';
+      if (loginBtn) loginBtn.style.display = 'inline-flex';
+      if (verificationCodeInput) verificationCodeInput.value = '';
+    }
   },
 
   // 静默自动刷新过期缴费日期
@@ -3979,6 +4002,7 @@ const App = {
     var currency = currencyMap[market] || "CNY";
     const currentPrice = document.getElementById("stockCurrentPrice").value || document.getElementById("stockCost").value;
     Storage.add(Storage.keys.stocks, {
+      id: document.getElementById("stockCode").value,
       code: document.getElementById("stockCode").value,
       name: document.getElementById("stockName").value,
       shares: document.getElementById("stockShares").value,
@@ -4038,21 +4062,39 @@ const App = {
 
   importLoanData() {
     if (typeof LOAN_HOLDINGS === "undefined") return;
-    var stored = Storage.get(Storage.keys.loans);
+    var stored = Storage.get(Storage.keys.loans, true); // 包含已删除，便于修复旧 ID
     var merged = [].concat(stored);
+    var added = 0, idFixed = 0;
     LOAN_HOLDINGS.forEach(function(src) {
+      var stableId = src.contractNo;
       var found = merged.find(function(s) {
         return s.contractNo === src.contractNo || s.accountNo === src.accountNo;
       });
       if (!found) {
-        src.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        src.id = stableId;
         src.createdAt = new Date().toISOString();
         merged.push(src);
+        added++;
         console.log('[房贷] 新增: ' + src.bank);
+      } else if (found.id !== stableId) {
+        // 修复已有记录 ID 为合同号
+        var idx = merged.findIndex(function(s) { return s.id === found.id; });
+        if (idx !== -1) {
+          merged[idx].id = stableId;
+          merged[idx].updatedAt = new Date().toISOString();
+          idFixed++;
+          console.log('[房贷] 修复 ID:', found.id, '→', stableId);
+        }
       }
     });
     Storage.set(Storage.keys.loans, merged);
     this.loadLoanList();
+    if (added > 0 || idFixed > 0) {
+      this.loadDashboard();
+      var msg = added > 0 ? ("已导入 " + added + " 笔房贷") : "";
+      msg += idFixed > 0 ? (msg ? "，" : "") + "已修复 " + idFixed + " 笔 ID" : "";
+      this.showToast(msg);
+    }
   },
 
   // 等额本息月供计算
@@ -4367,22 +4409,31 @@ const App = {
   },
 
   importAnnuityData() {
-    var list = Storage.get(Storage.keys.annuities);
+    var list = Storage.get(Storage.keys.annuities, true); // 包含已删除，便于修复旧 ID
     var added = 0;
+    var idFixed = 0;
     var self = this;
     ANNUITY_HOLDINGS.forEach(function(a) {
       var exists = list.find(function(item) { return item.code === a.code; });
       if (!exists) {
-        a.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        a.id = a.code;
         a.createdAt = new Date().toISOString();
         list.push({...a});
         added++;
+      } else if (exists.id !== a.code) {
+        var idx = list.findIndex(function(item) { return item.id === exists.id; });
+        if (idx !== -1) {
+          list[idx].id = a.code;
+          list[idx].updatedAt = new Date().toISOString();
+          idFixed++;
+          console.log('[App] 修复年金 ID:', exists.id, '→', a.code);
+        }
       }
     });
     Storage.set(Storage.keys.annuities, list);
     this.renderAnnuityPage();
     this.loadDashboard();
-    this.showToast(added > 0 ? ("已导入 " + added + " 个年金组合") : "年金数据已是最新");
+    this.showToast(added > 0 ? ("已导入 " + added + " 个年金组合") : (idFixed > 0 ? ("已修复 " + idFixed + " 个年金组合 ID") : "年金数据已是最新"));
   },
 
   loadAnnuityList() { this.renderAnnuityPage(); },
