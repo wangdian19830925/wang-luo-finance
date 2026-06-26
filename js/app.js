@@ -2014,21 +2014,38 @@ const App = {
     var card = document.getElementById('fxRateCard');
     if (!card) return;
 
+    // 始终显示卡片（避免 Mac 上因 API 失败而丢失卡片）
+    card.style.display = 'block';
+
+    // 立即用本地汇率填充（兜底，确保 Mac 上也能看到汇率）
+    var usdCny = this.getFxRate('USD');   // USD/CNY
+    var hkdCny = this.getFxRate('HKD');   // HKD/CNY
+    var fxCnyUsdEl = document.getElementById('fxCnyUsd');
+    var fxCnyHkdEl = document.getElementById('fxCnyHkd');
+    if (fxCnyUsdEl && usdCny > 0) fxCnyUsdEl.textContent = (1 / usdCny).toFixed(4);
+    if (fxCnyHkdEl && hkdCny > 0) fxCnyHkdEl.textContent = (1 / hkdCny).toFixed(4);
+
     self._fetchFxHistory(function(history) {
       if (!history || !history.cnyUsd || history.cnyUsd.length < 2) {
-        card.style.display = 'none';
+        // 历史数据不可用：保留本地汇率，隐藏走势图容器
+        var svg1 = document.getElementById('fxTrendCnyUsdSvg');
+        var svg2 = document.getElementById('fxTrendCnyHkdSvg');
+        if (svg1) svg1.style.display = 'none';
+        if (svg2) svg2.style.display = 'none';
         return;
       }
-      card.style.display = 'block';
 
-      // 更新实时汇率显示（最新一天）
+      // 用历史数据最新值更新汇率（更精确）
       var latestUsd = history.cnyUsd[history.cnyUsd.length - 1];
       var latestHkd = history.cnyHkd[history.cnyHkd.length - 1];
-      var fxCnyUsdEl = document.getElementById('fxCnyUsd');
-      var fxCnyHkdEl = document.getElementById('fxCnyHkd');
       if (fxCnyUsdEl) fxCnyUsdEl.textContent = latestUsd.rate.toFixed(4);
       if (fxCnyHkdEl) fxCnyHkdEl.textContent = latestHkd.rate.toFixed(4);
 
+      // 显示并绘制走势图
+      var svg1 = document.getElementById('fxTrendCnyUsdSvg');
+      var svg2 = document.getElementById('fxTrendCnyHkdSvg');
+      if (svg1) svg1.style.display = '';
+      if (svg2) svg2.style.display = '';
       self._drawFxTrendChart('fxTrendCnyUsdSvg', history.cnyUsd, 'CNY/USD');
       self._drawFxTrendChart('fxTrendCnyHkdSvg', history.cnyHkd, 'CNY/HKD');
     });

@@ -2407,14 +2407,14 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
-   汇率走势卡片（合并实时汇率 + 走势图）
+   汇率走势卡片（实时汇率与走势图配对）
    ============================================ */
 .fx-rate-card {
   /* 背景/边框/圆角在内联样式中定义，这里补充交互样式 */
 }
 
 .fx-rate-card-header {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .fx-rate-card-title {
@@ -2423,46 +2423,36 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   color: var(--text-primary, #f1f5f9);
 }
 
-.fx-rate-current {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: #93c5fd;
-}
-
-.fx-rate-pair {
-  white-space: nowrap;
-}
-
-.fx-rate-pair strong {
-  color: #f1f5f9;
-  margin-left: 4px;
-  font-size: 14px;
-}
-
-.fx-rate-divider {
-  color: rgba(255,255,255,0.15);
-}
-
-/* 走势图网格 */
-.fx-trend-charts {
+/* 两列配对布局 */
+.fx-rate-pairs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.fx-trend-chart {
+/* 每个配对块：汇率在上方，走势图在下方 */
+.fx-rate-pair-block {
   background: rgba(255,255,255,0.02);
   border-radius: 8px;
-  padding: 8px;
+  padding: 10px 12px;
 }
 
-.fx-trend-chart-title {
+.fx-rate-pair-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.fx-rate-pair-label {
   font-size: 11px;
   color: var(--text-muted, #64748b);
-  margin-bottom: 4px;
+}
+
+.fx-rate-pair-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
 }
 
 .fx-trend-svg-container {
@@ -2470,15 +2460,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 @media (max-width: 600px) {
-  .fx-rate-current {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  .fx-rate-divider {
-    display: none;
-  }
-  .fx-trend-charts {
+  .fx-rate-pairs {
     grid-template-columns: 1fr;
   }
 }

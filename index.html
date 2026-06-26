@@ -6,7 +6,7 @@
   <title>家庭资产管理</title>
   <!-- version: 2026-06-26-v87 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=87">
+  <link rel="stylesheet" href="./css/style.css?v=88">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -353,26 +353,29 @@
           <span class="value text-white" id="stockProfitLoss">¥0.00</span>
         </div>
       </div>
-      <!-- 汇率走势卡片（合并实时汇率 + 走势图） -->
-      <div class="fx-rate-card" id="fxRateCard" style="display:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+      <!-- 汇率走势卡片（实时汇率与走势图配对） -->
+      <div class="fx-rate-card" id="fxRateCard" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <div class="fx-rate-card-header">
           <span class="fx-rate-card-title">
             <svg class="icon" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;"><use href="#icon-trend"/></svg>
             汇率走势
           </span>
         </div>
-        <div class="fx-rate-current">
-          <span class="fx-rate-pair"><span title="人民币">🇨🇳</span> CNY/<span title="美元">🇺🇸</span> USD <strong id="fxCnyUsd">-</strong></span>
-          <span class="fx-rate-divider">|</span>
-          <span class="fx-rate-pair"><span title="人民币">🇨🇳</span> CNY/<span title="中国港币">🇭🇰</span> HKD <strong id="fxCnyHkd">-</strong></span>
-        </div>
-        <div class="fx-trend-charts">
-          <div class="fx-trend-chart">
-            <div class="fx-trend-chart-title">CNY/USD</div>
+        <div class="fx-rate-pairs">
+          <!-- CNY/USD 配对块 -->
+          <div class="fx-rate-pair-block">
+            <div class="fx-rate-pair-row">
+              <span class="fx-rate-pair-label"><span title="人民币">🇨🇳</span> CNY/<span title="美元">🇺🇸</span> USD</span>
+              <strong class="fx-rate-pair-value" id="fxCnyUsd">-</strong>
+            </div>
             <div class="fx-trend-svg-container" id="fxTrendCnyUsdSvg"></div>
           </div>
-          <div class="fx-trend-chart">
-            <div class="fx-trend-chart-title">CNY/HKD</div>
+          <!-- CNY/HKD 配对块 -->
+          <div class="fx-rate-pair-block">
+            <div class="fx-rate-pair-row">
+              <span class="fx-rate-pair-label"><span title="人民币">🇨🇳</span> CNY/<span title="中国港币">🇭🇰</span> HKD</span>
+              <strong class="fx-rate-pair-value" id="fxCnyHkd">-</strong>
+            </div>
             <div class="fx-trend-svg-container" id="fxTrendCnyHkdSvg"></div>
           </div>
         </div>
@@ -939,7 +942,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=87"></script>
+  <script src="./js/storage.js?v=88"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -949,6 +952,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=87"></script>
+  <script src="./js/app.js?v=88"></script>
 </body>
 </html>
