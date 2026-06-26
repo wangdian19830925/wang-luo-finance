@@ -690,6 +690,7 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   transition: all 0.2s;
@@ -1353,6 +1354,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 
 /* ===== 股票走势图（内嵌于股票卡片） ===== */
 .stock-chart-inner {
+  flex: 0 0 100%;
   margin-top: 8px;
   padding: 8px 0 4px;
   border-top: 1px solid var(--border);
@@ -2576,6 +2578,30 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 
 .cash-account-amount.editable:active {
   background: rgba(255,255,255,0.08);
+}
+
+.cash-account-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.cash-account-actions button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cash-account-actions button:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
 .cash-total-bar {

@@ -1042,7 +1042,9 @@ const App = {
   deleteFund(id) {
     if (!confirm("确定删除此基金？")) return;
     Storage.delete(Storage.keys.funds, id);
-    this.loadFundList(); this.showToast("基金已删除");
+    this.loadFundList();
+    this.loadDashboard();
+    this.showToast("基金已删除");
   },
 
   editFundPrice(id) {
@@ -1453,11 +1455,29 @@ const App = {
 
 
   // 从腾讯财经K线API获取历史数据（日线，约120个交易日≈6个月）
-  // 数据源优先级: 在线API(腾讯) > window.STOCK_HISTORY_DATA(内联) > localStorage
+  // 数据源优先级: 内存缓存 > 在线API(腾讯) > window.STOCK_HISTORY_DATA(内联) > localStorage
   fetchStockHistoryData(code, market, callback) {
     var self = this;
     var tc = this._getTencentCode(code, market);
     if (!tc) { if (callback) callback(null); return; }
+
+    // 内存缓存：同一会话内不重复请求同一股票的历史数据
+    if (!this._stockHistoryCache) this._stockHistoryCache = {};
+    var cacheKey = code + '_' + (market || '');
+    if (this._stockHistoryCache[cacheKey]) {
+      console.log('[走势图] ' + code + ' 命中内存缓存');
+      if (callback) callback(this._stockHistoryCache[cacheKey]);
+      return;
+    }
+
+    // 包装 callback，成功时自动写入缓存
+    var origCallback = callback;
+    callback = function(data) {
+      if (data && data.length >= 5) {
+        self._stockHistoryCache[cacheKey] = data;
+      }
+      if (origCallback) origCallback(data);
+    };
 
     // 计算日期范围
     var now = new Date();
@@ -2751,6 +2771,9 @@ const App = {
       html += '<div class="cash-account-detail">' + this.escapeHtml(a.note || "") + ' · 更新于 ' + this.escapeHtml(a.updated || "未知") + '</div>';
       html += '</div>';
       html += '<div class="cash-account-amount editable" onclick="App.openEditBalance(\'' + a.id + '\')" title="点击编辑余额">' + this.formatMoney(a.balance) + '</div>';
+      html += '<div class="cash-account-actions">';
+      html += '<button onclick="App.deleteCashAccount(\'' + a.id + '\')" title="删除">' + this.icon('delete') + '</button>';
+      html += '</div>';
       html += '</div>';
     }.bind(this));
 
@@ -2990,6 +3013,16 @@ const App = {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
       if (e.key === 'Escape') { self.loadTransactions(); }
     });
+  },
+
+  deleteCashAccount(id) {
+    if (!confirm("确定删除此现金账户？")) return;
+    var accounts = Storage.get(Storage.keys.cashAccounts);
+    accounts = accounts.filter(function(a) { return a.id !== id; });
+    Storage.set(Storage.keys.cashAccounts, accounts);
+    this.loadTransactions();
+    this.loadDashboard();
+    this.showToast("现金账户已删除");
   },
 
   deleteTransaction(type, id) {
@@ -3440,7 +3473,6 @@ const App = {
               "<div class=\"stock-chart-error\" id=\"stockChartCanvas_" + item.code + "_error\" style=\"display:none;\">暂无数据</div>" +
             "</div>" +
           "</div>" +
-          "</div>" +
         "</div>";
       });
 
@@ -3494,7 +3526,12 @@ const App = {
   deleteStock(id) {
     if (!confirm("确定删除此股票？")) return;
     Storage.delete(Storage.keys.stocks, id);
-    this.loadStockList(); this.showToast("股票已删除");
+    this.loadStockList();
+    this.loadDashboard();
+    // 直接渲染图表（使用内存缓存，已缓存的股票瞬间完成）
+    var self = this;
+    setTimeout(function() { self.renderStockCharts(); }, 50);
+    this.showToast("股票已删除");
   },
 
   editStockPrice(id) {
