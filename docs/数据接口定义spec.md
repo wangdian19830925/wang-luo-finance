@@ -1,6 +1,6 @@
 # 家庭资产管理工具 — 数据接口定义 Spec
 
-> 版本：v56 | 更新：2026-06-25
+> 版本：v94 | 更新：2026-06-26
 > 协议：时间戳采用 ISO 8601（UTC+8 实际使用）
 
 ---
@@ -118,6 +118,33 @@ GET https://open.er-api.com/v6/latest/USD
 
 缓存：localStorage `fm_exchange_rates`，TTL 1 小时。
 
+### 1.4 汇率历史走势（近 6 个月）
+
+```
+GET https://api.frankfurter.dev/v1/{start}..{end}?from=USD&to=CNY,HKD
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `start` | YYYY-MM-DD | 起始日期（约 6 个月前） |
+| `end` | YYYY-MM-DD | 结束日期（今天） |
+
+**响应**：
+
+```json
+{
+  "rates": {
+    "2026-01-01": { "CNY": 7.1234, "HKD": 7.8234 },
+    "2026-01-02": { "CNY": 7.1250, "HKD": 7.8240 }
+  }
+}
+```
+
+**处理方式**：
+- `USDCNY = rates[date].CNY`
+- `HKDCNY = rates[date].CNY / rates[date].HKD`
+- 超时或失败时使用本地当前汇率生成 26 个周频模拟点
+
 ---
 
 ## 2. 内部 JS 模块接口
@@ -162,14 +189,32 @@ GET https://open.er-api.com/v6/latest/USD
 | `getInsuranceReminders()` | 30 天内到期提醒 |
 | `getRecentRecords()` | 最近 10 条记录 |
 
+#### CloudBase 同步接口
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `initCloudBase()` | `() => Promise<{success, error}>` | 初始化 CloudBase SDK |
+| `restoreSession()` | `() => Promise<{success, source, reason}>` | 页面刷新后恢复会话 |
+| `loginAnonymously()` | `() => Promise<{success, error}>` | 匿名登录（仅本设备） |
+| `registerWithEmail(email, password)` | `() => Promise<{success, needsVerification, error}>` | 邮箱注册发送验证码 |
+| `verifyEmailCode(code)` | `() => Promise<{success, error}>` | 验证邮箱验证码并登录 |
+| `loginWithEmail(email, password)` | `() => Promise<{success, error}>` | 邮箱密码登录 |
+| `logoutCloud()` | `() => void` | 登出云端 |
+| `syncWithCloud()` | `() => Promise<{success, error}>` | 手动与云端同步 |
+| `pushToCloud()` | `() => Promise<{success, error}>` | 推送本地数据到云端 |
+| `pullFromCloud()` | `() => Promise<{success, data, error}>` | 从云端拉取数据 |
+
 ### 2.2 App 模块（`js/app.js`）
 
 | 方法 | 说明 |
 |------|------|
 | `init()` | 初始化应用 |
 | `navigateTo(page)` | 路由切换 |
-| `loadDashboard()` | 渲染资产总览 |
+| `loadDashboard()` | 渲染资产总览（含每日快照保存） |
 | `refreshAllData()` | 刷新所有在线数据 |
+| `renderDailyChangeBrief()` | 渲染净资产简报 |
+| `_saveDailySnapshot()` | 保存每日净资产快照 |
+| `_renderFxTrendCharts()` | 渲染汇率走势图 |
 | `saveStock()` / `saveFund()` / `saveInsurance()` / `saveLoan()` | 保存表单数据 |
 | `setupCSVImport()` | 账单 CSV 导入 |
 | `downloadCalendar()` | 导出 .ics 日历 |
@@ -208,6 +253,8 @@ GET https://open.er-api.com/v6/latest/USD
 | `fm_fund_imported` | string | 基金导入标记 |
 | `fm_loan_imported` | string | 房贷导入标记 |
 | `fm_annuity_imported` | string | 年金导入标记 |
+| `fm_cloud_login_mode` | string | 登录模式：'email' / 'anonymous' |
+| `fm_snapshots` | `SnapshotMap` | 每日净资产快照（v92 起） |
 
 ---
 
