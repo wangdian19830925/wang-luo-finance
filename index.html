@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v84 -->
+  <!-- version: 2026-06-26-v85 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=84">
+  <link rel="stylesheet" href="./css/style.css?v=85">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -355,6 +355,22 @@
       </div>
       <div class="fx-rate-bar" id="fxRateBar" style="display:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);border-radius:8px;padding:8px 16px;margin-bottom:12px;font-size:13px;color:#93c5fd;text-align:center;">
         实时汇率：<span title="美元">🇺🇸</span>USD/<span title="人民币">🇨🇳</span>CNY <strong id="fxUsdCny">-</strong> | <span title="中国港币">🇭🇰</span>HKD/<span title="人民币">🇨🇳</span>CNY <strong id="fxHkdCny">-</strong>
+      </div>
+      <!-- 汇率走势图 -->
+      <div class="fx-trend-section" id="fxTrendSection" style="display:none;margin-bottom:16px;">
+        <div class="fx-trend-header">
+          <span class="fx-trend-title">汇率走势（近6个月）</span>
+        </div>
+        <div class="fx-trend-charts">
+          <div class="fx-trend-chart">
+            <div class="fx-trend-chart-title">USD/CNY</div>
+            <div class="fx-trend-svg-container" id="fxTrendUsdCnySvg"></div>
+          </div>
+          <div class="fx-trend-chart">
+            <div class="fx-trend-chart-title">HKD/CNY</div>
+            <div class="fx-trend-svg-container" id="fxTrendHkdCnySvg"></div>
+          </div>
+        </div>
       </div>
       <div class="records-list" id="stockList">
         <div class="empty-tip">暂无股票记录</div>
@@ -918,7 +934,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=84"></script>
+  <script src="./js/storage.js?v=85"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -928,6 +944,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=84"></script>
+  <script src="./js/app.js?v=85"></script>
 </body>
 </html>

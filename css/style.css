@@ -2407,6 +2407,55 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
+   汇率走势图（近6个月）
+   ============================================ */
+.fx-trend-section {
+  background: var(--bg-card, #13132a);
+  border: 1px solid var(--border, rgba(255,255,255,0.06));
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow, 0 2px 12px rgba(0,0,0,0.3));
+}
+
+.fx-trend-header {
+  margin-bottom: 10px;
+}
+
+.fx-trend-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.fx-trend-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fx-trend-chart {
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.fx-trend-chart-title {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 4px;
+}
+
+.fx-trend-svg-container {
+  min-height: 100px;
+}
+
+@media (max-width: 600px) {
+  .fx-trend-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================
    CSV 导入面板
    ============================================ */
 

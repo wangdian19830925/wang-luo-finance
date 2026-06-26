@@ -1942,6 +1942,140 @@ const App = {
       });
   },
 
+  // ========== 汇率走势图（近6个月）==========
+  // 获取近6个月历史汇率（USD/CNY 和 HKD/CNY）
+  _fetchFxHistory(callback) {
+    var cacheKey = 'fm_fx_history';
+    var now = new Date();
+    var start = new Date(now);
+    start.setMonth(start.getMonth() - 6);
+    var fmt = function(d) {
+      var mm = (d.getMonth() + 1).toString().padStart(2, '0');
+      var dd = d.getDate().toString().padStart(2, '0');
+      return d.getFullYear() + '-' + mm + '-' + dd;
+    };
+    var startStr = fmt(start);
+    var endStr = fmt(now);
+
+    // 缓存1天内有效
+    try {
+      var cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed && parsed.endDate === endStr && parsed.data) {
+          console.log('[汇率走势] 使用缓存');
+          if (callback) callback(parsed.data);
+          return;
+        }
+      }
+    } catch(e) {}
+
+    if (location.protocol === 'file:') {
+      if (callback) callback(null);
+      return;
+    }
+
+    var url = 'https://api.exchangerate.host/timeseries?start_date=' + startStr + '&end_date=' + endStr + '&base=USD&symbols=CNY,HKD';
+    fetch(url)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.rates) {
+          if (callback) callback(null);
+          return;
+        }
+        var dates = Object.keys(data.rates).sort();
+        var usdCny = [];
+        var hkdCny = [];
+        dates.forEach(function(date) {
+          var r = data.rates[date];
+          if (r && r.CNY) {
+            usdCny.push({ date: date, rate: r.CNY });
+            if (r.HKD && r.HKD > 0) {
+              hkdCny.push({ date: date, rate: parseFloat((r.CNY / r.HKD).toFixed(6)) });
+            }
+          }
+        });
+        var result = { usdCny: usdCny, hkdCny: hkdCny };
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ endDate: endStr, data: result }));
+        } catch(e) {}
+        if (callback) callback(result);
+      })
+      .catch(function(e) {
+        console.warn('[汇率走势] 获取失败:', e.message);
+        if (callback) callback(null);
+      });
+  },
+
+  // 渲染汇率走势图主入口
+  _renderFxTrendCharts() {
+    var self = this;
+    var section = document.getElementById('fxTrendSection');
+    if (!section) return;
+
+    self._fetchFxHistory(function(history) {
+      if (!history || !history.usdCny || history.usdCny.length < 2) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      self._drawFxTrendChart('fxTrendUsdCnySvg', history.usdCny, 'USD/CNY');
+      self._drawFxTrendChart('fxTrendHkdCnySvg', history.hkdCny, 'HKD/CNY');
+    });
+  },
+
+  // 绘制单个汇率 SVG 走势图
+  _drawFxTrendChart(containerId, data, label) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    if (!data || data.length < 2) {
+      container.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px;font-size:12px;">数据不足</div>';
+      return;
+    }
+
+    var W = 300, H = 120, PAD = { top: 10, right: 8, bottom: 22, left: 38 };
+    var plotW = W - PAD.left - PAD.right;
+    var plotH = H - PAD.top - PAD.bottom;
+
+    var rates = data.map(function(d) { return d.rate; });
+    var minR = Math.min.apply(null, rates);
+    var maxR = Math.max.apply(null, rates);
+    var range = maxR - minR || 0.001;
+    var yMin = minR - range * 0.05;
+    var yMax = maxR + range * 0.05;
+
+    var xScale = function(i) { return PAD.left + (i / (data.length - 1)) * plotW; };
+    var yScale = function(v) { return PAD.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH; };
+
+    var points = data.map(function(d, i) {
+      return xScale(i) + ',' + yScale(d.rate);
+    });
+    var polyline = points.join(' ');
+
+    var gradId = containerId + '_grad';
+    var latest = data[data.length - 1].rate;
+    var first = data[0].rate;
+    var isUp = latest >= first;
+    var lineColor = isUp ? '#ef4444' : '#22c55e';
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' +
+      '<defs><linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="' + (isUp ? 'rgba(239,68,68,0.18)' : 'rgba(34,197,94,0.18)') + '"/>' +
+        '<stop offset="100%" stop-color="rgba(0,0,0,0)"/>' +
+      '</linearGradient></defs>' +
+      '<polygon points="' + PAD.left + ',' + (PAD.top + plotH) + ' ' + polyline + ' ' + (PAD.left + plotW) + ',' + (PAD.top + plotH) + '" fill="url(#' + gradId + ')"/>' +
+      '<polyline points="' + polyline + '" fill="none" stroke="' + lineColor + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<circle cx="' + xScale(data.length - 1) + '" cy="' + yScale(latest) + '" r="2.5" fill="' + lineColor + '"/>' +
+      '<text x="' + (PAD.left - 3) + '" y="' + (yScale(yMax) + 3) + '" text-anchor="end" fill="#64748b" font-size="8">' + yMax.toFixed(4) + '</text>' +
+      '<text x="' + (PAD.left - 3) + '" y="' + (yScale(yMin) + 3) + '" text-anchor="end" fill="#64748b" font-size="8">' + yMin.toFixed(4) + '</text>' +
+      '<text x="' + (PAD.left - 3) + '" y="' + (yScale(latest) + 3) + '" text-anchor="end" fill="' + lineColor + '" font-size="8" font-weight="600">' + latest.toFixed(4) + '</text>' +
+      '<text x="' + PAD.left + '" y="' + (H - 4) + '" text-anchor="start" fill="#64748b" font-size="8">' + data[0].date.slice(5) + '</text>' +
+      '<text x="' + (PAD.left + plotW) + '" y="' + (H - 4) + '" text-anchor="end" fill="#64748b" font-size="8">' + data[data.length - 1].date.slice(5) + '</text>' +
+    '</svg>';
+
+    container.innerHTML = svg;
+  },
+
   // ========== 股票走势图（6个月K线）==========
 
   // 清除历史K线缓存（刷新价格时调用，确保获取最新数据）
@@ -4213,6 +4347,8 @@ const App = {
         if (usdEl) usdEl.textContent = self.getFxRate("USD").toFixed(4);
         if (hkdEl) hkdEl.textContent = self.getFxRate("HKD").toFixed(4);
       }
+      // 渲染汇率走势图
+      self._renderFxTrendCharts();
       console.log('[App] loadStockList 完成: 总市值(CNY)=' + totalValueCNY + ' 总成本(CNY)=' + totalCostCNY + ' 盈亏(CNY)=' + totalProfitCNY);
       // 注意：renderStockCharts() 已移至 loadRsuList() 末尾，确保 RSU DOM 已就绪
     } catch(e) {
