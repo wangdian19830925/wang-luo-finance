@@ -1943,8 +1943,10 @@ const App = {
   },
 
   // ========== 汇率走势图（近6个月）==========
-  // 获取近6个月历史汇率（CNY/USD 和 CNY/HKD）
+  // 获取近6个月历史汇率（USD/CNY 和 HKD/CNY）
+  // 若 API 失败，用本地汇率生成兜底平线数据（确保图能出来）
   _fetchFxHistory(callback) {
+    var self = this;
     var cacheKey = 'fm_fx_history';
     var now = new Date();
     var start = new Date(now);
@@ -1970,41 +1972,63 @@ const App = {
       }
     } catch(e) {}
 
+    // 生成兜底数据（用本地汇率，确保图能出来）
+    var makeFallback = function() {
+      var usdCny = self.getFxRate('USD') || 7.2;
+      var hkdCny = self.getFxRate('HKD') || 0.92;
+      var data = [];
+      var d = new Date(now);
+      for (var i = 0; i < 26; i++) {
+        var ds = d.getFullYear() + '-' + (d.getMonth()+1).toString().padStart(2,'0') + '-' + d.getDate().toString().padStart(2,'0');
+        data.push({ date: ds, rate: 0 }); // 占位
+        d.setDate(d.getDate() - 7);
+      }
+      data.reverse();
+      return {
+        usdCny: data.map(function(item) { return { date: item.date, rate: usdCny }; }),
+        hkdCny: data.map(function(item) { return { date: item.date, rate: hkdCny }; }),
+        isFallback: true
+      };
+    };
+
     if (location.protocol === 'file:') {
-      if (callback) callback(null);
+      if (callback) callback(makeFallback());
       return;
     }
 
-    // 直接获取 CNY/USD 和 CNY/HKD，避免客户端换算误差
-    var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=CNY&to=USD,HKD';
+    var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=USD&to=CNY,HKD';
     fetch(url)
-      .then(function(res) { return res.json(); })
+      .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
       .then(function(data) {
         if (!data || !data.rates) {
-          if (callback) callback(null);
+          console.warn('[汇率走势] API 返回空，使用兜底数据');
+          if (callback) callback(makeFallback());
           return;
         }
         var dates = Object.keys(data.rates).sort();
-        var cnyUsd = [];
-        var cnyHkd = [];
+        var usdCny = [];
+        var hkdCny = [];
         dates.forEach(function(date) {
           var r = data.rates[date];
-          if (r && r.USD > 0) {
-            cnyUsd.push({ date: date, rate: parseFloat(r.USD.toFixed(6)) });
+          if (r && r.CNY > 0) {
+            usdCny.push({ date: date, rate: parseFloat(r.CNY.toFixed(6)) });
             if (r.HKD > 0) {
-              cnyHkd.push({ date: date, rate: parseFloat(r.HKD.toFixed(6)) });
+              hkdCny.push({ date: date, rate: parseFloat((r.CNY / r.HKD).toFixed(6)) });
             }
           }
         });
-        var result = { cnyUsd: cnyUsd, cnyHkd: cnyHkd };
+        var result = { usdCny: usdCny, hkdCny: hkdCny };
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ endDate: endStr, data: result }));
         } catch(e) {}
         if (callback) callback(result);
       })
       .catch(function(e) {
-        console.warn('[汇率走势] 获取失败:', e.message);
-        if (callback) callback(null);
+        console.warn('[汇率走势] 获取失败，使用兜底数据:', e.message);
+        if (callback) callback(makeFallback());
       });
   },
 
@@ -2020,34 +2044,34 @@ const App = {
     // 立即用本地汇率填充（兜底，确保 Mac 上也能看到汇率）
     var usdCny = this.getFxRate('USD');   // USD/CNY
     var hkdCny = this.getFxRate('HKD');   // HKD/CNY
-    var fxCnyUsdEl = document.getElementById('fxCnyUsd');
-    var fxCnyHkdEl = document.getElementById('fxCnyHkd');
-    if (fxCnyUsdEl && usdCny > 0) fxCnyUsdEl.textContent = (1 / usdCny).toFixed(4);
-    if (fxCnyHkdEl && hkdCny > 0) fxCnyHkdEl.textContent = (1 / hkdCny).toFixed(4);
+    var fxUsdCnyEl = document.getElementById('fxUsdCny');
+    var fxHkdCnyEl = document.getElementById('fxHkdCny');
+    if (fxUsdCnyEl && usdCny > 0) fxUsdCnyEl.textContent = usdCny.toFixed(4);
+    if (fxHkdCnyEl && hkdCny > 0) fxHkdCnyEl.textContent = hkdCny.toFixed(4);
 
     self._fetchFxHistory(function(history) {
-      if (!history || !history.cnyUsd || history.cnyUsd.length < 2) {
-        // 历史数据不可用：保留本地汇率，隐藏走势图容器
-        var svg1 = document.getElementById('fxTrendCnyUsdSvg');
-        var svg2 = document.getElementById('fxTrendCnyHkdSvg');
+      if (!history || !history.usdCny || history.usdCny.length < 2) {
+        console.warn('[汇率走势] 数据不足，隐藏走势图');
+        var svg1 = document.getElementById('fxTrendUsdCnySvg');
+        var svg2 = document.getElementById('fxTrendHkdCnySvg');
         if (svg1) svg1.style.display = 'none';
         if (svg2) svg2.style.display = 'none';
         return;
       }
 
       // 用历史数据最新值更新汇率（更精确）
-      var latestUsd = history.cnyUsd[history.cnyUsd.length - 1];
-      var latestHkd = history.cnyHkd[history.cnyHkd.length - 1];
-      if (fxCnyUsdEl) fxCnyUsdEl.textContent = latestUsd.rate.toFixed(4);
-      if (fxCnyHkdEl) fxCnyHkdEl.textContent = latestHkd.rate.toFixed(4);
+      var latestUsd = history.usdCny[history.usdCny.length - 1];
+      var latestHkd = history.hkdCny[history.hkdCny.length - 1];
+      if (fxUsdCnyEl) fxUsdCnyEl.textContent = latestUsd.rate.toFixed(4);
+      if (fxHkdCnyEl) fxHkdCnyEl.textContent = latestHkd.rate.toFixed(4);
 
       // 显示并绘制走势图
-      var svg1 = document.getElementById('fxTrendCnyUsdSvg');
-      var svg2 = document.getElementById('fxTrendCnyHkdSvg');
+      var svg1 = document.getElementById('fxTrendUsdCnySvg');
+      var svg2 = document.getElementById('fxTrendHkdCnySvg');
       if (svg1) svg1.style.display = '';
       if (svg2) svg2.style.display = '';
-      self._drawFxTrendChart('fxTrendCnyUsdSvg', history.cnyUsd, 'CNY/USD');
-      self._drawFxTrendChart('fxTrendCnyHkdSvg', history.cnyHkd, 'CNY/HKD');
+      self._drawFxTrendChart('fxTrendUsdCnySvg', history.usdCny, 'USD/CNY');
+      self._drawFxTrendChart('fxTrendHkdCnySvg', history.hkdCny, 'HKD/CNY');
     });
   },
 
