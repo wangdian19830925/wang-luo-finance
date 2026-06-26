@@ -1,6 +1,6 @@
 # 家庭资产管理工具 — Bug List
 
-> 版本：v57 | 更新：2026-06-26
+> 版本：v94 | 更新：2026-06-26
 
 ---
 
@@ -31,6 +31,8 @@
 | BUG-10 | 🟠 P1 | `loadInsuranceList` 中 innerHTML 未转义用户输入 | `js/app.js` L2934/L2958 | 所有用户输入字段使用 `escapeHtml()` 转义 | ✅ |
 | BUG-11 | 🟠 P1 | `manifest.json` icons 为空 | `manifest.json` | 使用内嵌 SVG data URI 作为图标 | ✅ |
 | BUG-12 | 🟠 P1 | `_findClosestClose` 使用 UTC 日期匹配本地历史数据 | `js/app.js` L2299 | 改用 `getFullYear()/getMonth()/getDate()` 本地日期 | ✅ |
+| BUG-14 | 🔴 P0 | v93 部署后 GitHub Pages 仍显示 v92 | `index.html` / `.nojekyll` | GitHub Pages Jekyll 构建失败，导致 CDN 不回源；添加 `.nojekyll` 并正确推送 v94 | ✅ |
+| BUG-15 | 🔴 P0 | iPhone 饼图图例文字被截断显示 "..." | `css/style.css` `.pie-legend-label` | 移除 `text-overflow: ellipsis`，改为左对齐 + 文字换行 | ✅ |
 
 ---
 
@@ -39,6 +41,6 @@
 | # | 等级 | 问题 | 位置 | 说明 | 状态 |
 |---|------|------|------|------|------|
 | BUG-02 | 🟡 P2 | `_drawAssetTrendChart` 中 `firstV/change` 等变量重复声明 | `js/app.js` L2317-2386 | 代码重复，维护隐患 | ⏳ |
-| BUG-05 | 🟠 P1 | `_loadAllHistoryData` 硬编码股票代码，新增股票不进入曲线 | `js/app.js` L2097 | 资产曲线对新增股票不准确 | ⏳ |
+| BUG-05 | 🟠 P1 | `_loadAllHistoryData` 硬编码股票代码，新增股票不进入曲线 | `js/app.js` L2097 | v57 已改为动态读取 `localStorage` 股票代码 | ✅ |
 | BUG-06 | 🟠 P1 | `import-insurance.js` 数据结构与 `insurance-data.js` 不兼容 | `js/import-insurance.js` | 死代码，导入后沉淀资产计算失效 | ⏳ |
 | BUG-13 | 🟡 P2 | `history-data.js` 日期与 `data/stock-history.json` 可能不同步 | `js/history-data.js` / `data/stock-history.json` | 曲线数据源不一致 | ⏳ |
