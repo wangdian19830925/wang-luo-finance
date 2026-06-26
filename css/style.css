@@ -717,7 +717,7 @@ body {
   background: var(--bg-card-hover);
 }
 
-.record-info { flex: 1; min-width: 0; }
+.record-info { flex: 1; min-width: 0; width: 100%; }
 
 .record-title {
   font-weight: 600;
