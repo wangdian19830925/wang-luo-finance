@@ -1274,6 +1274,24 @@ body {
   overflow: hidden;
 }
 
+/* RSU 记录项始终使用上下布局，避免桌面端 record-info 被压窄导致文字纵向排列 */
+.record-item-rsu {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.record-item-rsu .record-info {
+  width: 100%;
+  flex: none;
+}
+
+.record-item-rsu .stock-chart-inner {
+  flex: none;
+  width: 100%;
+  margin-top: 0;
+}
+
 /* ============================================
    Toast
    ============================================ */

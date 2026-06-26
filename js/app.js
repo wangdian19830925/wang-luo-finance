@@ -1157,7 +1157,7 @@ const App = {
             + ' (' + r.longCash.perYear.toLocaleString() + '/年)</div>';
         }
 
-        html += '<div class="record-item">'
+        html += '<div class="record-item record-item-rsu">'
           + '<div class="record-info">'
             + '<div class="record-title">' + r.name + '（' + r.code + '）'
               + ' <span style="font-size:11px;color:#22d3ee;font-weight:normal;">RSU</span></div>'
