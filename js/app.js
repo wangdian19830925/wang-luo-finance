@@ -1975,7 +1975,7 @@ const App = {
       return;
     }
 
-    var url = 'https://api.exchangerate.host/timeseries?start_date=' + startStr + '&end_date=' + endStr + '&base=USD&symbols=CNY,HKD';
+    var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=USD&to=CNY,HKD';
     fetch(url)
       .then(function(res) { return res.json(); })
       .then(function(data) {
@@ -1988,9 +1988,10 @@ const App = {
         var hkdCny = [];
         dates.forEach(function(date) {
           var r = data.rates[date];
-          if (r && r.CNY) {
+          if (r && r.CNY > 0) {
             usdCny.push({ date: date, rate: r.CNY });
-            if (r.HKD && r.HKD > 0) {
+            if (r.HKD > 0) {
+              // HKD/CNY = (USD/CNY) / (USD/HKD)
               hkdCny.push({ date: date, rate: parseFloat((r.CNY / r.HKD).toFixed(6)) });
             }
           }
