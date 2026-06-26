@@ -46,6 +46,7 @@ const App = {
     console.log('[App] === init 开始 ===');
     console.log('[App] Storage 是否存在:', typeof Storage !== 'undefined');
     console.log('[App] INSURANCE_POLICIES 是否存在:', typeof INSURANCE_POLICIES !== 'undefined');
+    this.initVersionBadge();
     this.registerSW();
     this.requestNotificationPermission();
     this.setupNavigation();
@@ -76,6 +77,20 @@ const App = {
     this.initCloudBase();
 
     console.log('[App] === init 完成 ===');
+  },
+
+  // 根据当前引用的 app.js?v=X 自动设置右上角版本号
+  initVersionBadge() {
+    try {
+      var script = document.querySelector('script[src*="app.js"]');
+      var match = script && script.src.match(/[?&]v=(\d+)/);
+      var version = match ? match[1] : '??';
+      var badge = document.getElementById('versionBadge');
+      if (badge) badge.innerText = 'v: ' + version;
+      console.log('[App] 版本号:', version);
+    } catch (e) {
+      console.warn('[App] 版本号初始化失败:', e);
+    }
   },
 
   // 初始化 CloudBase 云端同步
