@@ -277,7 +277,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v69'
+      clientVersion: 'v70'
     };
   },
 
@@ -296,58 +296,80 @@ const Storage = {
     }
   },
 
-  // 合并两个数据包（按 id 去重，LWW：updatedAt 较新的优先；支持软删除）
+  // 统一时间戳读取：updatedAt > updated > createdAt > 1970-01-01
+  _itemTimestamp(item) {
+    if (!item) return 0;
+    const raw = item.updatedAt || item.updated || item.createdAt || 0;
+    const t = new Date(raw).getTime();
+    return isNaN(t) ? 0 : t;
+  },
+
+  // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v69' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v70' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
       const map = {};
-      
+      let addedFromCloud = 0, conflictWinCloud = 0, conflictWinLocal = 0;
+
       // 先添加本地记录
       localArr.forEach(item => {
         if (!item || !item.id) return;
         map[item.id] = item;
       });
-      
+
       // 再用云端记录合并（LWW）
       cloudArr.forEach(item => {
         if (!item || !item.id) return;
         if (!map[item.id]) {
           map[item.id] = item;
+          addedFromCloud++;
         } else {
-          const oldTime = new Date(map[item.id].updatedAt || map[item.id].createdAt || 0).getTime();
-          const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+          const oldTime = this._itemTimestamp(map[item.id]);
+          const newTime = this._itemTimestamp(item);
           if (newTime > oldTime) {
             map[item.id] = item;
+            conflictWinCloud++;
+          } else if (newTime < oldTime) {
+            conflictWinLocal++;
           }
         }
       });
-      
+
       merged.data[k] = Object.values(map);
+      if (addedFromCloud > 0 || conflictWinCloud > 0 || conflictWinLocal > 0) {
+        console.log(`[CloudBase] 合并 ${k}: 云端新增 ${addedFromCloud}, 云端覆盖 ${conflictWinCloud}, 本地保留 ${conflictWinLocal}`);
+      }
     });
     return merged;
   },
 
   // 从云端拉取数据
   async pullFromCloud() {
-    if (!this.cloudSyncEnabled || !this.cloudDb) return { doc: null, error: 'CloudBase 未初始化' };
+    if (!this.cloudSyncEnabled || !this.cloudDb) return { doc: null, count: 0, error: 'CloudBase 未初始化' };
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     try {
       const res = await collection.limit(1).get();
       if (res.data && res.data.length > 0) {
         const doc = res.data[0];
         this.cloudDocId = doc._id;
-        console.log('[CloudBase] 拉取到云端数据，docId:', doc._id);
-        return { doc: doc, error: null };
+        let count = 0;
+        if (doc.data) {
+          Object.keys(doc.data).forEach(k => {
+            if (Array.isArray(doc.data[k])) count += doc.data[k].length;
+          });
+        }
+        console.log('[CloudBase] 拉取到云端数据，docId:', doc._id, '总记录数:', count);
+        return { doc: doc, count: count, error: null };
       }
       console.log('[CloudBase] 云端无数据');
-      return { doc: null, error: null };
+      return { doc: null, count: 0, error: null };
     } catch (e) {
       console.error('[CloudBase] 拉取失败:', e);
       this.cloudLastSyncError = '拉取失败: ' + (e.message || String(e));
       this._emitSyncStatus();
-      return { doc: null, error: e.message || String(e) };
+      return { doc: null, count: 0, error: e.message || String(e) };
     }
   },
 
@@ -400,23 +422,30 @@ const Storage = {
     }
     this.cloudSyncing = true;
     this._emitSyncStatus();
+    const diag = {
+      userId: this._getUserId(),
+      docId: this.cloudDocId || null,
+      startedAt: new Date().toISOString()
+    };
     try {
       const localPkg = this._getLocalDataPackage();
-      console.log('[CloudBase] 本地数据包:', JSON.stringify(localPkg).substring(0, 200) + '...');
-      
-      const { doc: cloudDoc, error: pullError } = await this.pullFromCloud();
+      console.log('[CloudBase] 本地数据包:', JSON.stringify(localPkg).substring(0, 300) + '...');
+
+      const { doc: cloudDoc, count: cloudCount, error: pullError } = await this.pullFromCloud();
+      diag.cloudDocId = (cloudDoc && cloudDoc._id) || this.cloudDocId || null;
+      diag.cloudCount = cloudCount || 0;
       if (pullError) {
-        return { success: false, error: '拉取云端数据失败: ' + pullError };
+        return { success: false, error: '拉取云端数据失败: ' + pullError, diag: diag };
       }
-      
+
       const cloudPkg = cloudDoc ? {
         data: cloudDoc.data,
         updatedAt: cloudDoc.updatedAt,
         clientVersion: cloudDoc.clientVersion
       } : null;
-      
-      console.log('[CloudBase] 云端数据包:', cloudPkg ? JSON.stringify(cloudPkg).substring(0, 200) + '...' : 'null');
-      
+
+      console.log('[CloudBase] 云端数据包:', cloudPkg ? JSON.stringify(cloudPkg).substring(0, 300) + '...' : 'null');
+
       let mergedPkg;
       let source;
       if (!cloudPkg) {
@@ -442,28 +471,40 @@ const Storage = {
       this._applyDataPackage(mergedPkg);
       console.log('[CloudBase] 已应用合并数据到本地');
 
+      // 统计合并后现金账户数量，用于诊断
+      const mergedCashCount = Array.isArray(mergedPkg.data && mergedPkg.data.cashAccounts) ? mergedPkg.data.cashAccounts.length : 0;
+      const localCashCount = Array.isArray(localPkg.data && localPkg.data.cashAccounts) ? localPkg.data.cashAccounts.length : 0;
+      diag.mergedCashCount = mergedCashCount;
+      diag.localCashCount = localCashCount;
+      diag.addedCashCount = Math.max(0, mergedCashCount - localCashCount);
+
       // 推回云端（确保云端也是最新合并结果）
       const pushSuccess = await this.pushToCloud(mergedPkg);
       if (!pushSuccess) {
         console.error('[CloudBase] 同步失败：推送云端数据失败');
-        return { success: false, error: '推送云端数据失败，请检查网络或 CloudBase 安全域名配置' };
+        return { success: false, error: '推送云端数据失败，请检查网络或 CloudBase 安全域名配置', diag: diag };
       }
       console.log('[CloudBase] 已推送合并数据到云端');
 
       this.cloudLastSync = new Date().toISOString();
       this.cloudLastSyncError = null;
       this._emitSyncStatus();
-      console.log('[CloudBase] 同步完成，来源:', source);
-      return { success: true, source: source };
+      console.log('[CloudBase] 同步完成，来源:', source, 'diag:', diag);
+      return { success: true, source: source, diag: diag };
     } catch (e) {
       console.error('[CloudBase] 同步失败:', e);
       this.cloudLastSyncError = e.message || String(e);
       this._emitSyncStatus();
-      return { success: false, error: e.message || String(e) };
+      return { success: false, error: e.message || String(e), diag: diag };
     } finally {
       this.cloudSyncing = false;
       this._emitSyncStatus();
     }
+  },
+
+  _getUserId() {
+    if (!this.cloudUser) return null;
+    return this.cloudUser.uid || this.cloudUser.id || this.cloudUser.openid || this.cloudUser.userId || this.cloudUser.email || null;
   },
 
   _isEmptyData(data) {
@@ -507,7 +548,9 @@ const Storage = {
   add(key, item) {
     const data = this.get(key, true); // 包含已删除，避免 ID 冲突
     item.id = item.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-    item.createdAt = item.createdAt || new Date().toISOString();
+    const now = new Date().toISOString();
+    item.createdAt = item.createdAt || now;
+    item.updatedAt = item.updatedAt || now;
     item.deleted = false;
     delete item.deletedAt;
     data.push(item);
@@ -519,7 +562,18 @@ const Storage = {
     const data = this.get(key, true); // 包含已删除，支持取消删除
     const index = data.findIndex(item => item && item.id === id);
     if (index !== -1) {
-      updates.updatedAt = new Date().toISOString();
+      const now = new Date().toISOString();
+      updates.updatedAt = now;
+      // 取消软删除（更新视为复活）
+      if (data[index].deleted) {
+        updates.deleted = false;
+        updates.deletedAt = null;
+        delete updates.deletedAt;
+      }
+      // 补齐 createdAt，确保 LWW 时间戳可用
+      if (!data[index].createdAt) {
+        data[index].createdAt = now;
+      }
       data[index] = { ...data[index], ...updates };
       this.set(key, data);
       return data[index];

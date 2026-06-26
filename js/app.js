@@ -110,6 +110,8 @@ const App = {
           if (result && result.success) {
             self.refreshAllPages();
           }
+        }).catch(function(e) {
+          console.error('[App] 切回前台同步失败:', e);
         });
       }
     });
@@ -125,12 +127,7 @@ const App = {
       syncBtn.addEventListener('click', function() {
         if (Storage.cloudSyncing) return;
         Storage.syncWithCloud().then(function(result) {
-          if (result && result.success) {
-            self.refreshAllPages();
-            self.showToast('同步成功');
-          } else {
-            self.showToast('同步未成功: ' + (result.reason || result.error || ''), 'error');
-          }
+          self._handleSyncResult(result);
         }).catch(function(e) {
           self.showToast('同步失败: ' + e.message, 'error');
         });
@@ -191,7 +188,7 @@ const App = {
       anonymousBtn.addEventListener('click', function() {
         Storage.loginAnonymously().then(function() {
           self.refreshAllPages();
-          self.showToast('匿名登录成功，数据已同步');
+          self.showToast('匿名登录成功（仅限本设备）');
         }).catch(function(e) {
           self.showToast('登录失败: ' + (e.message || ''), 'error');
         });
@@ -202,12 +199,7 @@ const App = {
       syncNowBtn.addEventListener('click', function() {
         if (Storage.cloudSyncing) return;
         Storage.syncWithCloud().then(function(result) {
-          if (result && result.success) {
-            self.refreshAllPages();
-            self.showToast('同步成功');
-          } else {
-            self.showToast('同步未成功: ' + (result.reason || result.error || ''), 'error');
-          }
+          self._handleSyncResult(result);
         }).catch(function(e) {
           self.showToast('同步失败: ' + e.message, 'error');
         });
@@ -232,6 +224,8 @@ const App = {
     var syncDot = document.getElementById('syncDot');
     var statusBox = document.getElementById('cloudSyncStatus');
     var authSection = document.getElementById('cloudAuthSection');
+    var diagBox = document.getElementById('cloudSyncDiag');
+    var anonymousTip = document.getElementById('anonymousSyncTip');
 
     if (syncBtn) {
       syncBtn.classList.toggle('syncing', !!status.syncing);
@@ -247,12 +241,17 @@ const App = {
       else syncDot.classList.add('sync-dot-offline');
     }
 
+    var isAnonymous = !!(status.user && (status.user.is_anonymous || !status.user.email));
+    if (anonymousTip) {
+      anonymousTip.style.display = (status.user && isAnonymous) ? 'block' : 'none';
+    }
+
     if (statusBox) {
       var text = '未初始化';
       if (!status.enabled) text = '云端同步未启用（SDK 未加载）';
       else if (status.syncing) text = '正在同步...';
       else if (status.user) {
-        var uid = status.user.uid || status.user.openid || '已登录';
+        var uid = status.user.uid || status.user.openid || status.user.userId || '已登录';
         var time = status.lastSync ? new Date(status.lastSync).toLocaleString() : '尚未同步';
         text = '已登录: ' + uid + '<br>最后同步: ' + time;
       } else {
@@ -264,8 +263,39 @@ const App = {
       statusBox.innerHTML = '<span class="sync-status-text">' + text + '</span>';
     }
 
+    if (diagBox && status.user) {
+      var uid = status.user.uid || status.user.openid || status.user.userId || '-';
+      var docId = status.docId || '-';
+      var diagHtml = '用户 ID: ' + uid + '<br>云端文档 ID: ' + docId;
+      if (status.lastSync) {
+        diagHtml += '<br>最后同步: ' + new Date(status.lastSync).toLocaleString();
+      }
+      diagBox.innerHTML = diagHtml;
+      diagBox.style.display = 'block';
+    } else if (diagBox) {
+      diagBox.style.display = 'none';
+    }
+
     if (authSection) {
       authSection.style.display = (status.user) ? 'none' : 'block';
+    }
+  },
+
+  // 统一处理同步结果并给出带诊断信息的提示
+  _handleSyncResult(result) {
+    if (result && result.success) {
+      this.refreshAllPages();
+      var diag = result.diag || {};
+      var msg = '同步成功';
+      if (diag.cloudCount !== undefined) {
+        msg += '（云端 ' + diag.cloudCount + ' 条';
+        if (diag.addedCashCount > 0) msg += '，新增 ' + diag.addedCashCount + ' 个现金账户';
+        msg += '）';
+      }
+      this.showToast(msg);
+    } else {
+      var reason = (result && (result.reason || result.error)) || '未知原因';
+      this.showToast('同步未成功: ' + reason, 'error');
     }
   },
 
@@ -3068,9 +3098,10 @@ const App = {
   // 初始化预设账户（首次使用时）
   initDefaultCashAccounts() {
     var today = new Date().toISOString().split("T")[0];
+    var now = new Date().toISOString();
     var accounts = [
-      { id: "cmb_8150", name: "招商银行", icon: "bank", label: "招商银行（尾号8150）", balance: 58529.59, updated: today, note: "活期 53,663.41 + 朝朝宝 4,866.18" },
-      { id: "yuebao", name: "余额宝", icon: "yuebao", label: "余额宝", balance: 1498946.04, updated: today, note: "天弘余额宝货币" }
+      { id: "cmb_8150", name: "招商银行", icon: "bank", label: "招商银行（尾号8150）", balance: 58529.59, updated: today, createdAt: now, updatedAt: now, note: "活期 53,663.41 + 朝朝宝 4,866.18" },
+      { id: "yuebao", name: "余额宝", icon: "yuebao", label: "余额宝", balance: 1498946.04, updated: today, createdAt: now, updatedAt: now, note: "天弘余额宝货币" }
     ];
     Storage.set(Storage.keys.cashAccounts, accounts);
     return accounts;
@@ -3217,23 +3248,17 @@ const App = {
 
   // 确认编辑余额
   confirmEditBalance() {
-    var self = this;
     var newBalance = parseFloat(document.getElementById("editBalanceInput").value);
     if (isNaN(newBalance) || newBalance < 0) {
       this.showToast("请输入有效的金额", "error");
       return;
     }
 
-    var accounts = Storage.get(Storage.keys.cashAccounts);
     var today = new Date().toISOString().split("T")[0];
-    for (var i = 0; i < accounts.length; i++) {
-      if (accounts[i].id === this._editingAccountId) {
-        accounts[i].balance = newBalance;
-        accounts[i].updated = today;
-        break;
-      }
-    }
-    Storage.set(Storage.keys.cashAccounts, accounts);
+    Storage.update(Storage.keys.cashAccounts, this._editingAccountId, {
+      balance: newBalance,
+      updated: today
+    });
 
     this.closeEditBalance();
     this.loadTransactions();
@@ -3275,9 +3300,7 @@ const App = {
     }
 
     var today = new Date().toISOString().split("T")[0];
-    var accounts = Storage.get(Storage.keys.cashAccounts);
     var newAccount = {
-      id: "manual_" + Date.now().toString(36),
       name: label,
       label: label,
       icon: this._selectedCashIcon || "bank",
@@ -3285,8 +3308,7 @@ const App = {
       updated: today,
       note: note || "手动添加"
     };
-    accounts.push(newAccount);
-    Storage.set(Storage.keys.cashAccounts, accounts);
+    Storage.add(Storage.keys.cashAccounts, newAccount);
 
     this.closeAddCashAccount();
     this.loadTransactions();

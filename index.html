@@ -585,7 +585,9 @@
         <div id="cloudSyncStatus" class="sync-status-box">
           <span class="sync-status-text">未初始化</span>
         </div>
+        <div id="cloudSyncDiag" class="sync-diag-box" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:12px;color:#94a3b8;line-height:1.6;"></div>
         <p class="settings-tip">数据同时保存在本地和腾讯云 CloudBase。登录同一账号后，Mac 与 iPhone 可自动同步。</p>
+        <p class="settings-tip" id="anonymousSyncTip" style="display:none;color:#f59e0b;">⚠️ 当前为匿名登录，数据仅与当前设备/浏览器绑定。如需跨设备同步，请在 Mac 和 iPhone 端使用同一邮箱账号登录。</p>
       </div>
 
       <div class="settings-section" id="cloudAuthSection">
@@ -886,7 +888,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=69"></script>
+  <script src="./js/storage.js?v=70"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -896,6 +898,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=69"></script>
+  <script src="./js/app.js?v=70"></script>
 </body>
 </html>
