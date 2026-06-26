@@ -2747,7 +2747,7 @@ const App = {
       html += '<div class="cash-account-card">';
       html += '<div class="cash-account-icon ' + (a.icon || 'bank') + '">' + logoSvg + '</div>';
       html += '<div class="cash-account-body">';
-      html += '<div class="cash-account-name">' + this.escapeHtml(a.label) + '</div>';
+      html += '<div class="cash-account-name editable-label" onclick="App.editCashLabel(\'' + a.id + '\')" title="点击修改名称">' + this.escapeHtml(a.label) + '</div>';
       html += '<div class="cash-account-detail">' + this.escapeHtml(a.note || "") + ' · 更新于 ' + this.escapeHtml(a.updated || "未知") + '</div>';
       html += '</div>';
       html += '<div class="cash-account-amount editable" onclick="App.openEditBalance(\'' + a.id + '\')" title="点击编辑余额">' + this.formatMoney(a.balance) + '</div>';
@@ -2936,6 +2936,60 @@ const App = {
     this.loadTransactions();
     this.loadDashboard();
     this.showToast("现金账户已添加");
+  },
+
+  // ===== 就地编辑现金账户名称 =====
+  editCashLabel(id) {
+    var accounts = Storage.get(Storage.keys.cashAccounts);
+    var account = accounts.find(function(a) { return a.id === id; });
+    if (!account) return;
+
+    // 找到显示名称的 DOM 元素
+    var cards = document.querySelectorAll('#cashAccounts .cash-account-card');
+    var targetCard = null;
+    cards.forEach(function(card) {
+      var nameEl = card.querySelector('.cash-account-name');
+      if (nameEl && nameEl.getAttribute('onclick') && nameEl.getAttribute('onclick').indexOf(id) !== -1) {
+        targetCard = card;
+      }
+    });
+    if (!targetCard) return;
+
+    var nameEl = targetCard.querySelector('.cash-account-name');
+    var oldLabel = account.label || account.name || '';
+
+    // 创建 input 替换
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'cash-label-input';
+    input.value = oldLabel;
+    input.maxLength = 30;
+
+    nameEl.innerHTML = '';
+    nameEl.appendChild(input);
+    nameEl.removeAttribute('onclick');
+    input.focus();
+    input.select();
+
+    var self = this;
+    var saveEdit = function() {
+      var newLabel = input.value.trim();
+      if (newLabel && newLabel !== oldLabel) {
+        Storage.update(Storage.keys.cashAccounts, id, { label: newLabel, name: newLabel, updated: new Date().toISOString().split('T')[0] });
+        self.showToast('名称已更新');
+        self.loadTransactions();
+        self.loadDashboard();
+      } else {
+        // 恢复显示
+        self.loadTransactions();
+      }
+    };
+
+    input.addEventListener('blur', saveEdit);
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { self.loadTransactions(); }
+    });
   },
 
   deleteTransaction(type, id) {
@@ -3374,6 +3428,9 @@ const App = {
           "</div>" +
           "<div class=\"record-amount " + colorClass + "\">" + self.formatMoney(valueCNY) +
             "<div style=\"font-size:12px;\">" + (profitCNY >= 0 ? "+" : "") + self.formatMoney(profitCNY) + "</div>" +
+          "</div>" +
+          "<div class=\"record-actions\">" +
+            "<button onclick=\"App.deleteStock('" + item.id + "')\" title=\"删除\">" + self.icon('delete') + "</button>" +
           "</div>" +
           "<div class=\"stock-chart-inner\" id=\"stockChartInner_" + item.code + "\">" +
             "<div class=\"stock-chart-change-inline\" id=\"stockChartCanvas_" + item.code + "_change\"></div>" +
