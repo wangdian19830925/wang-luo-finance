@@ -1901,6 +1901,9 @@ const App = {
     // 余额编辑弹窗事件
     this.setupEditBalance();
 
+    // 添加现金账户弹窗事件
+    this.setupAddCashAccount();
+
     // CSV 导入（独立于 try-catch，避免影响其他表单）
     this.setupCSVImport();
   },
@@ -2744,8 +2747,8 @@ const App = {
       html += '<div class="cash-account-card">';
       html += '<div class="cash-account-icon ' + (a.icon || 'bank') + '">' + logoSvg + '</div>';
       html += '<div class="cash-account-body">';
-      html += '<div class="cash-account-name">' + a.label + '</div>';
-      html += '<div class="cash-account-detail">' + (a.note || "") + ' · 更新于 ' + (a.updated || "未知") + '</div>';
+      html += '<div class="cash-account-name">' + this.escapeHtml(a.label) + '</div>';
+      html += '<div class="cash-account-detail">' + this.escapeHtml(a.note || "") + ' · 更新于 ' + this.escapeHtml(a.updated || "未知") + '</div>';
       html += '</div>';
       html += '<div class="cash-account-amount editable" onclick="App.openEditBalance(\'' + a.id + '\')" title="点击编辑余额">' + this.formatMoney(a.balance) + '</div>';
       html += '</div>';
@@ -2780,6 +2783,9 @@ const App = {
     }
     if (icon === "wechat") {
       return '<svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#07C160" opacity="0.15" stroke="#07C160" stroke-width="1.5"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="800" fill="#07C160" font-family="sans-serif">微</text></svg>';
+    }
+    if (icon === "savings") {
+      return '<svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#8B5CF6" opacity="0.15" stroke="#8B5CF6" stroke-width="1.5"/><text x="20" y="27" text-anchor="middle" font-size="16" font-weight="800" fill="#8B5CF6" font-family="sans-serif">储</text></svg>';
     }
     return '<svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="700" fill="currentColor" opacity="0.5" font-family="sans-serif">¥</text></svg>';
   },
@@ -2877,6 +2883,59 @@ const App = {
     this.loadTransactions();
     this.loadDashboard();
     this.showToast("余额已更新");
+  },
+
+  // ===== 添加现金账户 =====
+  openAddCashAccount() {
+    document.getElementById("addCashOverlay").style.display = "flex";
+    document.getElementById("addCashLabel").value = "";
+    document.getElementById("addCashBalance").value = "";
+    document.getElementById("addCashNote").value = "";
+    // 重置图标选择为默认 bank
+    var opts = document.querySelectorAll("#cashIconPicker .cash-icon-option");
+    opts.forEach(function(o) { o.classList.remove("selected"); });
+    var defaultOpt = document.querySelector('#cashIconPicker .cash-icon-option[data-icon="bank"]');
+    if (defaultOpt) defaultOpt.classList.add("selected");
+    this._selectedCashIcon = "bank";
+    setTimeout(function() { document.getElementById("addCashLabel").focus(); }, 100);
+  },
+
+  closeAddCashAccount() {
+    document.getElementById("addCashOverlay").style.display = "none";
+  },
+
+  confirmAddCashAccount() {
+    var label = document.getElementById("addCashLabel").value.trim();
+    var balance = parseFloat(document.getElementById("addCashBalance").value);
+    var note = document.getElementById("addCashNote").value.trim();
+
+    if (!label) {
+      this.showToast("请输入资产归属", "error");
+      return;
+    }
+    if (isNaN(balance) || balance < 0) {
+      this.showToast("请输入有效的金额", "error");
+      return;
+    }
+
+    var today = new Date().toISOString().split("T")[0];
+    var accounts = Storage.get(Storage.keys.cashAccounts);
+    var newAccount = {
+      id: "manual_" + Date.now().toString(36),
+      name: label,
+      label: label,
+      icon: this._selectedCashIcon || "bank",
+      balance: balance,
+      updated: today,
+      note: note || "手动添加"
+    };
+    accounts.push(newAccount);
+    Storage.set(Storage.keys.cashAccounts, accounts);
+
+    this.closeAddCashAccount();
+    this.loadTransactions();
+    this.loadDashboard();
+    this.showToast("现金账户已添加");
   },
 
   deleteTransaction(type, id) {
@@ -4223,6 +4282,51 @@ const App = {
     if (el) el.addEventListener("keydown", function(e) {
       if (e.key === "Enter") self.confirmEditBalance();
       if (e.key === "Escape") self.closeEditBalance();
+    });
+  },
+
+  setupAddCashAccount() {
+    var self = this;
+    var el;
+
+    el = document.getElementById("addCashAccountBtn");
+    if (el) el.addEventListener("click", function() { self.openAddCashAccount(); });
+
+    el = document.getElementById("cancelAddCashBtn");
+    if (el) el.addEventListener("click", function() { self.closeAddCashAccount(); });
+
+    el = document.getElementById("confirmAddCashBtn");
+    if (el) el.addEventListener("click", function() { self.confirmAddCashAccount(); });
+
+    // 点击遮罩关闭
+    el = document.getElementById("addCashOverlay");
+    if (el) el.addEventListener("click", function(e) {
+      if (e.target === this) self.closeAddCashAccount();
+    });
+
+    // 图标选择
+    var opts = document.querySelectorAll("#cashIconPicker .cash-icon-option");
+    opts.forEach(function(opt) {
+      opt.addEventListener("click", function() {
+        opts.forEach(function(o) { o.classList.remove("selected"); });
+        this.classList.add("selected");
+        self._selectedCashIcon = this.getAttribute("data-icon");
+      });
+    });
+
+    // Enter 键确认（在金额输入框按 Enter）
+    el = document.getElementById("addCashBalance");
+    if (el) el.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") self.confirmAddCashAccount();
+    });
+    el = document.getElementById("addCashNote");
+    if (el) el.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") self.confirmAddCashAccount();
+      if (e.key === "Escape") self.closeAddCashAccount();
+    });
+    el = document.getElementById("addCashLabel");
+    if (el) el.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") self.closeAddCashAccount();
     });
   },
 

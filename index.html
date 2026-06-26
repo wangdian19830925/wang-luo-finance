@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v57 -->
+  <!-- version: 2026-06-26-v58 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=57">
+  <link rel="stylesheet" href="./css/style.css?v=58">
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -139,6 +139,7 @@
     <section class="page" id="page-transactions">
       <div class="page-header">
         <h2>现金资产</h2>
+        <button class="btn btn-primary" id="addCashAccountBtn">+ 添加现金账户</button>
       </div>
 
       <!-- 现金账户余额卡片 -->
@@ -157,6 +158,40 @@
           <div class="form-actions">
             <button class="btn btn-cancel" id="cancelEditBalanceBtn">取消</button>
             <button class="btn btn-primary" id="confirmEditBalanceBtn">确认</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 添加现金账户弹窗 -->
+      <div class="edit-balance-overlay" id="addCashOverlay" style="display:none;">
+        <div class="add-cash-panel">
+          <h3>添加现金账户</h3>
+          <div class="form-group">
+            <label>资产归属</label>
+            <input type="text" id="addCashLabel" placeholder="如：招商银行、微信零钱" maxlength="30">
+          </div>
+          <div class="form-group">
+            <label>资产金额 (¥)</label>
+            <input type="number" id="addCashBalance" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>备注（选填）</label>
+            <input type="text" id="addCashNote" placeholder="如：活期、定期、货币基金" maxlength="50">
+          </div>
+          <div class="form-group">
+            <label>选择图标</label>
+            <div class="cash-icon-picker" id="cashIconPicker">
+              <div class="cash-icon-option selected" data-icon="bank"><svg viewBox="0 0 40 40" width="28" height="28"><rect x="6" y="10" width="28" height="22" rx="3" fill="#C41230" opacity="0.15" stroke="#C41230" stroke-width="1.5"/><rect x="12" y="16" width="16" height="2" rx="1" fill="#C41230"/><rect x="12" y="21" width="12" height="2" rx="1" fill="#C41230"/><rect x="12" y="26" width="8" height="2" rx="1" fill="#C41230"/></svg><span>银行</span></div>
+              <div class="cash-icon-option" data-icon="alipay"><svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#1677FF" opacity="0.15" stroke="#1677FF" stroke-width="1.5"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="800" fill="#1677FF" font-family="sans-serif">支</text></svg><span>支付宝</span></div>
+              <div class="cash-icon-option" data-icon="wechat"><svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#07C160" opacity="0.15" stroke="#07C160" stroke-width="1.5"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="800" fill="#07C160" font-family="sans-serif">微</text></svg><span>微信</span></div>
+              <div class="cash-icon-option" data-icon="yuebao"><svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#FF6A00" opacity="0.2"/><circle cx="20" cy="20" r="18" fill="none" stroke="#FF6A00" stroke-width="2"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="800" fill="#FF6A00" font-family="sans-serif">¥</text></svg><span>理财</span></div>
+              <div class="cash-icon-option" data-icon="savings"><svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="#8B5CF6" opacity="0.15" stroke="#8B5CF6" stroke-width="1.5"/><text x="20" y="27" text-anchor="middle" font-size="16" font-weight="800" fill="#8B5CF6" font-family="sans-serif">储</text></svg><span>储蓄</span></div>
+              <div class="cash-icon-option" data-icon="other"><svg viewBox="0 0 40 40" width="28" height="28"><circle cx="20" cy="20" r="18" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.5"/><text x="20" y="27" text-anchor="middle" font-size="18" font-weight="700" fill="#94a3b8" opacity="0.7" font-family="sans-serif">¥</text></svg><span>其他</span></div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-cancel" id="cancelAddCashBtn">取消</button>
+            <button class="btn btn-primary" id="confirmAddCashBtn">确认添加</button>
           </div>
         </div>
       </div>
@@ -760,6 +795,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=57"></script>
+  <script src="./js/app.js?v=58"></script>
 </body>
 </html>

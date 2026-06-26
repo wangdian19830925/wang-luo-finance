@@ -2695,6 +2695,102 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
+   添加现金账户弹窗
+   ============================================ */
+
+.add-cash-panel {
+  background: var(--bg-card);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 400px;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.add-cash-panel h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.add-cash-panel .form-group {
+  margin-bottom: 16px;
+}
+
+.add-cash-panel label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.add-cash-panel input[type="text"],
+.add-cash-panel input[type="number"] {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-body);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.add-cash-panel input[type="text"]:focus,
+.add-cash-panel input[type="number"]:focus {
+  border-color: var(--accent);
+}
+
+.cash-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cash-icon-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 56px;
+}
+
+.cash-icon-option:hover {
+  border-color: var(--border-light);
+}
+
+.cash-icon-option.selected {
+  border-color: var(--accent);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.cash-icon-option span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cash-icon-option.selected span {
+  color: var(--accent);
+}
+
+.add-cash-panel .form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* ============================================
    现金资产饼图
    ============================================ */
 
