@@ -71,7 +71,206 @@ const App = {
     // 设置与数据同步
     this.setupSettings();
 
+    // CloudBase 云端同步
+    this.setupCloudSync();
+    this.initCloudBase();
+
     console.log('[App] === init 完成 ===');
+  },
+
+  // 初始化 CloudBase 云端同步
+  async initCloudBase() {
+    try {
+      // CloudBase 环境配置
+      const config = {
+        env: 'wang-luo-finance-d6enmg07a198e20'
+      };
+      const initialized = await Storage.initCloudbase(config);
+      if (initialized) {
+        console.log('[App] CloudBase 初始化完成，尝试匿名登录');
+        await Storage.loginAnonymously();
+      }
+    } catch (e) {
+      console.error('[App] CloudBase 初始化异常:', e);
+    }
+  },
+
+  // 监听页面可见性变化，切回前台时同步
+  setupVisibilitySync() {
+    var self = this;
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && Storage.cloudSyncEnabled && Storage.cloudUser) {
+        console.log('[App] 页面回到前台，触发云端同步');
+        Storage.syncWithCloud().then(function(result) {
+          if (result && result.success) {
+            self.refreshAllPages();
+          }
+        });
+      }
+    });
+  },
+
+  // CloudBase 同步相关 UI 与事件
+  setupCloudSync() {
+    var self = this;
+
+    // 同步按钮点击手动同步
+    var syncBtn = document.getElementById('syncBtn');
+    if (syncBtn) {
+      syncBtn.addEventListener('click', function() {
+        if (Storage.cloudSyncing) return;
+        Storage.syncWithCloud().then(function(result) {
+          if (result && result.success) {
+            self.refreshAllPages();
+            self.showToast('同步成功');
+          } else {
+            self.showToast('同步未成功: ' + (result.reason || result.error || ''), 'error');
+          }
+        }).catch(function(e) {
+          self.showToast('同步失败: ' + e.message, 'error');
+        });
+      });
+    }
+
+    // 监听同步状态变化，更新 UI
+    Storage.onSyncStatusChange(function(status) {
+      self.updateSyncUI(status);
+    });
+
+    // 设置面板中的 CloudBase 事件
+    var loginBtn = document.getElementById('cloudLoginBtn');
+    var registerBtn = document.getElementById('cloudRegisterBtn');
+    var anonymousBtn = document.getElementById('cloudAnonymousBtn');
+    var syncNowBtn = document.getElementById('cloudSyncNowBtn');
+    var logoutBtn = document.getElementById('cloudLogoutBtn');
+
+    if (loginBtn) {
+      loginBtn.addEventListener('click', function() {
+        var email = document.getElementById('cloudEmail').value.trim();
+        var password = document.getElementById('cloudPassword').value;
+        if (!email || !password) {
+          self.showToast('请输入邮箱和密码', 'error');
+          return;
+        }
+        Storage.loginWithEmail(email, password).then(function() {
+          self.refreshAllPages();
+          self.showToast('登录成功，数据已同步');
+        }).catch(function(e) {
+          self.showToast('登录失败: ' + (e.message || ''), 'error');
+        });
+      });
+    }
+
+    if (registerBtn) {
+      registerBtn.addEventListener('click', function() {
+        var email = document.getElementById('cloudEmail').value.trim();
+        var password = document.getElementById('cloudPassword').value;
+        if (!email || !password) {
+          self.showToast('请输入邮箱和密码', 'error');
+          return;
+        }
+        if (password.length < 6) {
+          self.showToast('密码长度至少 6 位', 'error');
+          return;
+        }
+        Storage.registerWithEmail(email, password).then(function() {
+          self.refreshAllPages();
+          self.showToast('注册并登录成功，数据已同步');
+        }).catch(function(e) {
+          self.showToast('注册失败: ' + (e.message || ''), 'error');
+        });
+      });
+    }
+
+    if (anonymousBtn) {
+      anonymousBtn.addEventListener('click', function() {
+        Storage.loginAnonymously().then(function() {
+          self.refreshAllPages();
+          self.showToast('匿名登录成功，数据已同步');
+        }).catch(function(e) {
+          self.showToast('登录失败: ' + (e.message || ''), 'error');
+        });
+      });
+    }
+
+    if (syncNowBtn) {
+      syncNowBtn.addEventListener('click', function() {
+        if (Storage.cloudSyncing) return;
+        Storage.syncWithCloud().then(function(result) {
+          if (result && result.success) {
+            self.refreshAllPages();
+            self.showToast('同步成功');
+          } else {
+            self.showToast('同步未成功: ' + (result.reason || result.error || ''), 'error');
+          }
+        }).catch(function(e) {
+          self.showToast('同步失败: ' + e.message, 'error');
+        });
+      });
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', function() {
+        Storage.logout();
+        self.showToast('已退出登录');
+      });
+    }
+
+    // 页面可见性变化时同步
+    this.setupVisibilitySync();
+  },
+
+  // 更新同步状态 UI
+  updateSyncUI(status) {
+    var syncBtn = document.getElementById('syncBtn');
+    var syncIcon = document.getElementById('syncIcon');
+    var syncDot = document.getElementById('syncDot');
+    var statusBox = document.getElementById('cloudSyncStatus');
+    var authSection = document.getElementById('cloudAuthSection');
+
+    if (syncBtn) {
+      syncBtn.classList.toggle('syncing', !!status.syncing);
+    }
+    if (syncIcon) {
+      syncIcon.style.animation = status.syncing ? 'spin 1s linear infinite' : 'none';
+    }
+    if (syncDot) {
+      syncDot.className = 'sync-dot';
+      if (!status.enabled) syncDot.classList.add('sync-dot-offline');
+      else if (status.syncing) syncDot.classList.add('sync-dot-syncing');
+      else if (status.user) syncDot.classList.add('sync-dot-online');
+      else syncDot.classList.add('sync-dot-offline');
+    }
+
+    if (statusBox) {
+      var text = '未初始化';
+      if (!status.enabled) text = '云端同步未启用（SDK 未加载）';
+      else if (status.syncing) text = '正在同步...';
+      else if (status.user) {
+        var uid = status.user.uid || status.user.openid || '已登录';
+        var time = status.lastSync ? new Date(status.lastSync).toLocaleString() : '尚未同步';
+        text = '已登录: ' + uid + '<br>最后同步: ' + time;
+      } else {
+        text = '未登录，请在下方登录以启用同步';
+      }
+      statusBox.innerHTML = '<span class="sync-status-text">' + text + '</span>';
+    }
+
+    if (authSection) {
+      authSection.style.display = (status.user) ? 'none' : 'block';
+    }
+  },
+
+  // 刷新所有页面数据（同步后调用）
+  refreshAllPages() {
+    this.loadDashboard();
+    this.loadTransactions();
+    this.loadInsurance();
+    this.loadStocks();
+    this.loadFunds();
+    this.loadLoans();
+    this.loadAnnuities();
+    this.loadAlerts();
   },
 
   // 顶部刷新按钮：依次拉取最新数据

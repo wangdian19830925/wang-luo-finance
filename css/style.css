@@ -3250,3 +3250,92 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
     font-size: 11px;
   }
 }
+
+/* ============================================
+   云端同步相关样式
+   ============================================ */
+
+.sync-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sync-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+
+.sync-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sync-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--bg-body);
+}
+
+.sync-dot-offline {
+  background: #64748b;
+}
+
+.sync-dot-online {
+  background: var(--accent, #4ade80);
+  box-shadow: 0 0 6px var(--accent, #4ade80);
+}
+
+.sync-dot-syncing {
+  background: var(--cyan, #22d3ee);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sync-status-box {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.sync-status-text {
+  word-break: break-all;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-actions .btn {
+  flex: 1;
+  min-width: 80px;
+}
