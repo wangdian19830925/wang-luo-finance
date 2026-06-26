@@ -2747,7 +2747,8 @@ const App = {
       this.renderDashboardGrid();
       this.checkNotifications();
       this.renderAssetTrend();   // 6 个月净资产变化曲线（异步加载历史价）
-      this.renderDailyChangeBrief(); // 净资产简报（异步加载历史价）
+      this._saveDailySnapshot();  // 每天第一次打开时保存快照
+      this.renderDailyChangeBrief(); // 净资产简报（基于快照）
     } catch(e) {
       console.error('[App] loadDashboard 异常:', e);
     }
@@ -2881,6 +2882,91 @@ const App = {
     });
   },
 
+  // ===== 每日快照 =====
+  // 每天第一次打开应用时保存资产快照（北京时间当天首次）
+  // 快照存在 localStorage.fm_snapshots，格式：{ "YYYY-MM-DD": { timestamp, netWorth, categories: {...} } }
+  _saveDailySnapshot() {
+    var self = this;
+    var now = new Date();
+    // 北京时间 = UTC+8
+    var bjNow = new Date(now.getTime() + 8 * 3600 * 1000);
+    var bjDateStr = bjNow.getUTCFullYear() + '-' + String(bjNow.getUTCMonth()+1).padStart(2,'0') + '-' + String(bjNow.getUTCDate()).padStart(2,'0');
+
+    var snapshots = {};
+    try { snapshots = JSON.parse(localStorage.getItem('fm_snapshots')) || {}; } catch(e) {}
+
+    // 今天已保存过则跳过
+    if (snapshots[bjDateStr]) return;
+
+    // 计算当前各分类价值
+    var categories = { stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0 };
+
+    var stocks = Storage.get(Storage.keys.stocks) || [];
+    stocks.forEach(function(s) {
+      var shares = parseInt(s.shares) || 0;
+      var price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
+      categories.stocks += self.toCNY(shares * price, s.currency || "CNY");
+    });
+
+    var funds = Storage.get(Storage.keys.funds) || [];
+    funds.forEach(function(f) { categories.funds += parseFloat(f.holdValue) || 0; });
+
+    var rsuList = Storage.get(Storage.keys.rsu) || [];
+    rsuList.forEach(function(r) {
+      var vested = parseInt(r.vested) || 0;
+      var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
+      categories.rsu += vested * price;
+    });
+
+    var annuities = Storage.get(Storage.keys.annuities) || [];
+    annuities.forEach(function(a) { categories.annuity += parseFloat(a.balance) || 0; });
+
+    categories.insurance = Storage.calcInsuranceSettledValue();
+    categories.cash = Storage.calcCashTotal();
+
+    var totalAssets = Storage.calcTotalAssets();
+    var totalDebts = Storage.calcTotalDebts();
+    var netWorth = totalAssets - totalDebts;
+
+    snapshots[bjDateStr] = {
+      timestamp: now.getTime(),
+      bjDateStr: bjDateStr,
+      totalAssets: totalAssets,
+      totalDebts: totalDebts,
+      netWorth: netWorth,
+      categories: categories
+    };
+
+    // 只保留最近 90 天快照
+    var keys = Object.keys(snapshots).sort();
+    if (keys.length > 90) {
+      delete snapshots[keys[0]];
+    }
+
+    try { localStorage.setItem('fm_snapshots', JSON.stringify(snapshots)); } catch(e) {}
+    console.log('[快照] 已保存 ' + bjDateStr + ' 净资产 ' + netWorth);
+  },
+
+  // 查找距离 targetDate 最近的一个历史收盘价
+  _findClosestClose(arr, targetDate) {
+    if (!arr || arr.length === 0) return 0;
+    var targetStr = targetDate.toISOString().slice(0, 10);
+    // 精确匹配
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].date === targetStr) return arr[i].close;
+    }
+    // 找最近的一条（向前找）
+    var closest = null;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].date <= targetStr) {
+        closest = arr[i];
+      } else {
+        break;
+      }
+    }
+    return closest ? closest.close : (arr.length > 0 ? arr[arr.length-1].close : 0);
+  },
+
   // ===== 净资产简报 =====
   // 找到上一个有资产变化意义的日期（默认昨天；若昨天是周末则回退到上周五）
   _getPreviousAssetDate() {
@@ -2968,7 +3054,7 @@ const App = {
     return result;
   },
 
-  // 渲染净资产简报（上一日相对今日的净资产变化归因）
+  // 渲染净资产简报（基于每日快照，对比间隔≥24小时的两个快照）
   renderDailyChangeBrief() {
     var self = this;
     var section = document.getElementById("dailyChangeSection");
@@ -2977,118 +3063,113 @@ const App = {
     var dateEl = document.getElementById("dailyChangeDate");
     if (!section || !summaryEl || !listEl) return;
 
-    var prevDate = this._getPreviousAssetDate();
-    var dateStr = prevDate.toISOString().slice(0, 10);
-    if (dateEl) {
-      dateEl.textContent = "对比日期 " + dateStr;
+    // 确保今天快照已保存（幂等，已保存则跳过）
+    this._saveDailySnapshot();
+
+    // 读取所有快照
+    var snapshots = {};
+    try { snapshots = JSON.parse(localStorage.getItem('fm_snapshots')) || {}; } catch(e) {}
+    var snapshotKeys = Object.keys(snapshots).sort(); // 按日期升序
+
+    if (snapshotKeys.length === 0) {
+      listEl.innerHTML = '<div class="daily-change-empty">暂无快照数据，请明天再来查看简报</div>';
+      summaryEl.innerHTML = '';
+      if (dateEl) dateEl.textContent = '';
+      return;
     }
 
-    // 今日各分类价值
-    var todayValues = {
-      stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0,
-      totalAssets: Storage.calcTotalAssets(),
-      totalDebts: Storage.calcTotalDebts()
-    };
+    // 找到今天（北京时间）的快照
+    var now = new Date();
+    var bjNow = new Date(now.getTime() + 8 * 3600 * 1000);
+    var todayStr = bjNow.getUTCFullYear() + '-' + String(bjNow.getUTCMonth()+1).padStart(2,'0') + '-' + String(bjNow.getUTCDate()).padStart(2,'0');
+    var todaySnap = snapshots[todayStr] || null;
 
-    // 股票今日
-    var stocks = Storage.get(Storage.keys.stocks) || [];
-    stocks.forEach(function(s) {
-      var shares = parseInt(s.shares) || 0;
-      var price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
-      todayValues.stocks += self.toCNY(shares * price, s.currency || "CNY");
-    });
+    // 如果没有今天的快照（极端情况），用最新快照代替
+    if (!todaySnap && snapshotKeys.length > 0) {
+      todaySnap = snapshots[snapshotKeys[snapshotKeys.length - 1]];
+    }
 
-    // 基金今日
-    var funds = Storage.get(Storage.keys.funds) || [];
-    funds.forEach(function(f) { todayValues.funds += parseFloat(f.holdValue) || 0; });
-
-    // RSU今日
-    var rsuList = Storage.get(Storage.keys.rsu) || [];
-    rsuList.forEach(function(r) {
-      var vested = parseInt(r.vested) || 0;
-      var price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
-      todayValues.rsu += vested * price;
-    });
-
-    // 年金今日
-    var annuities = Storage.get(Storage.keys.annuities) || [];
-    annuities.forEach(function(a) { todayValues.annuity += parseFloat(a.balance) || 0; });
-
-    // 保险今日
-    todayValues.insurance = Storage.calcInsuranceSettledValue();
-
-    // 现金今日
-    todayValues.cash = Storage.calcCashTotal();
-
-    // 加载历史数据并计算上一日
-    this._loadAllHistoryData(function(historyData) {
-      var prevValues = self._estimateCategoryValuesAt(prevDate, historyData);
-
-      var todayNetWorth = todayValues.totalAssets - todayValues.totalDebts;
-      var prevNetWorth = prevValues.totalAssets - prevValues.totalDebts;
-      var netChange = todayNetWorth - prevNetWorth;
-
-      // 汇总区
-      var netClass = netChange >= 0 ? "trend-up" : "trend-down";
-      var netSign = netChange >= 0 ? "+" : "";
-      summaryEl.innerHTML =
-        '<div class="daily-change-total">' +
-          '<div class="daily-change-total-label">净资产变化</div>' +
-          '<div class="daily-change-total-value ' + netClass + '">' + netSign + self.formatMoney(netChange) + '</div>' +
-        '</div>' +
-        '<div class="daily-change-sub">' +
-          '<span>今日净资产 <b>' + self.formatMoney(todayNetWorth) + '</b></span>' +
-          '<span>昨日净资产 <b>' + self.formatMoney(prevNetWorth) + '</b></span>' +
-        '</div>';
-
-      // 明细条目：对净资产变化的贡献
-      // 资产项：today - prev（增加为正向贡献）
-      // 负债项：prev - today（减少为正向贡献）
-      var items = [
-        { key: 'stocks', label: '股票持仓', icon: 'stocks', today: todayValues.stocks, prev: prevValues.stocks, isDebt: false },
-        { key: 'funds', label: '基金理财', icon: 'funds', today: todayValues.funds, prev: prevValues.funds, isDebt: false },
-        { key: 'rsu', label: 'RSU 已解禁', icon: 'trophy', today: todayValues.rsu, prev: prevValues.rsu, isDebt: false },
-        { key: 'cash', label: '现金资产', icon: 'transactions', today: todayValues.cash, prev: prevValues.cash, isDebt: false },
-        { key: 'insurance', label: '保险沉淀', icon: 'insurance', today: todayValues.insurance, prev: prevValues.insurance, isDebt: false },
-        { key: 'annuity', label: '企业年金', icon: 'annuity', today: todayValues.annuity, prev: prevValues.annuity, isDebt: false },
-        { key: 'debt', label: '剩余房贷', icon: 'loan', today: todayValues.totalDebts, prev: prevValues.totalDebts, isDebt: true }
-      ];
-
-      var html = '';
-      items.forEach(function(item) {
-        var change = item.isDebt ? (item.prev - item.today) : (item.today - item.prev);
-        var absChange = Math.abs(change);
-        // 无变化条目不展示
-        if (absChange < 0.01) return;
-
-        var pct = item.prev > 0 ? (change / item.prev * 100) : 0;
-
-        // 对净资产的影响：正 = 增加（红），负 = 减少（绿）
-        var changeClass = change >= 0 ? "trend-up" : "trend-down";
-        var sign = change > 0 ? "+" : "";
-
-        html += '<div class="daily-change-item">' +
-          '<div class="daily-change-item-left">' +
-            '<div class="daily-change-icon">' + self.icon(item.icon) + '</div>' +
-            '<div class="daily-change-info">' +
-              '<div class="daily-change-name">' + item.label + '</div>' +
-              '<div class="daily-change-sub">' + self.formatMoney(item.today) + ' / 昨 ' + self.formatMoney(item.prev) + '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="daily-change-item-right">' +
-            '<div class="daily-change-value ' + changeClass + '">' + sign + self.formatMoney(change) + '</div>' +
-            '<div class="daily-change-pct ' + changeClass + '">(' + sign + pct.toFixed(2) + '%)</div>' +
-          '</div>' +
-        '</div>';
-      });
-
-      // 若全部无变化，给出提示
-      if (!html) {
-        html = '<div class="daily-change-empty">各分类均无变化</div>';
+    // 找间隔≥24小时的最近一个快照
+    var prevSnap = null;
+    var twentyFourHours = 24 * 3600 * 1000;
+    for (var i = snapshotKeys.length - 2; i >= 0; i--) {
+      var key = snapshotKeys[i];
+      var snap = snapshots[key];
+      if (snap && todaySnap && (todaySnap.timestamp - snap.timestamp >= twentyFourHours)) {
+        prevSnap = snap;
+        break;
       }
+    }
 
-      listEl.innerHTML = html;
+    if (!prevSnap) {
+      listEl.innerHTML = '<div class="daily-change-empty">暂无超过24小时的快照数据<br>请超过24小时后再查看简报</div>';
+      summaryEl.innerHTML = '';
+      if (dateEl) dateEl.textContent = '';
+      return;
+    }
+
+    // 计算间隔天数
+    var daysDiff = Math.round((todaySnap.timestamp - prevSnap.timestamp) / (24 * 3600 * 1000));
+    var daysLabel = daysDiff <= 1 ? '1天' : daysDiff + '天';
+
+    var todayNet = todaySnap.netWorth;
+    var prevNet = prevSnap.netWorth;
+    var netChange = todayNet - prevNet;
+
+    // 汇总区
+    var netClass = netChange >= 0 ? "trend-up" : "trend-down";
+    var netSign = netChange >= 0 ? "+" : "";
+    summaryEl.innerHTML =
+      '<div class="daily-change-total">' +
+        '<div class="daily-change-total-label">' + daysLabel + '净资产变化</div>' +
+        '<div class="daily-change-total-value ' + netClass + '">' + netSign + this.formatMoney(netChange) + '</div>' +
+      '</div>' +
+      '<div class="daily-change-sub">' +
+        '<span>当前净资产 <b>' + this.formatMoney(todayNet) + '</b></span>' +
+        '<span>' + daysLabel + '前 <b>' + this.formatMoney(prevNet) + '</b></span>' +
+      '</div>';
+
+    if (dateEl) {
+      dateEl.textContent = todaySnap.bjDateStr + ' vs ' + prevSnap.bjDateStr;
+    }
+
+    // 明细条目
+    var cats = ['stocks', 'funds', 'rsu', 'cash', 'insurance', 'annuity', 'debt'];
+    var labels = { stocks: '股票持仓', funds: '基金理财', rsu: 'RSU 已解禁', cash: '现金资产', insurance: '保险沉淀', annuity: '企业年金', debt: '剩余房贷' };
+    var icons = { stocks: 'stocks', funds: 'funds', rsu: 'trophy', cash: 'transactions', insurance: 'insurance', annuity: 'annuity', debt: 'loan' };
+
+    var html = '';
+    cats.forEach(function(key) {
+      var todayVal = (todaySnap.categories && todaySnap.categories[key]) || 0;
+      var prevVal = (prevSnap.categories && prevSnap.categories[key]) || 0;
+      var change = key === 'debt' ? (prevVal - todayVal) : (todayVal - prevVal);
+      var absChange = Math.abs(change);
+      if (absChange < 0.01) return;
+
+      var pct = prevVal > 0 ? (change / prevVal * 100) : 0;
+      var changeClass = change >= 0 ? "trend-up" : "trend-down";
+      var sign = change > 0 ? "+" : "";
+
+      html += '<div class="daily-change-item">' +
+        '<div class="daily-change-item-left">' +
+          '<div class="daily-change-icon">' + self.icon(icons[key]) + '</div>' +
+          '<div class="daily-change-info">' +
+            '<div class="daily-change-name">' + labels[key] + '</div>' +
+            '<div class="daily-change-sub">' + self.formatMoney(todayVal) + ' / ' + daysLabel + '前 ' + self.formatMoney(prevVal) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="daily-change-item-right">' +
+          '<div class="daily-change-value ' + changeClass + '">' + sign + self.formatMoney(change) + '</div>' +
+          '<div class="daily-change-pct ' + changeClass + '">(' + sign + pct.toFixed(2) + '%)</div>' +
+        '</div>' +
+      '</div>';
     });
+
+    if (!html) {
+      html = '<div class="daily-change-empty">各分类均无变化</div>';
+    }
+
+    listEl.innerHTML = html;
   },
 
   // 收集 start 到 end 之间的所有周五
