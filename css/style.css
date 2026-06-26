@@ -1309,8 +1309,13 @@ body {
 @media (max-width: 600px) {
   .record-item {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 6px;
+  }
+  .record-info {
+    width: 100%;
+    align-self: stretch;
+    min-width: 0;
   }
   .record-amount {
     margin-left: 0;
