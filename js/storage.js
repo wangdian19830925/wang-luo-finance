@@ -189,9 +189,12 @@ const Storage = {
       this.cloudUser = user || { email: email };
       const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
       console.log('[CloudBase] 邮箱登录成功:', uid);
+      // 释放同步锁，避免 syncWithCloud 因自己持有锁而返回 syncing
+      this.cloudSyncing = false;
+      this._emitSyncStatus();
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
-        throw new Error(syncResult.error || '同步失败');
+        throw new Error(syncResult.error || syncResult.reason || '同步失败');
       }
       return true;
     } catch (e) {
@@ -227,6 +230,7 @@ const Storage = {
         if (data && typeof data.verifyOtp === 'function') {
           this._pendingVerifyOtp = data.verifyOtp;
           this._pendingEmail = email;
+          this._pendingPassword = password;
           return { needsVerification: true, message: '验证码已发送至邮箱，请查收并输入' };
         }
         this.cloudUser = (data && data.user) ? data.user : data;
@@ -266,14 +270,42 @@ const Storage = {
       this._emitSyncStatus();
       const { data, error } = await this._pendingVerifyOtp({ token: code });
       if (error) throw error;
-      this.cloudUser = (data && data.user) ? data.user : { email: this._pendingEmail };
+
+      // 验证通过后用邮箱+密码真正登录，确保 cloudUser 有 uid
+      const auth = this._getAuth();
+      let user = null;
+      if (auth && typeof auth.signInWithPassword === 'function' && this._pendingPassword) {
+        try {
+          const signInRes = await auth.signInWithPassword({
+            email: this._pendingEmail,
+            password: this._pendingPassword
+          });
+          if (!signInRes.error) {
+            user = (signInRes.data && signInRes.data.user) ? signInRes.data.user : signInRes.data;
+          }
+        } catch (signInErr) {
+          console.warn('[CloudBase] 验证后自动登录失败:', signInErr);
+        }
+      }
+
+      // 兜底：如果登录没拿到 user，尝试从 verifyOtp 的 data 取
+      if (!user) {
+        user = (data && data.user) ? data.user : { email: this._pendingEmail };
+      }
+
+      this.cloudUser = user || { email: this._pendingEmail };
       this._pendingVerifyOtp = null;
       this._pendingEmail = null;
-      const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
-      console.log('[CloudBase] 邮箱验证成功:', uid);
+      this._pendingPassword = null;
+      const uid = this._getUserId();
+      console.log('[CloudBase] 邮箱验证成功:', uid || this.cloudUser.email);
+
+      // 释放同步锁，避免 syncWithCloud 因自己持有锁而返回 syncing
+      this.cloudSyncing = false;
+      this._emitSyncStatus();
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
-        throw new Error(syncResult.error || '同步失败');
+        throw new Error(syncResult.error || syncResult.reason || '同步失败');
       }
       return true;
     } catch (e) {
@@ -314,6 +346,7 @@ const Storage = {
       this.cloudLastSync = null;
       this._pendingVerifyOtp = null;
       this._pendingEmail = null;
+      this._pendingPassword = null;
       this._emitSyncStatus();
     } catch (e) {
       console.error('[CloudBase] 登出失败:', e);
@@ -329,7 +362,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v71'
+      clientVersion: 'v72'
     };
   },
 
@@ -358,7 +391,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v71' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v72' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
