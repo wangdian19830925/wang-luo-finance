@@ -61,6 +61,15 @@ const Storage = {
     try {
       this.cloudConfig.env = config.env;
       this.cloudApp = cloudbase.init({ env: config.env });
+
+      // 检查 auth 与 database 模块是否已通过 CDN 自动注册
+      if (typeof this.cloudApp.auth !== 'function') {
+        throw new Error('CloudBase Auth 模块未加载，请确认已引入 cloudbase.auth.js');
+      }
+      if (typeof this.cloudApp.database !== 'function') {
+        throw new Error('CloudBase Database 模块未加载，请确认已引入 cloudbase.database.js');
+      }
+
       this.cloudDb = this.cloudApp.database();
       this.cloudSyncEnabled = true;
       console.log('[CloudBase] 初始化成功，环境:', config.env);
@@ -69,6 +78,8 @@ const Storage = {
     } catch (e) {
       console.error('[CloudBase] 初始化失败:', e);
       this.cloudSyncEnabled = false;
+      this.cloudInitError = e.message || String(e);
+      this._emitSyncStatus();
       return false;
     }
   },

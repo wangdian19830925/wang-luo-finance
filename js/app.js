@@ -86,9 +86,14 @@ const App = {
         env: 'wang-luo-finance-d6enmg07a198e20'
       };
       const initialized = await Storage.initCloudbase(config);
-      if (initialized) {
-        console.log('[App] CloudBase 初始化完成，尝试匿名登录');
-        await Storage.loginAnonymously();
+      if (!initialized) {
+        console.warn('[App] CloudBase 未初始化:', Storage.cloudInitError || '未知原因');
+        return;
+      }
+      console.log('[App] CloudBase 初始化完成，尝试匿名登录');
+      const anonymousOk = await Storage.loginAnonymously();
+      if (!anonymousOk) {
+        console.warn('[App] 匿名登录未成功，请点击右上角设置面板登录');
       }
     } catch (e) {
       console.error('[App] CloudBase 初始化异常:', e);
