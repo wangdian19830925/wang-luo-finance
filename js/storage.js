@@ -87,16 +87,18 @@ const Storage = {
     }
   },
 
-  // 匿名登录
+  // 匿名登录（兼容 CloudBase SDK 1.7.x 的 Provider 模式）
   async loginAnonymously() {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
+      this.cloudLastSyncError = null;
       this._emitSyncStatus();
       const auth = this.cloudApp.auth();
-      const state = await auth.signInAnonymously();
-      this.cloudUser = state.user || state;
-      console.log('[CloudBase] 匿名登录成功:', this.cloudUser.uid || this.cloudUser.openid);
+      const state = await this._tryAnonymousSignIn(auth);
+      this.cloudUser = (state && state.user) ? state.user : state;
+      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId)) || 'anonymous';
+      console.log('[CloudBase] 匿名登录成功:', uid);
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
         throw new Error(syncResult.error || '同步失败');
@@ -104,6 +106,8 @@ const Storage = {
       return true;
     } catch (e) {
       console.error('[CloudBase] 匿名登录失败:', e);
+      this.cloudLastSyncError = '匿名登录失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
       throw e;
     } finally {
       this.cloudSyncing = false;
@@ -111,16 +115,43 @@ const Storage = {
     }
   },
 
+  // 尝试多种匿名登录方式，兼容不同 SDK 版本
+  async _tryAnonymousSignIn(auth) {
+    const methods = [];
+    if (typeof auth.anonymousAuthProvider === 'function') {
+      try {
+        const provider = auth.anonymousAuthProvider();
+        if (provider && typeof provider.signIn === 'function') {
+          return await provider.signIn();
+        }
+      } catch (e) {
+        methods.push('anonymousAuthProvider().signIn(): ' + (e.message || String(e)));
+      }
+    }
+    if (typeof auth.signInAnonymously === 'function') {
+      try {
+        return await auth.signInAnonymously();
+      } catch (e) {
+        methods.push('signInAnonymously(): ' + (e.message || String(e)));
+      }
+    }
+    // 输出 auth 对象可用方法，方便调试
+    const available = Object.keys(auth).filter(k => typeof auth[k] === 'function').sort().join(', ');
+    throw new Error('未找到可用的匿名登录方法。已尝试: ' + methods.join('; ') + '。auth 方法: ' + available);
+  },
+
   // 邮箱登录
   async loginWithEmail(email, password) {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
+      this.cloudLastSyncError = null;
       this._emitSyncStatus();
       const auth = this.cloudApp.auth();
       const state = await auth.signInWithEmailAndPassword(email, password);
-      this.cloudUser = state.user || state;
-      console.log('[CloudBase] 邮箱登录成功:', this.cloudUser.uid || this.cloudUser.email);
+      this.cloudUser = (state && state.user) ? state.user : state;
+      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId || this.cloudUser.email)) || 'email';
+      console.log('[CloudBase] 邮箱登录成功:', uid);
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
         throw new Error(syncResult.error || '同步失败');
@@ -128,6 +159,8 @@ const Storage = {
       return true;
     } catch (e) {
       console.error('[CloudBase] 邮箱登录失败:', e);
+      this.cloudLastSyncError = '邮箱登录失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
       throw e;
     } finally {
       this.cloudSyncing = false;
@@ -140,11 +173,13 @@ const Storage = {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
       this.cloudSyncing = true;
+      this.cloudLastSyncError = null;
       this._emitSyncStatus();
       const auth = this.cloudApp.auth();
       const state = await auth.signUpWithEmailAndPassword(email, password);
-      this.cloudUser = state.user || state;
-      console.log('[CloudBase] 邮箱注册成功:', this.cloudUser.uid || this.cloudUser.email);
+      this.cloudUser = (state && state.user) ? state.user : state;
+      const uid = (this.cloudUser && (this.cloudUser.uid || this.cloudUser.openid || this.cloudUser.userId || this.cloudUser.email)) || 'email';
+      console.log('[CloudBase] 邮箱注册成功:', uid);
       const syncResult = await this.syncWithCloud();
       if (!syncResult.success) {
         throw new Error(syncResult.error || '同步失败');
@@ -152,6 +187,8 @@ const Storage = {
       return true;
     } catch (e) {
       console.error('[CloudBase] 邮箱注册失败:', e);
+      this.cloudLastSyncError = '邮箱注册失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
       throw e;
     } finally {
       this.cloudSyncing = false;
@@ -182,7 +219,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v62'
+      clientVersion: 'v66'
     };
   },
 
@@ -203,7 +240,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，更新时间较新的优先）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v62' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v66' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
