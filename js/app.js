@@ -3350,9 +3350,7 @@ const App = {
 
   deleteCashAccount(id) {
     if (!confirm("确定删除此现金账户？")) return;
-    var accounts = Storage.get(Storage.keys.cashAccounts);
-    accounts = accounts.filter(function(a) { return a.id !== id; });
-    Storage.set(Storage.keys.cashAccounts, accounts);
+    Storage.delete(Storage.keys.cashAccounts, id);
     this.loadTransactions();
     this.loadDashboard();
     this.showToast("现金账户已删除");

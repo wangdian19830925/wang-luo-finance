@@ -277,7 +277,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v68'
+      clientVersion: 'v69'
     };
   },
 
@@ -298,23 +298,32 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v68' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v69' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
       const map = {};
-      const mergeItem = (item) => {
+      
+      // 先添加本地记录
+      localArr.forEach(item => {
+        if (!item || !item.id) return;
+        map[item.id] = item;
+      });
+      
+      // 再用云端记录合并（LWW）
+      cloudArr.forEach(item => {
         if (!item || !item.id) return;
         if (!map[item.id]) {
           map[item.id] = item;
         } else {
           const oldTime = new Date(map[item.id].updatedAt || map[item.id].createdAt || 0).getTime();
           const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
-          if (newTime > oldTime) map[item.id] = item;
+          if (newTime > oldTime) {
+            map[item.id] = item;
+          }
         }
-      };
-      localArr.forEach(mergeItem);
-      cloudArr.forEach(mergeItem);
+      });
+      
       merged.data[k] = Object.values(map);
     });
     return merged;
@@ -354,14 +363,20 @@ const Storage = {
         clientVersion: pkg.clientVersion
       };
       if (this.cloudDocId) {
-        // v2: update 直接传入字段（非 { data: {...} } 包裹）
-        await collection.doc(this.cloudDocId).update(docData);
-        console.log('[CloudBase] 更新云端数据成功');
+        // v2: update 直接传入字段
+        const res = await collection.doc(this.cloudDocId).update(docData);
+        console.log('[CloudBase] 更新云端数据成功, res:', res);
       } else {
         // v2: add 直接传入字段
         const res = await collection.add(docData);
-        this.cloudDocId = res._id || res.id || (res.data && (res.data._id || res.data.id));
-        console.log('[CloudBase] 新增云端数据成功，docId:', this.cloudDocId);
+        console.log('[CloudBase] 新增云端数据, res:', res);
+        // v2 返回格式: { data: { _id: '...' }, error: null }
+        if (res && res.data && res.data._id) {
+          this.cloudDocId = res.data._id;
+        } else if (res && res._id) {
+          this.cloudDocId = res._id;
+        }
+        console.log('[CloudBase] docId:', this.cloudDocId);
       }
       this.cloudLastSync = new Date().toISOString();
       return true;
@@ -387,36 +402,45 @@ const Storage = {
     this._emitSyncStatus();
     try {
       const localPkg = this._getLocalDataPackage();
+      console.log('[CloudBase] 本地数据包:', JSON.stringify(localPkg).substring(0, 200) + '...');
+      
       const { doc: cloudDoc, error: pullError } = await this.pullFromCloud();
       if (pullError) {
         return { success: false, error: '拉取云端数据失败: ' + pullError };
       }
+      
       const cloudPkg = cloudDoc ? {
         data: cloudDoc.data,
         updatedAt: cloudDoc.updatedAt,
         clientVersion: cloudDoc.clientVersion
       } : null;
-
+      
+      console.log('[CloudBase] 云端数据包:', cloudPkg ? JSON.stringify(cloudPkg).substring(0, 200) + '...' : 'null');
+      
       let mergedPkg;
       let source;
       if (!cloudPkg) {
         // 云端无数据，直接推送本地
         mergedPkg = localPkg;
         source = 'local';
+        console.log('[CloudBase] 云端无数据，使用本地数据');
       } else if (!localPkg.data || this._isEmptyData(localPkg.data)) {
         // 本地无数据，使用云端
         mergedPkg = cloudPkg;
         source = 'cloud';
+        console.log('[CloudBase] 本地无数据，使用云端数据');
       } else {
         // 合并，以 updatedAt 判断是否需要覆盖
         const localTime = new Date(localPkg.updatedAt || 0).getTime();
         const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
         mergedPkg = this._mergeDataPackages(localPkg, cloudPkg);
         source = localTime >= cloudTime ? 'merge-local-newer' : 'merge-cloud-newer';
+        console.log('[CloudBase] 合并数据，来源:', source, 'localTime:', localPkg.updatedAt, 'cloudTime:', cloudPkg.updatedAt);
       }
 
       // 写回本地
       this._applyDataPackage(mergedPkg);
+      console.log('[CloudBase] 已应用合并数据到本地');
 
       // 推回云端（确保云端也是最新合并结果）
       const pushSuccess = await this.pushToCloud(mergedPkg);
@@ -424,6 +448,7 @@ const Storage = {
         console.error('[CloudBase] 同步失败：推送云端数据失败');
         return { success: false, error: '推送云端数据失败，请检查网络或 CloudBase 安全域名配置' };
       }
+      console.log('[CloudBase] 已推送合并数据到云端');
 
       this.cloudLastSync = new Date().toISOString();
       this.cloudLastSyncError = null;
