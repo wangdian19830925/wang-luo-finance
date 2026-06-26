@@ -268,16 +268,16 @@ const Storage = {
     }
   },
 
-  // 从本地组装完整数据包
+  // 从本地组装完整数据包（同步用，包含已删除记录）
   _getLocalDataPackage() {
     const data = {};
     Object.keys(this.keys).forEach(k => {
-      data[k] = this.get(this.keys[k]);
+      data[k] = this.get(this.keys[k], true); // true = 包含已删除
     });
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v67'
+      clientVersion: 'v68'
     };
   },
 
@@ -296,9 +296,9 @@ const Storage = {
     }
   },
 
-  // 合并两个数据包（按 id 去重，更新时间较新的优先）
+  // 合并两个数据包（按 id 去重，LWW：updatedAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v67' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v68' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -310,7 +310,7 @@ const Storage = {
         } else {
           const oldTime = new Date(map[item.id].updatedAt || map[item.id].createdAt || 0).getTime();
           const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
-          if (newTime >= oldTime) map[item.id] = item;
+          if (newTime > oldTime) map[item.id] = item;
         }
       };
       localArr.forEach(mergeItem);
@@ -456,10 +456,14 @@ const Storage = {
     }, 2000);
   },
 
-  get(key) {
+  get(key, includeDeleted) {
     try {
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
+      let arr = data ? JSON.parse(data) : [];
+      if (!includeDeleted) {
+        arr = arr.filter(item => !(item && item.deleted));
+      }
+      return arr;
     } catch (e) {
       return [];
     }
@@ -476,17 +480,19 @@ const Storage = {
   },
 
   add(key, item) {
-    const data = this.get(key);
-    item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-    item.createdAt = new Date().toISOString();
+    const data = this.get(key, true); // 包含已删除，避免 ID 冲突
+    item.id = item.id || Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    item.createdAt = item.createdAt || new Date().toISOString();
+    item.deleted = false;
+    delete item.deletedAt;
     data.push(item);
     this.set(key, data);
     return item;
   },
 
   update(key, id, updates) {
-    const data = this.get(key);
-    const index = data.findIndex(item => item.id === id);
+    const data = this.get(key, true); // 包含已删除，支持取消删除
+    const index = data.findIndex(item => item && item.id === id);
     if (index !== -1) {
       updates.updatedAt = new Date().toISOString();
       data[index] = { ...data[index], ...updates };
@@ -497,23 +503,29 @@ const Storage = {
   },
 
   delete(key, id) {
-    const data = this.get(key);
-    const filtered = data.filter(item => item.id !== id);
-    this.set(key, filtered);
+    const data = this.get(key, true); // 包含已删除，找到目标记录
+    const index = data.findIndex(item => item && item.id === id);
+    if (index !== -1) {
+      const now = new Date().toISOString();
+      data[index].deleted = true;
+      data[index].deletedAt = now;
+      data[index].updatedAt = now;
+      this.set(key, data);
+    }
     return true;
   },
 
-  // 快捷读取
-  getCashAccounts() { return this.get(this.keys.cashAccounts); },
-  getIncome()      { return this.get(this.keys.income); },
-  getExpense()     { return this.get(this.keys.expense); },
-  getAssets()      { return this.get(this.keys.assets); },
-  getInsurance()   { return this.get(this.keys.insurance); },
-  getStocks()      { return this.get(this.keys.stocks); },
-  getRsu()         { return this.get(this.keys.rsu); },
-  getFunds()       { return this.get(this.keys.funds); },
-  getLoans()       { return this.get(this.keys.loans); },
-  getAnnuities()   { return this.get(this.keys.annuities); },
+  // 快捷读取（默认过滤已删除记录）
+  getCashAccounts(includeDeleted) { return this.get(this.keys.cashAccounts, includeDeleted); },
+  getIncome(includeDeleted)      { return this.get(this.keys.income, includeDeleted); },
+  getExpense(includeDeleted)     { return this.get(this.keys.expense, includeDeleted); },
+  getAssets(includeDeleted)      { return this.get(this.keys.assets, includeDeleted); },
+  getInsurance(includeDeleted)   { return this.get(this.keys.insurance, includeDeleted); },
+  getStocks(includeDeleted)      { return this.get(this.keys.stocks, includeDeleted); },
+  getRsu(includeDeleted)         { return this.get(this.keys.rsu, includeDeleted); },
+  getFunds(includeDeleted)       { return this.get(this.keys.funds, includeDeleted); },
+  getLoans(includeDeleted)       { return this.get(this.keys.loans, includeDeleted); },
+  getAnnuities(includeDeleted)   { return this.get(this.keys.annuities, includeDeleted); },
 
   // 获取汇率（与 app.js 保持一致，含有效性校验）
   _getFxRates() {
