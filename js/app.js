@@ -2482,7 +2482,7 @@ const App = {
       this.renderDashboardGrid();
       this.checkNotifications();
       this.renderAssetTrend();   // 6 个月净资产变化曲线（异步加载历史价）
-      this.renderDailyChangeBrief(); // 上一日资产变化简报（异步加载历史价）
+      this.renderDailyChangeBrief(); // 净资产简报（异步加载历史价）
     } catch(e) {
       console.error('[App] loadDashboard 异常:', e);
     }
@@ -2616,7 +2616,7 @@ const App = {
     });
   },
 
-  // ===== 上一日资产变化简报 =====
+  // ===== 净资产简报 =====
   // 找到上一个有资产变化意义的日期（默认昨天；若昨天是周末则回退到上周五）
   _getPreviousAssetDate() {
     var d = new Date();
@@ -2703,7 +2703,7 @@ const App = {
     return result;
   },
 
-  // 渲染上一日资产变化简报
+  // 渲染净资产简报（上一日相对今日的净资产变化归因）
   renderDailyChangeBrief() {
     var self = this;
     var section = document.getElementById("dailyChangeSection");
@@ -2759,7 +2759,9 @@ const App = {
     this._loadAllHistoryData(function(historyData) {
       var prevValues = self._estimateCategoryValuesAt(prevDate, historyData);
 
-      var netChange = (todayValues.totalAssets - todayValues.totalDebts) - (prevValues.totalAssets - prevValues.totalDebts);
+      var todayNetWorth = todayValues.totalAssets - todayValues.totalDebts;
+      var prevNetWorth = prevValues.totalAssets - prevValues.totalDebts;
+      var netChange = todayNetWorth - prevNetWorth;
 
       // 汇总区
       var netClass = netChange >= 0 ? "trend-up" : "trend-down";
@@ -2770,35 +2772,34 @@ const App = {
           '<div class="daily-change-total-value ' + netClass + '">' + netSign + self.formatMoney(netChange) + '</div>' +
         '</div>' +
         '<div class="daily-change-sub">' +
-          '<span>今日净资产 <b>' + self.formatMoney(todayValues.totalAssets - todayValues.totalDebts) + '</b></span>' +
-          '<span>昨日净资产 <b>' + self.formatMoney(prevValues.totalAssets - prevValues.totalDebts) + '</b></span>' +
+          '<span>今日净资产 <b>' + self.formatMoney(todayNetWorth) + '</b></span>' +
+          '<span>昨日净资产 <b>' + self.formatMoney(prevNetWorth) + '</b></span>' +
         '</div>';
 
-      // 明细条目
+      // 明细条目：对净资产变化的贡献
+      // 资产项：today - prev（增加为正向贡献）
+      // 负债项：prev - today（减少为正向贡献）
       var items = [
-        { key: 'stocks', label: '股票持仓', icon: 'stocks', today: todayValues.stocks, prev: prevValues.stocks },
-        { key: 'funds', label: '基金理财', icon: 'funds', today: todayValues.funds, prev: prevValues.funds },
-        { key: 'rsu', label: 'RSU 已解禁', icon: 'trophy', today: todayValues.rsu, prev: prevValues.rsu },
-        { key: 'cash', label: '现金资产', icon: 'transactions', today: todayValues.cash, prev: prevValues.cash },
-        { key: 'insurance', label: '保险沉淀', icon: 'insurance', today: todayValues.insurance, prev: prevValues.insurance },
-        { key: 'annuity', label: '企业年金', icon: 'annuity', today: todayValues.annuity, prev: prevValues.annuity },
-        { key: 'debt', label: '房贷剩余本金', icon: 'loan', today: todayValues.totalDebts, prev: prevValues.totalDebts, isDebt: true }
+        { key: 'stocks', label: '股票持仓', icon: 'stocks', today: todayValues.stocks, prev: prevValues.stocks, isDebt: false },
+        { key: 'funds', label: '基金理财', icon: 'funds', today: todayValues.funds, prev: prevValues.funds, isDebt: false },
+        { key: 'rsu', label: 'RSU 已解禁', icon: 'trophy', today: todayValues.rsu, prev: prevValues.rsu, isDebt: false },
+        { key: 'cash', label: '现金资产', icon: 'transactions', today: todayValues.cash, prev: prevValues.cash, isDebt: false },
+        { key: 'insurance', label: '保险沉淀', icon: 'insurance', today: todayValues.insurance, prev: prevValues.insurance, isDebt: false },
+        { key: 'annuity', label: '企业年金', icon: 'annuity', today: todayValues.annuity, prev: prevValues.annuity, isDebt: false },
+        { key: 'debt', label: '剩余房贷', icon: 'loan', today: todayValues.totalDebts, prev: prevValues.totalDebts, isDebt: true }
       ];
 
       var html = '';
       items.forEach(function(item) {
         var change = item.isDebt ? (item.prev - item.today) : (item.today - item.prev);
         var absChange = Math.abs(change);
-        var pct = item.prev > 0 ? (change / item.prev * 100) : 0;
-        var isZero = Math.abs(change) < 0.01;
+        // 无变化条目不展示
+        if (absChange < 0.01) return;
 
-        // 资产：涨=红（增加），跌=绿（减少）；负债：减少=红（改善），增加=绿（恶化）
-        var changeClass;
-        if (item.isDebt) {
-          changeClass = change > 0 ? "trend-up" : "trend-down";
-        } else {
-          changeClass = change >= 0 ? "trend-up" : "trend-down";
-        }
+        var pct = item.prev > 0 ? (change / item.prev * 100) : 0;
+
+        // 对净资产的影响：正 = 增加（红），负 = 减少（绿）
+        var changeClass = change >= 0 ? "trend-up" : "trend-down";
         var sign = change > 0 ? "+" : "";
 
         html += '<div class="daily-change-item">' +
@@ -2810,13 +2811,16 @@ const App = {
             '</div>' +
           '</div>' +
           '<div class="daily-change-item-right">' +
-            (isZero
-              ? '<div class="daily-change-value flat">—</div>'
-              : '<div class="daily-change-value ' + changeClass + '">' + sign + self.formatMoney(change) + '</div>' +
-                '<div class="daily-change-pct ' + changeClass + '">(' + sign + pct.toFixed(2) + '%)</div>') +
+            '<div class="daily-change-value ' + changeClass + '">' + sign + self.formatMoney(change) + '</div>' +
+            '<div class="daily-change-pct ' + changeClass + '">(' + sign + pct.toFixed(2) + '%)</div>' +
           '</div>' +
         '</div>';
       });
+
+      // 若全部无变化，给出提示
+      if (!html) {
+        html = '<div class="daily-change-empty">各分类均无变化</div>';
+      }
 
       listEl.innerHTML = html;
     });

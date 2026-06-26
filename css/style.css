@@ -2202,7 +2202,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
-   上一日资产变化简报
+   净资产简报
    ============================================ */
 .daily-change-section {
   background: var(--bg-card, #13132a);
@@ -2377,6 +2377,15 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 
 .daily-change-pct.trend-up { color: #ef4444; }
 .daily-change-pct.trend-down { color: #22c55e; }
+
+.daily-change-empty {
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+}
 
 @media (max-width: 600px) {
   .daily-change-section {

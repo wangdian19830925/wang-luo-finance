@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v83 -->
+  <!-- version: 2026-06-26-v84 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=83">
+  <link rel="stylesheet" href="./css/style.css?v=84">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -144,12 +144,12 @@
         <!-- 由 loadDashboard 动态渲染 -->
       </div>
 
-      <!-- 上一日资产变化简报 -->
+      <!-- 净资产简报 -->
       <div class="daily-change-section" id="dailyChangeSection">
         <div class="daily-change-header">
           <div class="daily-change-title">
             <svg class="icon"><use href="#icon-refresh"/></svg>
-            上一日资产变化简报
+            净资产简报
           </div>
           <span class="daily-change-date" id="dailyChangeDate">--</span>
         </div>
@@ -918,7 +918,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=83"></script>
+  <script src="./js/storage.js?v=84"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -928,6 +928,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=83"></script>
+  <script src="./js/app.js?v=84"></script>
 </body>
 </html>
