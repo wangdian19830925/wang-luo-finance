@@ -328,5 +328,81 @@ const Storage = {
     const all = [...income, ...expense];
     all.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
     return all.slice(0, limit);
+  },
+
+  // 导出所有用户数据（不含汇率等可重新获取的临时数据）
+  exportAllData() {
+    const data = {};
+    Object.keys(this.keys).forEach(k => {
+      data[k] = this.get(this.keys[k]);
+    });
+    // 额外保留汇率，方便跨设备一致性
+    try {
+      const fx = localStorage.getItem('fm_exchange_rates');
+      if (fx) data._exchangeRates = JSON.parse(fx);
+    } catch (e) {}
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: data
+    };
+  },
+
+  // 导入数据：mode = 'merge' | 'replace'
+  importAllData(packageJson, mode) {
+    mode = mode || 'merge';
+    if (!packageJson || !packageJson.data) throw new Error('无效的数据文件');
+
+    const imported = packageJson.data;
+    const mergedSummary = {};
+
+    Object.keys(this.keys).forEach(k => {
+      const key = this.keys[k];
+      const incoming = Array.isArray(imported[k]) ? imported[k] : [];
+      if (mode === 'replace') {
+        this.set(key, incoming);
+        mergedSummary[k] = { before: 0, after: incoming.length, added: incoming.length };
+        return;
+      }
+
+      // 智能合并：以 id 去重，导入数据优先（较新）
+      const existing = this.get(key);
+      const map = {};
+      existing.forEach(item => { if (item && item.id) map[item.id] = item; });
+      let added = 0, updated = 0;
+      incoming.forEach(item => {
+        if (!item || !item.id) return;
+        if (!map[item.id]) {
+          map[item.id] = item;
+          added++;
+        } else {
+          // 以更新时间或创建时间较晚的为准
+          const oldItem = map[item.id];
+          const oldTime = new Date(oldItem.updatedAt || oldItem.createdAt || 0).getTime();
+          const newTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+          if (newTime >= oldTime) {
+            map[item.id] = item;
+            updated++;
+          }
+        }
+      });
+      const merged = Object.values(map);
+      this.set(key, merged);
+      mergedSummary[k] = { before: existing.length, after: merged.length, added: added, updated: updated };
+    });
+
+    // 恢复汇率（可选）
+    if (imported._exchangeRates && typeof imported._exchangeRates === 'object') {
+      localStorage.setItem('fm_exchange_rates', JSON.stringify(imported._exchangeRates));
+    }
+
+    return mergedSummary;
+  },
+
+  // 清空所有本地数据
+  clearAllData() {
+    Object.keys(this.keys).forEach(k => localStorage.removeItem(this.keys[k]));
+    localStorage.removeItem('fm_exchange_rates');
+    return true;
   }
 };

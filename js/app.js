@@ -68,6 +68,9 @@ const App = {
     // 顶部"刷新"按钮：拉取最新股票 / 汇率 / 基金 / 房贷进度
     this.setupRefreshAllButton();
 
+    // 设置与数据同步
+    this.setupSettings();
+
     console.log('[App] === init 完成 ===');
   },
 
@@ -80,6 +83,124 @@ const App = {
       if (btn.disabled) return;
       self.refreshAllData(btn);
     });
+  },
+
+  // 设置与数据同步：导出/导入/清空
+  setupSettings() {
+    var self = this;
+    var settingsBtn = document.getElementById("settingsBtn");
+    var closeBtn = document.getElementById("closeSettingsBtn");
+    var overlay = document.getElementById("settingsOverlay");
+    var exportBtn = document.getElementById("exportDataBtn");
+    var importFile = document.getElementById("importDataFile");
+    var clearBtn = document.getElementById("clearLocalDataBtn");
+
+    if (settingsBtn) settingsBtn.addEventListener("click", function() { self.openSettings(); });
+    if (closeBtn) closeBtn.addEventListener("click", function() { self.closeSettings(); });
+    if (overlay) overlay.addEventListener("click", function(e) {
+      if (e.target === overlay) self.closeSettings();
+    });
+
+    if (exportBtn) exportBtn.addEventListener("click", function() { self.exportDataToFile(); });
+
+    if (importFile) importFile.addEventListener("change", function(e) {
+      var file = e.target.files && e.target.files[0];
+      if (file) self.importDataFromFile(file);
+      importFile.value = "";
+    });
+
+    if (clearBtn) clearBtn.addEventListener("click", function() { self.clearAllLocalData(); });
+  },
+
+  openSettings() {
+    var overlay = document.getElementById("settingsOverlay");
+    if (overlay) overlay.style.display = "flex";
+  },
+
+  closeSettings() {
+    var overlay = document.getElementById("settingsOverlay");
+    if (overlay) overlay.style.display = "none";
+  },
+
+  exportDataToFile() {
+    try {
+      var pkg = Storage.exportAllData();
+      var blob = new Blob([JSON.stringify(pkg, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var dateStr = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = "家庭资产数据_" + dateStr + ".json";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+      this.showToast("数据已导出");
+    } catch (e) {
+      console.error('[导出数据] 失败:', e);
+      this.showToast("导出失败: " + e.message, "error");
+    }
+  },
+
+  importDataFromFile(file) {
+    var self = this;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var text = e.target.result;
+        var pkg = JSON.parse(text);
+        var mode = document.getElementById("importModeSelect");
+        var modeValue = mode ? mode.value : "merge";
+
+        if (!confirm(modeValue === "replace"
+          ? "覆盖模式将清空当前设备所有数据，并用导入文件替换。是否继续？"
+          : "合并模式将保留本地数据，并导入新条目/更新已有条目。是否继续？")) {
+          return;
+        }
+
+        var summary = Storage.importAllData(pkg, modeValue);
+        console.log('[导入数据] 结果:', summary);
+
+        // 刷新所有页面
+        self.loadDashboard();
+        self.loadTransactions();
+        self.loadStockList();
+        self.renderStockCharts();
+        self.loadFundList();
+        self.loadInsuranceList();
+        self.loadLoanList();
+        self.loadAnnuityList();
+        self.checkNotifications();
+
+        self.closeSettings();
+        self.showToast("导入成功 ✓");
+      } catch (err) {
+        console.error('[导入数据] 失败:', err);
+        self.showToast("导入失败: " + err.message, "error");
+      }
+    };
+    reader.onerror = function() {
+      self.showToast("读取文件失败", "error");
+    };
+    reader.readAsText(file);
+  },
+
+  clearAllLocalData() {
+    if (!confirm("确定清空所有本地数据？\n此操作不可恢复，建议先导出备份。")) return;
+    Storage.clearAllData();
+    this.loadDashboard();
+    this.loadTransactions();
+    this.loadStockList();
+    this.renderStockCharts();
+    this.loadFundList();
+    this.loadInsuranceList();
+    this.loadLoanList();
+    this.loadAnnuityList();
+    this.checkNotifications();
+    this.closeSettings();
+    this.showToast("本地数据已清空");
   },
 
   // 刷新全部数据：股票 / 汇率 / 基金 / 房贷还款进度
