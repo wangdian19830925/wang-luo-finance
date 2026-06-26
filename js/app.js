@@ -231,7 +231,7 @@ const App = {
     const banner = document.getElementById("notificationBanner");
     const text = document.getElementById("bannerText");
     if (!banner || !text) return;
-    text.innerHTML = this.icon('clipboard', 'icon-info') + ' 检测到保险 Excel 数据，<strong>点击此处</strong>一键导入全部 18 条保单';
+    text.innerHTML = this.icon('clipboard', 'icon-info') + ' 检测到保险 Excel 数据，<strong>点击此处</strong>一键导入全部 ' + (typeof INSURANCE_POLICIES !== 'undefined' ? INSURANCE_POLICIES.length : 16) + ' 条保单';
     banner.style.display = "flex";
     banner.style.background = "linear-gradient(135deg, #dbeafe, #e0e7ff)";
     banner.style.borderColor = "#4a6cf7";
@@ -2094,7 +2094,12 @@ const App = {
   //       拉取后调用 _appendTodayIfMissing 补今天一条
   _loadAllHistoryData(callback) {
     var self = this;
-    var codes = ['NIO', '00992', '515170'];
+    // 动态获取股票代码：从 localStorage 读取，兜底使用默认列表
+    var stocks = Storage.get(Storage.keys.stocks);
+    var codes = stocks.length > 0 ? stocks.map(function(s) { return s.code; }) : ['NIO', '00992', '515170'];
+    // 同时纳入 RSU 代码
+    var rsu = Storage.get(Storage.keys.rsu);
+    rsu.forEach(function(r) { if (r.code && codes.indexOf(r.code) < 0) codes.push(r.code); });
     var historyData = {};
 
     fetch("data/stock-history.json")
@@ -2296,7 +2301,7 @@ const App = {
   // 在历史数组中找到 target_date 当天或之前最近一条
   _findClosestClose(arr, targetDate) {
     if (!arr || arr.length === 0) return 0;
-    var target = targetDate.toISOString().slice(0, 10);
+    var target = targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0');
     var last = null;
     for (var i = 0; i < arr.length; i++) {
       if (arr[i].date <= target) last = arr[i];
@@ -2931,7 +2936,7 @@ const App = {
             var daysLeft = Math.ceil((nextDate - today) / 86400000);
             var daysText = daysLeft === 0 ? "今天" : (daysLeft + "天后");
             var urgencyClass = daysLeft <= 7 ? " style=\"color:#ef4444;font-weight:bold;\"" : "";
-            rhtml += "<div class=\"reminder-item\"><div><strong>" + item.product + "</strong>（" + item.person + "）<div style=\"font-size:12px;color:#94a3b8;\">下次缴费: " + item.nextPayDate + " · ¥" + Number(item.premium).toLocaleString() + "</div></div><div class=\"reminder-days\"" + urgencyClass + ">" + daysText + "</div></div>";
+            rhtml += "<div class=\"reminder-item\"><div><strong>" + self.escapeHtml(item.product) + "</strong>（" + self.escapeHtml(item.person) + "）<div style=\"font-size:12px;color:#94a3b8;\">下次缴费: " + self.escapeHtml(item.nextPayDate) + " · ¥" + Number(item.premium).toLocaleString() + "</div></div><div class=\"reminder-days\"" + urgencyClass + ">" + daysText + "</div></div>";
           });
           rc.innerHTML = rhtml;
         } else {
@@ -2954,8 +2959,8 @@ const App = {
             var daysColor = daysLeft < 0 ? "#ef4444" : (daysLeft <= 30 ? "#f59e0b" : "#22c55e");
             extra += "<div class=\"record-detail\">下次缴费: " + item.nextPayDate + " <span style=\"color:" + daysColor + ";font-weight:bold;\">（" + daysLabel + "）</span></div>";
           }
-          if (item.collectNote) extra += "<div class=\"collect-tag\">" + item.collectNote + "</div>";
-          html += "<div class=\"record-item\"><div class=\"record-info\"><div class=\"record-title\">" + item.product + "</div><div class=\"record-detail\">被保险人: " + item.person + " · " + item.company + "</div><div class=\"record-detail\">年缴: " + self.formatMoney(item.premium) + " · 区间: " + (item.payPeriod || "—") + "</div>" + extra + "</div><div class=\"record-actions\"><button onclick=\"App.editInsurance('" + item.id + "')\">" + self.icon('edit') + "</button><button onclick=\"App.deleteInsurance('" + item.id + "')\">" + self.icon('delete') + "</button></div></div>";
+          if (item.collectNote) extra += "<div class=\"collect-tag\">" + self.escapeHtml(item.collectNote) + "</div>";
+          html += "<div class=\"record-item\"><div class=\"record-info\"><div class=\"record-title\">" + self.escapeHtml(item.product) + "</div><div class=\"record-detail\">被保险人: " + self.escapeHtml(item.person) + " · " + self.escapeHtml(item.company) + "</div><div class=\"record-detail\">年缴: " + self.formatMoney(item.premium) + " · 区间: " + self.escapeHtml(item.payPeriod || "—") + "</div>" + extra + "</div><div class=\"record-actions\"><button onclick=\"App.editInsurance('" + item.id + "')\">" + self.icon('edit') + "</button><button onclick=\"App.deleteInsurance('" + item.id + "')\">" + self.icon('delete') + "</button></div></div>";
         });
         container.innerHTML = html;
       }
@@ -3451,7 +3456,7 @@ const App = {
   //   basis: 计算依据描述字符串
   // }
   calcLoanProgress(loan, today) {
-    today = today || new Date();
+    today = today ? new Date(today) : new Date();
     today.setHours(0, 0, 0, 0);
 
     var total = parseFloat(loan.total) || 0;
@@ -4737,16 +4742,19 @@ const App = {
 
   showToast(message, type) {
     type = type || "success";
+    if (!this._toastStyleAdded) {
+      const style = document.createElement("style");
+      style.textContent = "@keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}";
+      document.head.appendChild(style);
+      this._toastStyleAdded = true;
+    }
     const toast = document.createElement("div");
-    const style = document.createElement("style");
-    style.textContent = "@keyframes slideDown{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}";
-    document.head.appendChild(style);
     toast.style.cssText = "position:fixed;top:70px;left:50%;transform:translateX(-50%);background:" + (type==="error"?"#ef4444":"#22c55e") + ";color:white;padding:12px 24px;border-radius:8px;font-size:14px;z-index:1000;animation:slideDown 0.3s ease;";
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = "0"; toast.style.transition = "opacity 0.3s";
-      setTimeout(() => { toast.remove(); style.remove(); }, 300);
+      setTimeout(() => { toast.remove(); }, 300);
     }, 2000);
   }
 };

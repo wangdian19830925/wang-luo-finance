@@ -51,8 +51,8 @@ for (const fn of criticalFuncs) {
 console.log('\n【3】Bug 修复验证');
 assert(appCode.match(/renderInsuranceProgress\(\)\s*\{[\s\S]{0,200}var today\s*=/),
   'P0-01: renderInsuranceProgress 有 var today');
-assert(appCode.match(/_loadAllHistoryData[\s\S]{0,300}location\.protocol\s*===\s*\'file:\'/),
-  'P1-01: _loadAllHistoryData 有 file: 检查');
+assert(appCode.match(/_loadAllHistoryData[\s\S]{0,500}Storage\.get\(Storage\.keys\.stocks\)/),
+  'P1-01: _loadAllHistoryData 动态读取股票代码');
 assert(appCode.match(/_fetchLiveFxRates[\s\S]{0,200}location\.protocol\s*===\s*\'file:\'/),
   'P1-02: _fetchLiveFxRates 有 file: 检查');
 assert(appCode.match(/today\s*=\s*today\s*\?\s*new Date\(today\)/),
@@ -72,13 +72,13 @@ for (const f of dataFiles) {
 console.log('\n【5】HTML 引用检查');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert(html.includes('js/history-data.js'), 'index.html 引用 history-data.js');
-assert(html.includes('app.js?v=33'), 'index.html 版本 v33');
+assert(html.includes('app.js?v=57'), 'index.html 版本 v57');
 assert(!html.includes('NIO_HISTORY_DATA'), 'index.html 无内联 NIO 数据');
 
 // 6. Service Worker
 console.log('\n【6】Service Worker');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert(sw.includes('family-finance-v59'), 'SW 版本 v59');
+assert(sw.includes('family-finance-v57'), 'SW 版本 v57');
 assert(sw.includes('history-data.js'), 'SW 预缓存 history-data.js');
 
 // 总结

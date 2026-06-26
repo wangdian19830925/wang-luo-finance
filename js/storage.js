@@ -60,6 +60,7 @@ const Storage = {
   },
 
   // 快捷读取
+  getCashAccounts() { return this.get(this.keys.cashAccounts); },
   getIncome()      { return this.get(this.keys.income); },
   getExpense()     { return this.get(this.keys.expense); },
   getAssets()      { return this.get(this.keys.assets); },
@@ -70,11 +71,15 @@ const Storage = {
   getLoans()       { return this.get(this.keys.loans); },
   getAnnuities()   { return this.get(this.keys.annuities); },
 
-  // 获取汇率（与 app.js 保持一致）
+  // 获取汇率（与 app.js 保持一致，含有效性校验）
   _getFxRates() {
     try {
       var raw = localStorage.getItem("fm_exchange_rates");
-      return raw ? JSON.parse(raw) : {};
+      var rates = raw ? JSON.parse(raw) : {};
+      if (typeof rates !== 'object' || rates === null) rates = {};
+      if (!rates.USDCNY || rates.USDCNY < 6) rates.USDCNY = 7.2;
+      if (!rates.HKDCNY || rates.HKDCNY < 0.5) rates.HKDCNY = 0.92;
+      return rates;
     } catch(e) { return {}; }
   },
 

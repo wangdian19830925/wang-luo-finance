@@ -1,7 +1,7 @@
 # 家庭资产管理工具 — 数据接口定义 Spec
 
-> 版本：v32 baseline | 更新：2026-06-24
-> 协议：所有时间戳用 ISO 8601（UTC+8 显式标出）
+> 版本：v56 | 更新：2026-06-25
+> 协议：时间戳采用 ISO 8601（UTC+8 实际使用）
 
 ---
 
@@ -11,6 +11,7 @@
 2. [内部 JS 模块接口](#2-内部-js-模块接口)
 3. [localStorage 键值规范](#3-localstorage-键值规范)
 4. [文件接口（静态资源）](#4-文件接口)
+5. [模块间数据流](#5-模块间数据流)
 
 ---
 
@@ -21,56 +22,49 @@
 #### 腾讯财经 API（主用）
 
 ```
-GET https://web.ifzq.gtimg.cn/appstock/app/fqkline/get
-  ?param={tc},day,{start},{end},120,qfq
+GET https://qt.gtimg.cn/q={codes}
 ```
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `tc` | string | 腾讯股票代码，如 `hk00992`（港股前缀 `hk`），`us.nio`（美股前缀 `us.`） |
+| `codes` | string | 逗号分隔，如 `hk00992,usNIO` |
+
+**响应**：通过 `<script>` 注入全局变量 `v_hk00992`、`v_usNIO` 等，字段以 `~` 分隔。
+
+#### 股票 K 线历史
+
+```
+GET https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tc},day,{start},{end},120,qfq
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `tc` | string | `hk00992`、`us.nio`、`sh600519` 等 |
 | `start` | YYYY-MM-DD | 起始日期 |
 | `end` | YYYY-MM-DD | 结束日期 |
-| `120` | int | 最�¡�120 个交易日 |
-| `qfq` | string | 前复权 |
 
 **响应示例**：
+
 ```json
 {
   "code": 0,
   "data": {
     "hk00992": {
       "qfqday": [
-        ["2025-12-24", "4.02", "4.15", "4.20", "3.98", "1234567"],
-        ["2025-12-25", "4.15", "4.22", "4.30", "4.10", "2345678"]
+        ["2025-12-24", "4.02", "4.15", "4.20", "3.98", "1234567"]
       ]
     }
   }
 }
 ```
 
-**字段顺序**：`[日期, 开盘, 收盘, 最高, 最低, 成交量]`
-
-**CORS**：支持跨域。
+字段顺序：`[日期, 开盘, 收盘, 最高, 最低, 成交量]`
 
 ---
 
-#### 新浪财经 API（备用）
+### 1.2 基金实时净值
 
-```
-GET https://hq.sinajs.cn/list={tc}
-```
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `tc` | string | `hk00992`, `gb_nio` |
-
-**响应**：JSONP，`window.jsonpgz` 回调。
-
----
-
-### 1.2 基金净值
-
-#### 天天基金网 API
+#### 天天基金 API
 
 ```
 GET https://fundgz.1234567.com.cn/js/{code}.js
@@ -80,273 +74,198 @@ GET https://fundgz.1234567.com.cn/js/{code}.js
 |------|------|------|
 | `code` | string | 基金代码，如 `013126` |
 
-**响应**：JSONP，`window.jsonpgz` 回调。
+**响应**：JSONP 回调 `window.jsonpgz({ ... })`
 
 ```json
 {
   "fundcode": "013126",
-  "name": "华夏食品饮料ETF发起联接C",
-  "jzrzl": "+1.23%",
-  "gsz": "0.5321",
-  "gszzl": "+0.85%",
-  "gztime": "2026-06-24 15:00"
+  "name": "华夏食品饮料ETF联接C",
+  "jzrq": "2026-06-24",
+  "dwjz": "1.2345",
+  "gzrq": "2026-06-25",
+  "gsz": "1.2350"
 }
 ```
 
-**字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `fundcode` | string | 基金代码 |
-| `name` | string | 基金名称 |
-| `jzrzl` | string | 日涨�·率（含百分号） |
-| `gsz` | string | 估算净值 |
-| `gszzl` | string | 估算涨�·率 |
-| `gztime` | string | 估值时间 |
+字段说明：
+- `jzrq`：净值日期
+- `dwjz`：单位净值
+- `gzrq`：估算日期
+- `gsz`：估算净值
 
 ---
 
-### 1.3 汇率
-
-#### 免费 API（兼容 CORS）
+### 1.3 实时汇率
 
 ```
-GET https://api.exchangerate-api.com/v4/latest/USD
+GET https://open.er-api.com/v6/latest/USD
 ```
 
 **响应**：
+
 ```json
 {
-  "base": "USD",
-  "rates": { "CNY": 7.2, "HKD": 7.8 }
+  "rates": {
+    "CNY": 7.2345,
+    "HKD": 7.8234
+  }
 }
 ```
 
-**备选**：`https://open.er-api.com/v6/latest/USD`
+**处理方式**：
+- `USDCNY = rates.CNY`
+- `HKDCNY = rates.CNY / rates.HKD`
+
+缓存：localStorage `fm_exchange_rates`，TTL 1 小时。
 
 ---
 
 ## 2. 内部 JS 模块接口
 
-### 2.1 `Storage` 模块
+### 2.1 Storage 模块（`js/storage.js`）
 
-```javascript
-const Storage = {
-  // 键值常量
-  keys: {
-    income: 'fm_income',       // 收入记录
-    expense: 'fm_expense',     // 支出记录
-    assets: 'fm_assets',       // 资产（预留）
-    insurance: 'fm_insurance',  // 保单
-    stocks: 'fm_stocks',       // 股票持仓
-    rsu: 'fm_rsu',            // RSU 授予
-    funds: 'fm_funds',         // 基金持仓
-    loans: 'fm_loans',         // 房贷
-    annuities: 'fm_annuities',// 企业年金
-    notifications: 'fm_notifications' // 提醒（预留）
-  },
+#### CRUD 接口
 
-  // CRUD
-  get(key: string): any[],
-  set(key: string, data: any[]): bolian,
-  add(key: string, item: object): object,    // 自动生成 id/createdAt
-  update(key: string, id: string, updates: object): object | null,
-  delete(key: string, id: string): bolian,
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `get` | `(key: string) => any[] \| object` | 读取 localStorage，失败返回 `[]` |
+| `set` | `(key: string, data: any) => boolean` | 写入 localStorage |
+| `add` | `(key: string, item: object) => object` | 新增一条记录，自动生成 id/createdAt |
+| `update` | `(key: string, id: string, updates: object) => object \| null` | 更新记录 |
+| `delete` | `(key: string, id: string) => boolean` | 删除记录 |
 
-  // 计算
-  calcTotalAssets(): number,       // 总资产（CNY）
-  calcTotalDebts(): number,       // 总负债（CNY）
-  calcNetWorth(): number,         // 净资产
-  calcRsuVestedValue(): number,   // RSU 已解禁价值
-  calcRsuLockedValue(): number,   // RSU 未解禁价值（最大可能收益）
-  calcTotalAnnuities(): number,   // 年金总额
-  calcInsuranceSettledValue(): number,   // 保险沉淀资产（累计已缴）
-  calcInsuranceSettledValueAt(date: Date|string): number, // 历史时点沉淀
-  calcInsuranceContingentAsset(): number,  // 或有资产（重疾给付）
-  calcInsuranceContingentLiability(): number, // 或有负债（未来保费承诺）
+#### 快捷读取接口
 
-  // 提醒
-  getInsuranceReminders(daysAhead=30): array,
+| 方法 | 说明 |
+|------|------|
+| `getIncome()` | 收入记录 |
+| `getExpense()` | 支出记录 |
+| `getAssets()` | 资产预留 |
+| `getInsurance()` | 保单 |
+| `getStocks()` | 股票持仓 |
+| `getRsu()` | RSU 授予 |
+| `getFunds()` | 基金持仓 |
+| `getLoans()` | 房贷 |
+| `getAnnuities()` | 企业年金 |
 
-  // 最近记录
-  getRecentRecords(limit=10): array
-};
-```
+#### 计算接口
 
----
+| 方法 | 说明 |
+|------|------|
+| `calcTotalAssets()` | 总资产（CNY） |
+| `calcTotalDebts()` | 总负债（CNY） |
+| `calcNetWorth()` | 净资产 |
+| `calcCashTotal()` | 现金账户总余额 |
+| `calcInsuranceSettledValue()` | 保险沉淀资产 |
+| `calcInsuranceContingentAsset()` | 保险或有资产（重疾给付） |
+| `calcInsuranceContingentLiability()` | 保险或有负债（未来保费） |
+| `getInsuranceReminders()` | 30 天内到期提醒 |
+| `getRecentRecords()` | 最近 10 条记录 |
 
-### 2.2 `App` 模块（主逻辑）
+### 2.2 App 模块（`js/app.js`）
 
-```javascript
-const App = {
-  // 初始化
-  init(): void,
-  setupNavigation(): void,
-  setupForms(): void,
-  setupParser(): void,
-  setupInlineEditDelegation(): void,
+| 方法 | 说明 |
+|------|------|
+| `init()` | 初始化应用 |
+| `navigateTo(page)` | 路由切换 |
+| `loadDashboard()` | 渲染资产总览 |
+| `refreshAllData()` | 刷新所有在线数据 |
+| `saveStock()` / `saveFund()` / `saveInsurance()` / `saveLoan()` | 保存表单数据 |
+| `setupCSVImport()` | 账单 CSV 导入 |
+| `downloadCalendar()` | 导出 .ics 日历 |
+| `showToast()` | 提示条 |
 
-  // 刷新
-  refreshAll(): void,
-  fetchStockPrices(): void,
-  _loadPricesFromJson(callback: function): void,
-  _fetchLiveFxRates(): void,
+### 2.3 Parser 模块（`js/parser.js`）
 
-  // 渲染
-  renderDashboard(): void,
-  renderStockTrend(): void,
-  renderFundTrend(): void,
-  renderStockCharts(): void,
-
-  // 保险
-  renderInsuranceList(): void,
-  importInsuranceFromExcel(data: array): number,
-
-  // 股价历史
-  fetchStockHistoryData(code: string, market: string, callback: function): void,
-  _getInlineHistory(code: string): array | null,
-
-  // 显示
-  showToast(msg: string, duration=2000): void,
-  showLoading(msg: string): void,
-  hideLoading(): void
-};
-```
-
----
-
-### 2.3 `Parser` 模块（通知解析）
-
-```javascript
-const Parser = {
-  parse(text: string): { success: bolian, data: object, error: string },
-
-  // 内部
-  _isIncome(content: string): bolian,
-  _isExpense(content: string): bolian,
-  _isTransfer(content: string): bolian,
-  _parseIncome(content: string): object,
-  _parseExpense(content: string): object,
-  _calcConfidence(result: object): number
-};
-```
-
-**输出 `data` 结构**：
-
-```javascript
-{
-  type: 'income' | 'expense' | 'transfer' | 'unknown',
-  amount: number,
-  date: string,        // YYYY-MM-DD
-  incomeType: string,   // salary | bonus | investment | rent | other
-  category: string,     // food | shopping | housing | transport | ...
-  method: string,       // alipay | wechat | bankcard | credit
-  source: string,       // 商家/来源
-  note: string,
-  confidence: number    // 0-100
-}
-```
-
----
-
-### 2.4 `StockApi`（股价获取，app.js 内部类）
-
-```javascript
-// 在 app.js 中以 this 上下文调用
-_fetchStockPriceFromSina(code: string, market: string, callback: function): void
-// callback(err, { price, currency, name, source })
-
-// 腾讯 API 获取历史
-fetchStockHistoryData(code: string, market: string, callback: function): void
-// callback(data: [{ date, open, close, high, low, volume }] | null)
-```
+| 方法 | 说明 |
+|------|------|
+| `parse(text)` | 解析通知文本，返回 `{ type, amount, source, method, date, confidence }` |
 
 ---
 
 ## 3. localStorage 键值规范
 
-| Key | 值类型 | 说明 | 示例 |
-|-----|--------|------|------|
-| `fm_income` | `object[]` | 收入记录 | `[{ id, amount, date, incomeType, method, source, note, createdAt }]` |
-| `fm_expense` | `object[]` | 支出记录 | `[{ id, amount, date, category, method, source, note, createdAt }]` |
-| `fm_assets` | `object[]` | 资产（预留） | `[]` |
-| `fm_insurance` | `object[]` | 保单 | `[{ id, contractNo, company, product, person, premium, freq, payPeriod, nextPayDate, expireDate, ... }]` |
-| `fm_stocks` | `object[]` | 股票持仓 | `[{ id, code, name, shares, cost, currentPrice, currency, market, broker, accountNo }]` |
-| `fm_rsu` | `object[]` | RSU 授予 | `[{ id, code, name, totalShares, perYearShares, grantPrice, currentPrice, grantDate, vestingYears, vesting, longCash, ... }]` |
-| `fm_funds` | `object[]` | 基金持仓 | `[{ id, code, name, holdValue, costValue, nav, shares, market, currency }]` |
-| `fm_loans` | `object[]` | 房贷 | `[{ id, bank, property, total, paid, balance, rate, rateType, term, startDate, endDate, ... }]` |
-| `fm_annuities` | `object[]` | 企业年金 | `[{ id, code, name, planName, manager, balance, category, risk, lastUpdate }]` |
-| `fm_notifications` | `object[]` | 提醒（预留） | `[]` |
-| `fm_exchange_rates` | `object` | 汇率 | `{"USDCNY": 7.2, "HKDCNY": 0.92, "_updated": "2026-06-24T08:00:00.000Z"}` |
-| `fm_stock_price_{code}` | `object` | 单只股票价格缓存 | `{"price": 22.18, "currency": "HKD", "name": "LENOVO GROUP", "source": "sina", "_cachedAt": 1719216000000}` |
-
-**缓存 TTL**：股票价格缓存 30 分钟（`_cachedAt` 判断）。
+| Key | 值类型 | 说明 |
+|------|--------|------|
+| `fm_income` | `Income[]` | 收入记录 |
+| `fm_expense` | `Expense[]` | 支出记录 |
+| `fm_cash_accounts` | `CashAccount[]` | 现金账户 |
+| `fm_assets` | `Asset[]` | 预留资产 |
+| `fm_insurance` | `Insurance[]` | 保单 |
+| `fm_stocks` | `StockHolding[]` | 股票持仓 |
+| `fm_rsu` | `RSUGrant[]` | RSU 授予 |
+| `fm_funds` | `FundHolding[]` | 基金持仓 |
+| `fm_loans` | `Loan[]` | 房贷 |
+| `fm_annuities` | `Annuity[]` | 企业年金 |
+| `fm_notifications` | `Notification[]` | 通知记录 |
+| `fm_exchange_rates` | `FxRates` | 汇率缓存 |
+| `fm_stock_price_last_refresh` | string | 股价刷新时间戳 |
+| `fm_stock_price_{code}` | `PriceCache` | 单只股票价格缓存 |
+| `fm_stock_hist_{code}` | `HistoryCache` | 单只股票历史 K 线缓存（当前已禁用持久化） |
+| `fm_insurance_imported` | string | 保险导入标记 |
+| `fm_stock_imported` | string | 股票导入标记 |
+| `fm_rsu_imported` | string | RSU 导入标记 |
+| `fm_fund_imported` | string | 基金导入标记 |
+| `fm_loan_imported` | string | 房贷导入标记 |
+| `fm_annuity_imported` | string | 年金导入标记 |
 
 ---
 
-## 4. 文件接口
+## 4. 文件接口（静态资源）
 
-### 4.1 `data/stock-prices.json`（自动生成）
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `data/stock-prices.json` | JSON | 实时股价 + 汇率 + 基金净值（Python 脚本生成） |
+| `data/stock-history.json` | JSON | 6 个月历史 K 线（中间产物） |
+| `js/history-data.js` | JS | 内联历史 K 线全局变量（`window.STOCK_HISTORY_DATA`） |
+| `js/insurance-data.js` | JS | 预设保单数据（`INSURANCE_POLICIES`） |
+| `js/stock-data.js` | JS | 预设股票数据（`STOCK_HOLDINGS`, `STOCK_CASH`） |
+| `js/rsu-data.js` | JS | 预设 RSU 数据（`RSU_GRANTS`） |
+| `js/fund-data.js` | JS | 预设基金数据（`FUND_HOLDINGS`） |
+| `js/loan-data.js` | JS | 预设房贷数据（`LOAN_HOLDINGS`） |
+| `js/annuity-data.js` | JS | 预设年金数据（`ANNUITY_HOLDINGS`） |
+| `家庭资产管理-缴费还款日历.ics` | ICS | 生成的日历文件 |
 
-```json
-{
-  "fetchTime": "2026-06-24 08:42:13",
-  "stocks": {
-    "00992": { "price": 22.18, "currency": "HKD", "name": "LENOVO GROUP", "source": "sina" },
-    "NIO": { "price": 5.09, "currency": "USD", "name": "蔚来", "source": "sina" },
-    "689009": { "price": 33.01, "currency": "CNY", "name": "九号公司", "source": "sina" }
-  },
-  "funds": {
-    "013126": { "nav": 0.5321, "estNav": 0.5252, "name": "华夏食品饮料ETF联接C", "navDate": "2026-06-22", "estTime": "2026-06-23 15:00", "source": "tiantian" }
-  },
-  "fxRates": { "USDCNY": 7.2, "HKDCNY": 0.92 }
-}
+---
+
+## 5. 模块间数据流
+
+### 5.1 初始化流程
+
+```
+JS 数据文件 (insurance-data.js / stock-data.js 等)
+    ↓
+App.init() → checkXxxImportStatus()
+    ↓
+Storage.add() / Storage.set()
+    ↓
+localStorage
 ```
 
-**生成脚本**：`scripts/fetch_stock_prices.py`
+### 5.2 股价更新流程
 
----
-
-### 4.2 `js/history-data.js`（自动生成）
-
-```javascript
-// Auto-generated from data/stock-history.json by scripts/update_history.py
-// DO NOT EDIT MANUALLY.
-window.STOCK_HISTORY_DATA = {
-  "NIO": [
-    { "date": "2025-12-24", "open": 7.4, "close": 7.42, "high": 7.44, "low": 7.37 },
-    ...
-  ],
-  "00992": [ ... ],
-  "515170": [ ... ]
-};
+```
+data/stock-prices.json (fetch) → _loadPricesFromJson()
+    ↓
+_tryFetchLivePrices() → 腾讯 API / 天天基金 API
+    ↓
+_fetchLiveFxRates() → open.er-api.com
+    ↓
+Storage.update() → localStorage
+    ↓
+loadDashboard() 重新渲染
 ```
 
-**生成脚本**：`scripts/update_history.py`
+### 5.3 资产曲线流程
 
----
-
-### 4.3 `data/stock-history.json`（中间产物）
-
-同 `js/history-data.js` 的 JSON 格式，用于脚本间数据交换。
-
----
-
-## 5. 错误码规范（待实现）
-
-| 码 | 含义 | 处理 |
-|-----|------|------|
-| `E_API_TIMEOUT` | 外部 API 超时（>10s） | 回退到缓存/内联数据 |
-| `E_API_NO_DATA` | API 返回空数据 | 回退到缓存/内联数据 |
-| `E_PARSE_FAIL` | 解析通知失败 | 提示用户手动输入 |
-| `E_STORAGE_FULL` | localStorage 满（>5MB） | 提示用户导出数据 |
-| `E_NETWORK` | 网络不可用 | PWA 离线提示 |
-
----
-
-## 6. 安全规范
-
-1. **API Key**：无（所有外部 API 为免费公开接口，无需 Key）
-2. **敏感数据**：保单号、银行账号存储在 localStorage，**不**上传云端
-3. **CSP**：`netlify.toml` 已配置 `script-src 'self' 'unsafe-inline' *.sina.com.cn *.gtimg.cn`
-4. **CORS**：静态 JSON 文件需通过 HTTP 访问（不能用 `file://`），v32 改为内联 JS 解决。
+```
+data/stock-history.json (fetch) / window.STOCK_HISTORY_DATA
+    ↓
+_loadAllHistoryData()
+    ↓
+_appendTodayIfMissing()
+    ↓
+_estimateAssetsAt() / _estimateDebtsAt()
+    ↓
+_drawAssetTrendChart()
+```
