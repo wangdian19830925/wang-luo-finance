@@ -1959,19 +1959,6 @@ const App = {
     var startStr = fmt(start);
     var endStr = fmt(now);
 
-    // 缓存1天内有效
-    try {
-      var cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        var parsed = JSON.parse(cached);
-        if (parsed && parsed.endDate === endStr && parsed.data) {
-          console.log('[汇率走势] 使用缓存');
-          if (callback) callback(parsed.data);
-          return;
-        }
-      }
-    } catch(e) {}
-
     // 生成兜底数据（用本地汇率，确保图能出来）
     var makeFallback = function() {
       var usdCny = self.getFxRate('USD') || 7.2;
@@ -1980,7 +1967,7 @@ const App = {
       var d = new Date(now);
       for (var i = 0; i < 26; i++) {
         var ds = d.getFullYear() + '-' + (d.getMonth()+1).toString().padStart(2,'0') + '-' + d.getDate().toString().padStart(2,'0');
-        data.push({ date: ds, rate: 0 }); // 占位
+        data.push({ date: ds, rate: 0 });
         d.setDate(d.getDate() - 7);
       }
       data.reverse();
@@ -1991,13 +1978,46 @@ const App = {
       };
     };
 
+    // 带超时的 fetch 封装
+    var fetchWithTimeout = function(url, timeoutMs) {
+      return new Promise(function(resolve, reject) {
+        var timer = setTimeout(function() {
+          reject(new Error('timeout ' + timeoutMs + 'ms'));
+        }, timeoutMs);
+        fetch(url)
+          .then(function(res) {
+            clearTimeout(timer);
+            resolve(res);
+          })
+          .catch(function(err) {
+            clearTimeout(timer);
+            reject(err);
+          });
+      });
+    };
+
+    // 缓存1天内有效
+    try {
+      var cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed && parsed.endDate === endStr && parsed.data) {
+          console.log('[汇率走势] 使用缓存, usd条数=' + parsed.data.usdCny.length);
+          if (callback) callback(parsed.data);
+          return;
+        }
+      }
+    } catch(e) {}
+
     if (location.protocol === 'file:') {
+      console.log('[汇率走势] file: 协议，使用兜底数据');
       if (callback) callback(makeFallback());
       return;
     }
 
     var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=USD&to=CNY,HKD';
-    fetch(url)
+    console.log('[汇率走势] 开始获取 ' + startStr + '..' + endStr);
+    fetchWithTimeout(url, 8000)
       .then(function(res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
@@ -2020,6 +2040,7 @@ const App = {
             }
           }
         });
+        console.log('[汇率走势] API 获取成功, USD条数=' + usdCny.length + ', HKD条数=' + hkdCny.length);
         var result = { usdCny: usdCny, hkdCny: hkdCny };
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ endDate: endStr, data: result }));
@@ -2027,7 +2048,7 @@ const App = {
         if (callback) callback(result);
       })
       .catch(function(e) {
-        console.warn('[汇率走势] 获取失败，使用兜底数据:', e.message);
+        console.warn('[汇率走势] 获取失败 (' + e.message + ')，使用兜底数据');
         if (callback) callback(makeFallback());
       });
   },
@@ -2063,28 +2084,30 @@ const App = {
 
       self._fetchFxHistory(function(history) {
         try {
-          console.log('[汇率走势] 历史数据回调, usdCny条数=' + (history && history.usdCny ? history.usdCny.length : 0) + ', hkdCny条数=' + (history && history.hkdCny ? history.hkdCny.length : 0));
+          var isFallback = history && history.isFallback;
+          console.log('[汇率走势] 历史数据回调, usdCny条数=' + (history && history.usdCny ? history.usdCny.length : 0) + ', hkdCny条数=' + (history && history.hkdCny ? history.hkdCny.length : 0) + ', isFallback=' + isFallback);
 
           // 即使数据不足也尝试渲染（使用纯兜底数据）
           if (!history || !history.usdCny || history.usdCny.length < 2) {
-            console.warn('[汇率走势] 数据不足，生成纯兜底数据');
-            // 生成最简兜底：至少2个点
-            var now = new Date();
-            var fmt = function(d) { return d.getFullYear() + '-' + (d.getMonth()+1).toString().padStart(2,'0') + '-' + d.getDate().toString().padStart(2,'0'); };
-            var fallbackRateU = self.getFxRate('USD') || 7.2;
-            var fallbackRateH = self.getFxRate('HKD') || 0.92;
-            var d1 = new Date(now); d1.setDate(d1.getDate() - 30);
+            console.warn('[汇率走势] 数据不足，生成兜底数据');
+            // 生成兜底：26个周频点，约6个月
+            var now2 = new Date();
+            var fmt2 = function(d) { return d.getFullYear() + '-' + (d.getMonth()+1).toString().padStart(2,'0') + '-' + d.getDate().toString().padStart(2,'0'); };
+            var fallbackRateU2 = self.getFxRate('USD') || 7.2;
+            var fallbackRateH2 = self.getFxRate('HKD') || 0.92;
+            var dArr = [];
+            var d2 = new Date(now2);
+            for (var fi = 0; fi < 26; fi++) {
+              dArr.push(fmt2(d2));
+              d2.setDate(d2.getDate() - 7);
+            }
+            dArr.reverse();
             history = {
-              usdCny: [
-                { date: fmt(d1), rate: fallbackRateU },
-                { date: fmt(now), rate: fallbackRateU }
-              ],
-              hkdCny: [
-                { date: fmt(d1), rate: fallbackRateH },
-                { date: fmt(now), rate: fallbackRateH }
-              ],
+              usdCny: dArr.map(function(dd) { return { date: dd, rate: fallbackRateU2 }; }),
+              hkdCny: dArr.map(function(dd) { return { date: dd, rate: fallbackRateH2 }; }),
               isFallback: true
             };
+            isFallback = true;
           }
 
           // 用历史数据最新值更新汇率（更精确）
@@ -2104,8 +2127,22 @@ const App = {
           var svg2 = document.getElementById('fxTrendHkdCnySvg');
           if (svg1) svg1.style.display = '';
           if (svg2) svg2.style.display = '';
-          self._drawFxTrendChart('fxTrendUsdCnySvg', history.usdCny, 'USD/CNY');
-          self._drawFxTrendChart('fxTrendHkdCnySvg', history.hkdCny, 'HKD/CNY');
+          self._drawFxTrendChart('fxTrendUsdCnySvg', history.usdCny, 'USD/CNY', isFallback);
+          self._drawFxTrendChart('fxTrendHkdCnySvg', history.hkdCny, 'HKD/CNY', isFallback);
+
+          // 在卡片底部显示数据来源说明
+          var noteEl = document.getElementById('fxDataSourceNote');
+          if (noteEl) {
+            if (isFallback) {
+              noteEl.textContent = '（汇率走势为模拟数据，基于当前汇率生成）';
+              noteEl.style.color = 'var(--text-muted, #64748b)';
+            } else {
+              noteEl.textContent = '（数据来源：frankfurter.dev，近6个月）';
+              noteEl.style.color = 'var(--text-muted, #64748b)';
+            }
+            noteEl.style.display = '';
+          }
+
           console.log('[汇率走势] 渲染完成');
         } catch(innerErr) {
           console.error('[汇率走势] 回调内异常:', innerErr);
@@ -2117,7 +2154,8 @@ const App = {
   },
 
   // 绘制单个汇率 SVG 走势图
-  _drawFxTrendChart(containerId, data, label) {
+  // isFallback: 是否为模拟数据（会在图上加水印提示）
+  _drawFxTrendChart(containerId, data, label, isFallback) {
     var container = document.getElementById(containerId);
     if (!container) return;
     if (!data || data.length < 2) {
@@ -2163,6 +2201,7 @@ const App = {
       '<text x="' + (PAD.left - 3) + '" y="' + (yScale(latest) + 3) + '" text-anchor="end" fill="' + lineColor + '" font-size="8" font-weight="600">' + latest.toFixed(4) + '</text>' +
       '<text x="' + PAD.left + '" y="' + (H - 4) + '" text-anchor="start" fill="#64748b" font-size="8">' + data[0].date.slice(5) + '</text>' +
       '<text x="' + (PAD.left + plotW) + '" y="' + (H - 4) + '" text-anchor="end" fill="#64748b" font-size="8">' + data[data.length - 1].date.slice(5) + '</text>' +
+      (isFallback ? '<text x="' + (PAD.left + plotW / 2) + '" y="' + (PAD.top + plotH / 2) + '" text-anchor="middle" fill="rgba(100,116,139,0.25)" font-size="10" font-weight="600" transform="rotate(-15 ' + (PAD.left + plotW / 2) + ' ' + (PAD.top + plotH / 2) + ')">模拟数据</text>' : '') +
     '</svg>';
 
     container.innerHTML = svg;
