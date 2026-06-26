@@ -1943,7 +1943,7 @@ const App = {
   },
 
   // ========== 汇率走势图（近6个月）==========
-  // 获取近6个月历史汇率（USD/CNY 和 HKD/CNY）
+  // 获取近6个月历史汇率（CNY/USD 和 CNY/HKD）
   _fetchFxHistory(callback) {
     var cacheKey = 'fm_fx_history';
     var now = new Date();
@@ -1975,7 +1975,8 @@ const App = {
       return;
     }
 
-    var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=USD&to=CNY,HKD';
+    // 直接获取 CNY/USD 和 CNY/HKD，避免客户端换算误差
+    var url = 'https://api.frankfurter.dev/v1/' + startStr + '..' + endStr + '?from=CNY&to=USD,HKD';
     fetch(url)
       .then(function(res) { return res.json(); })
       .then(function(data) {
@@ -1984,19 +1985,18 @@ const App = {
           return;
         }
         var dates = Object.keys(data.rates).sort();
-        var usdCny = [];
-        var hkdCny = [];
+        var cnyUsd = [];
+        var cnyHkd = [];
         dates.forEach(function(date) {
           var r = data.rates[date];
-          if (r && r.CNY > 0) {
-            usdCny.push({ date: date, rate: r.CNY });
+          if (r && r.USD > 0) {
+            cnyUsd.push({ date: date, rate: parseFloat(r.USD.toFixed(6)) });
             if (r.HKD > 0) {
-              // HKD/CNY = (USD/CNY) / (USD/HKD)
-              hkdCny.push({ date: date, rate: parseFloat((r.CNY / r.HKD).toFixed(6)) });
+              cnyHkd.push({ date: date, rate: parseFloat(r.HKD.toFixed(6)) });
             }
           }
         });
-        var result = { usdCny: usdCny, hkdCny: hkdCny };
+        var result = { cnyUsd: cnyUsd, cnyHkd: cnyHkd };
         try {
           localStorage.setItem(cacheKey, JSON.stringify({ endDate: endStr, data: result }));
         } catch(e) {}
@@ -2011,17 +2011,26 @@ const App = {
   // 渲染汇率走势图主入口
   _renderFxTrendCharts() {
     var self = this;
-    var section = document.getElementById('fxTrendSection');
-    if (!section) return;
+    var card = document.getElementById('fxRateCard');
+    if (!card) return;
 
     self._fetchFxHistory(function(history) {
-      if (!history || !history.usdCny || history.usdCny.length < 2) {
-        section.style.display = 'none';
+      if (!history || !history.cnyUsd || history.cnyUsd.length < 2) {
+        card.style.display = 'none';
         return;
       }
-      section.style.display = 'block';
-      self._drawFxTrendChart('fxTrendUsdCnySvg', history.usdCny, 'USD/CNY');
-      self._drawFxTrendChart('fxTrendHkdCnySvg', history.hkdCny, 'HKD/CNY');
+      card.style.display = 'block';
+
+      // 更新实时汇率显示（最新一天）
+      var latestUsd = history.cnyUsd[history.cnyUsd.length - 1];
+      var latestHkd = history.cnyHkd[history.cnyHkd.length - 1];
+      var fxCnyUsdEl = document.getElementById('fxCnyUsd');
+      var fxCnyHkdEl = document.getElementById('fxCnyHkd');
+      if (fxCnyUsdEl) fxCnyUsdEl.textContent = latestUsd.rate.toFixed(4);
+      if (fxCnyHkdEl) fxCnyHkdEl.textContent = latestHkd.rate.toFixed(4);
+
+      self._drawFxTrendChart('fxTrendCnyUsdSvg', history.cnyUsd, 'CNY/USD');
+      self._drawFxTrendChart('fxTrendCnyHkdSvg', history.cnyHkd, 'CNY/HKD');
     });
   },
 
@@ -4339,16 +4348,7 @@ const App = {
         profitLossEl.textContent = (totalProfitCNY >= 0 ? "+" : "") + self.formatMoney(totalProfitCNY);
         // 浮动盈亏卡片始终用 text-white 类显示白色（不随盈亏变色）
       }
-      // 更新汇率显示条
-      var fxBar = document.getElementById("fxRateBar");
-      if (fxBar) {
-        fxBar.style.display = "block";
-        var usdEl = document.getElementById("fxUsdCny");
-        var hkdEl = document.getElementById("fxHkdCny");
-        if (usdEl) usdEl.textContent = self.getFxRate("USD").toFixed(4);
-        if (hkdEl) hkdEl.textContent = self.getFxRate("HKD").toFixed(4);
-      }
-      // 渲染汇率走势图
+      // 渲染汇率走势卡片（含实时汇率）
       self._renderFxTrendCharts();
       console.log('[App] loadStockList 完成: 总市值(CNY)=' + totalValueCNY + ' 总成本(CNY)=' + totalCostCNY + ' 盈亏(CNY)=' + totalProfitCNY);
       // 注意：renderStockCharts() 已移至 loadRsuList() 末尾，确保 RSU DOM 已就绪

@@ -2407,26 +2407,46 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
-   汇率走势图（近6个月）
+   汇率走势卡片（合并实时汇率 + 走势图）
    ============================================ */
-.fx-trend-section {
-  background: var(--bg-card, #13132a);
-  border: 1px solid var(--border, rgba(255,255,255,0.06));
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: var(--shadow, 0 2px 12px rgba(0,0,0,0.3));
+.fx-rate-card {
+  /* 背景/边框/圆角在内联样式中定义，这里补充交互样式 */
 }
 
-.fx-trend-header {
-  margin-bottom: 10px;
+.fx-rate-card-header {
+  margin-bottom: 8px;
 }
 
-.fx-trend-title {
+.fx-rate-card-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary, #f1f5f9);
 }
 
+.fx-rate-current {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #93c5fd;
+}
+
+.fx-rate-pair {
+  white-space: nowrap;
+}
+
+.fx-rate-pair strong {
+  color: #f1f5f9;
+  margin-left: 4px;
+  font-size: 14px;
+}
+
+.fx-rate-divider {
+  color: rgba(255,255,255,0.15);
+}
+
+/* 走势图网格 */
 .fx-trend-charts {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2450,6 +2470,14 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 @media (max-width: 600px) {
+  .fx-rate-current {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .fx-rate-divider {
+    display: none;
+  }
   .fx-trend-charts {
     grid-template-columns: 1fr;
   }
