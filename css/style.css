@@ -1326,21 +1326,33 @@ body {
 /* iPhone 等窄屏：所有 record-item 改为上下布局 */
 @media (max-width: 600px) {
   .record-item {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    align-items: center;
   }
   .record-info {
     width: 100%;
-    align-self: stretch;
+    grid-column: 1 / -1;
     min-width: 0;
   }
   .record-amount {
     margin-left: 0;
     font-size: 16px;
+    grid-column: 1;
+    grid-row: 2;
   }
   .record-actions {
     margin-left: 0;
+    margin-top: 0;
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    justify-content: flex-end;
+  }
+  /* 股票走势图独占一行 */
+  .stock-chart-inner {
+    grid-column: 1 / -1;
     margin-top: 4px;
   }
   .recent-item {
@@ -1876,6 +1888,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   padding: 3px 10px;
   border-radius: 100px;
   font-weight: 500;
+  white-space: nowrap;
 }
 .loan-card-actions {
   display: flex;
@@ -3291,6 +3304,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   border-radius: 14px;
   padding: 20px 22px;
   border: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .cash-pie-title {
@@ -3362,6 +3376,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   }
   .pie-legend {
     width: 100%;
+    max-width: 280px;
   }
 }
 
