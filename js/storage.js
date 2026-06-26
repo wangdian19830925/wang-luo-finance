@@ -205,7 +205,7 @@ const Storage = {
     }
   },
 
-  // 邮箱注册（CloudBase SDK v2: auth.signUp，需邮箱验证码）
+  // 邮箱注册（CloudBase SDK v2: auth.signUp -> verifyOtp）
   async registerWithEmail(email, password) {
     if (!this.cloudSyncEnabled || !this.cloudApp) return false;
     try {
@@ -216,11 +216,18 @@ const Storage = {
       if (!auth) throw new Error('Auth 模块不可用');
 
       if (typeof auth.signUp === 'function') {
-        // v2: signUp 返回 { data: { verifyOtp }, error }，需要邮箱验证码
-        const { data, error } = await auth.signUp({ email: email, password: password });
+        // v2: signUp 发送验证码并返回 { data: { verifyOtp }, error }
+        const username = this._generateUsername(email);
+        const { data, error } = await auth.signUp({
+          email: email,
+          password: password,
+          username: username
+        });
         if (error) throw error;
         if (data && typeof data.verifyOtp === 'function') {
-          throw new Error('注册需要邮箱验证码，当前暂不支持自动注册。请使用匿名登录，或在云开发控制台配置邮箱验证后手动完成注册。');
+          this._pendingVerifyOtp = data.verifyOtp;
+          this._pendingEmail = email;
+          return { needsVerification: true, message: '验证码已发送至邮箱，请查收并输入' };
         }
         this.cloudUser = (data && data.user) ? data.user : data;
       } else if (typeof auth.signUpWithEmailAndPassword === 'function') {
@@ -249,6 +256,49 @@ const Storage = {
     }
   },
 
+  // 验证邮箱注册验证码（继续完成 signUp）
+  async verifyEmailCode(code) {
+    if (!this.cloudSyncEnabled || !this.cloudApp) return false;
+    if (!this._pendingVerifyOtp) throw new Error('请先点击"注册"获取验证码');
+    try {
+      this.cloudSyncing = true;
+      this.cloudLastSyncError = null;
+      this._emitSyncStatus();
+      const { data, error } = await this._pendingVerifyOtp({ token: code });
+      if (error) throw error;
+      this.cloudUser = (data && data.user) ? data.user : { email: this._pendingEmail };
+      this._pendingVerifyOtp = null;
+      this._pendingEmail = null;
+      const uid = (this.cloudUser.uid || this.cloudUser.id || this.cloudUser.userId || this.cloudUser.email) || 'email';
+      console.log('[CloudBase] 邮箱验证成功:', uid);
+      const syncResult = await this.syncWithCloud();
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || '同步失败');
+      }
+      return true;
+    } catch (e) {
+      console.error('[CloudBase] 邮箱验证失败:', e);
+      this.cloudLastSyncError = '邮箱验证失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
+      throw e;
+    } finally {
+      this.cloudSyncing = false;
+      this._emitSyncStatus();
+    }
+  },
+
+  // 生成符合 CloudBase 规则的用户名（用于邮箱注册）
+  _generateUsername(email) {
+    const base = (email.split('@')[0] || 'user').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const tail = Math.random().toString(36).substr(2, 4);
+    let username = (base + '_' + tail).toLowerCase();
+    if (username.length > 32) username = username.substr(0, 32);
+    if (/^[0-9_-]/.test(username)) username = 'u' + username;
+    if (/[-_]$/.test(username)) username = username + '0';
+    if (!/[a-zA-Z]/.test(username)) username = 'u' + username;
+    return username;
+  },
+
   // 登出
   async logout() {
     if (!this.cloudApp) return;
@@ -262,6 +312,8 @@ const Storage = {
       this.cloudUser = null;
       this.cloudDocId = null;
       this.cloudLastSync = null;
+      this._pendingVerifyOtp = null;
+      this._pendingEmail = null;
       this._emitSyncStatus();
     } catch (e) {
       console.error('[CloudBase] 登出失败:', e);
@@ -277,7 +329,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v70'
+      clientVersion: 'v71'
     };
   },
 
@@ -306,7 +358,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v70' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v71' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];

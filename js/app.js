@@ -142,19 +142,47 @@ const App = {
     // 设置面板中的 CloudBase 事件
     var loginBtn = document.getElementById('cloudLoginBtn');
     var registerBtn = document.getElementById('cloudRegisterBtn');
+    var verifyBtn = document.getElementById('cloudVerifyBtn');
+    var sendCodeBtn = document.getElementById('cloudSendCodeBtn');
     var anonymousBtn = document.getElementById('cloudAnonymousBtn');
     var syncNowBtn = document.getElementById('cloudSyncNowBtn');
     var logoutBtn = document.getElementById('cloudLogoutBtn');
+    var verifyCodeGroup = document.getElementById('cloudVerifyCodeGroup');
+    var verificationCodeInput = document.getElementById('cloudVerificationCode');
+
+    function showVerificationUI(show) {
+      if (verifyCodeGroup) verifyCodeGroup.style.display = show ? 'block' : 'none';
+      if (verifyBtn) verifyBtn.style.display = show ? 'inline-flex' : 'none';
+      if (registerBtn) registerBtn.style.display = show ? 'none' : 'inline-flex';
+      if (loginBtn) loginBtn.style.display = show ? 'none' : 'inline-flex';
+    }
+
+    function getEmailPassword() {
+      var email = document.getElementById('cloudEmail').value.trim();
+      var password = document.getElementById('cloudPassword').value;
+      return { email: email, password: password };
+    }
+
+    function validatePassword(password) {
+      if (password.length < 8 || password.length > 32) {
+        self.showToast('密码长度需为 8-32 位', 'error');
+        return false;
+      }
+      if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+        self.showToast('密码需同时包含字母和数字', 'error');
+        return false;
+      }
+      return true;
+    }
 
     if (loginBtn) {
       loginBtn.addEventListener('click', function() {
-        var email = document.getElementById('cloudEmail').value.trim();
-        var password = document.getElementById('cloudPassword').value;
-        if (!email || !password) {
+        var creds = getEmailPassword();
+        if (!creds.email || !creds.password) {
           self.showToast('请输入邮箱和密码', 'error');
           return;
         }
-        Storage.loginWithEmail(email, password).then(function() {
+        Storage.loginWithEmail(creds.email, creds.password).then(function() {
           self.refreshAllPages();
           self.showToast('登录成功，数据已同步');
         }).catch(function(e) {
@@ -165,21 +193,61 @@ const App = {
 
     if (registerBtn) {
       registerBtn.addEventListener('click', function() {
-        var email = document.getElementById('cloudEmail').value.trim();
-        var password = document.getElementById('cloudPassword').value;
-        if (!email || !password) {
+        var creds = getEmailPassword();
+        if (!creds.email || !creds.password) {
           self.showToast('请输入邮箱和密码', 'error');
           return;
         }
-        if (password.length < 6) {
-          self.showToast('密码长度至少 6 位', 'error');
-          return;
-        }
-        Storage.registerWithEmail(email, password).then(function() {
-          self.refreshAllPages();
-          self.showToast('注册并登录成功，数据已同步');
+        if (!validatePassword(creds.password)) return;
+        self.showToast('正在发送验证码...');
+        Storage.registerWithEmail(creds.email, creds.password).then(function(result) {
+          if (result && result.needsVerification) {
+            showVerificationUI(true);
+            if (verificationCodeInput) verificationCodeInput.focus();
+            self.showToast(result.message || '验证码已发送，请查收邮箱');
+          } else {
+            self.refreshAllPages();
+            self.showToast('注册并登录成功，数据已同步');
+          }
         }).catch(function(e) {
           self.showToast('注册失败: ' + (e.message || ''), 'error');
+        });
+      });
+    }
+
+    if (sendCodeBtn) {
+      sendCodeBtn.addEventListener('click', function() {
+        var creds = getEmailPassword();
+        if (!creds.email || !creds.password) {
+          self.showToast('请输入邮箱和密码', 'error');
+          return;
+        }
+        if (!validatePassword(creds.password)) return;
+        self.showToast('正在重新发送验证码...');
+        Storage.registerWithEmail(creds.email, creds.password).then(function(result) {
+          if (result && result.needsVerification) {
+            self.showToast(result.message || '验证码已重新发送');
+          }
+        }).catch(function(e) {
+          self.showToast('发送验证码失败: ' + (e.message || ''), 'error');
+        });
+      });
+    }
+
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', function() {
+        var code = verificationCodeInput ? verificationCodeInput.value.trim() : '';
+        if (!code) {
+          self.showToast('请输入验证码', 'error');
+          return;
+        }
+        Storage.verifyEmailCode(code).then(function() {
+          showVerificationUI(false);
+          if (verificationCodeInput) verificationCodeInput.value = '';
+          self.refreshAllPages();
+          self.showToast('验证成功，数据已同步');
+        }).catch(function(e) {
+          self.showToast('验证失败: ' + (e.message || ''), 'error');
         });
       });
     }
@@ -357,6 +425,19 @@ const App = {
   openSettings() {
     var overlay = document.getElementById("settingsOverlay");
     if (overlay) overlay.style.display = "flex";
+    // 如果之前没有待验证的注册流程，重置验证码输入框状态
+    if (!Storage._pendingVerifyOtp) {
+      var verifyCodeGroup = document.getElementById('cloudVerifyCodeGroup');
+      var verifyBtn = document.getElementById('cloudVerifyBtn');
+      var registerBtn = document.getElementById('cloudRegisterBtn');
+      var loginBtn = document.getElementById('cloudLoginBtn');
+      var verificationCodeInput = document.getElementById('cloudVerificationCode');
+      if (verifyCodeGroup) verifyCodeGroup.style.display = 'none';
+      if (verifyBtn) verifyBtn.style.display = 'none';
+      if (registerBtn) registerBtn.style.display = 'inline-flex';
+      if (loginBtn) loginBtn.style.display = 'inline-flex';
+      if (verificationCodeInput) verificationCodeInput.value = '';
+    }
   },
 
   closeSettings() {
