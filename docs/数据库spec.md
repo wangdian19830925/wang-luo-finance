@@ -1,7 +1,7 @@
 # 家庭资产管理工具 — 数据库 Spec
 
-> 版本：v56 | 更新：2026-06-25
-> 当前架构：纯前端 PWA，数据存 `localStorage`（无后端数据库）
+> 版本：v94 | 更新：2026-06-26
+> 当前架构：前端 PWA，数据存 `localStorage` + 腾讯云 CloudBase 文档集合（用户数据云端同步）
 > 本文档定义：① 当前 localStorage 数据结构 ② 未来若引入后端 DB 的 Schema 设计
 
 ---
@@ -36,8 +36,10 @@
 | `fm_stock_price_{code}` | `PriceCache` | <1KB/只 | 单只股票价格缓存 |
 | `fm_stock_hist_{code}` | `HistoryCache` | <5KB/只 | 单只股票历史 K 线缓存（已禁用持久化） |
 | `fm_*_imported` | string | <1KB | 各模块数据导入标记 |
+| `fm_cloud_login_mode` | string | <1KB | 登录模式：'email' / 'anonymous'（v78 起） |
+| `fm_snapshots` | `SnapshotMap` | <20KB | 每日净资产快照（v92 起），保留最近 90 天 |
 
-**总大小**：<80KB，远低于 localStorage 5MB 限制。
+**总大小**：<100KB，远低于 localStorage 5MB 限制。
 
 ---
 
@@ -49,11 +51,13 @@
 interface CashAccount {
   id: string;           // 如 "cmb_8150", "yuebao"
   name: string;         // 如 "招商银行", "余额宝"
-  icon: string;         // "bank" | "yuebao" | "alipay" | "wechat"
+  icon: string;         // "bank" | "yuebao" | "alipay" | "wechat" | "lilu" | "other"
   label: string;        // 显示名称
   balance: number;      // 当前余额（CNY）
   updated: string;      // 更新日期 YYYY-MM-DD
   note: string;         // 备注
+  createdAt: string;    // ISO 8601，v70 起统一添加
+  updatedAt: string;    // ISO 8601，v70 起统一添加
 }
 ```
 
@@ -228,6 +232,29 @@ interface FxRates {
   USDCNY: number;   // 美元兑人民币
   HKDCNY: number;   // 港币兑人民币
   updatedAt: string; // 更新时间戳
+}
+```
+
+#### `SnapshotMap`（每日净资产快照）
+
+```typescript
+interface SnapshotMap {
+  [date: string]: DailySnapshot;  // key 为北京时间日期字符串 "YYYY-MM-DD"
+}
+
+interface DailySnapshot {
+  date: string;        // "YYYY-MM-DD"
+  timestamp: number;   // Unix 毫秒时间戳
+  netWorth: number;    // 当日净资产
+  categories: {
+    stocks: number;    // 股票市值（CNY）
+    funds: number;     // 基金市值（CNY）
+    rsu: number;       // RSU 已解禁价值（CNY）
+    cash: number;      // 现金总余额（CNY）
+    insurance: number; // 保险沉淀资产（CNY）
+    annuity: number;   // 年金余额（CNY）
+    totalDebts: number;// 总负债（CNY）
+  };
 }
 ```
 
