@@ -24,6 +24,8 @@ const Storage = {
   cloudSyncEnabled: false,
   cloudSyncing: false,
   cloudLastSync: null,
+  cloudLastSyncError: null,
+  cloudInitError: null,
   cloudUser: null,
   cloudDocId: null,
   syncDebounceTimer: null,
@@ -39,6 +41,7 @@ const Storage = {
       enabled: this.cloudSyncEnabled,
       syncing: this.cloudSyncing,
       lastSync: this.cloudLastSync,
+      lastError: this.cloudLastSyncError || this.cloudInitError,
       user: this.cloudUser,
       docId: this.cloudDocId
     };
@@ -94,11 +97,14 @@ const Storage = {
       const state = await auth.signInAnonymously();
       this.cloudUser = state.user || state;
       console.log('[CloudBase] 匿名登录成功:', this.cloudUser.uid || this.cloudUser.openid);
-      await this.syncWithCloud();
+      const syncResult = await this.syncWithCloud();
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || '同步失败');
+      }
       return true;
     } catch (e) {
       console.error('[CloudBase] 匿名登录失败:', e);
-      return false;
+      throw e;
     } finally {
       this.cloudSyncing = false;
       this._emitSyncStatus();
@@ -115,7 +121,10 @@ const Storage = {
       const state = await auth.signInWithEmailAndPassword(email, password);
       this.cloudUser = state.user || state;
       console.log('[CloudBase] 邮箱登录成功:', this.cloudUser.uid || this.cloudUser.email);
-      await this.syncWithCloud();
+      const syncResult = await this.syncWithCloud();
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || '同步失败');
+      }
       return true;
     } catch (e) {
       console.error('[CloudBase] 邮箱登录失败:', e);
@@ -136,7 +145,10 @@ const Storage = {
       const state = await auth.signUpWithEmailAndPassword(email, password);
       this.cloudUser = state.user || state;
       console.log('[CloudBase] 邮箱注册成功:', this.cloudUser.uid || this.cloudUser.email);
-      await this.syncWithCloud();
+      const syncResult = await this.syncWithCloud();
+      if (!syncResult.success) {
+        throw new Error(syncResult.error || '同步失败');
+      }
       return true;
     } catch (e) {
       console.error('[CloudBase] 邮箱注册失败:', e);
@@ -215,7 +227,7 @@ const Storage = {
 
   // 从云端拉取数据
   async pullFromCloud() {
-    if (!this.cloudSyncEnabled || !this.cloudDb) return null;
+    if (!this.cloudSyncEnabled || !this.cloudDb) return { doc: null, error: 'CloudBase 未初始化' };
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     try {
       const res = await collection.limit(1).get();
@@ -223,13 +235,15 @@ const Storage = {
         const doc = res.data[0];
         this.cloudDocId = doc._id;
         console.log('[CloudBase] 拉取到云端数据，docId:', doc._id);
-        return doc;
+        return { doc: doc, error: null };
       }
       console.log('[CloudBase] 云端无数据');
-      return null;
+      return { doc: null, error: null };
     } catch (e) {
       console.error('[CloudBase] 拉取失败:', e);
-      return null;
+      this.cloudLastSyncError = '拉取失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
+      return { doc: null, error: e.message || String(e) };
     }
   },
 
@@ -250,13 +264,15 @@ const Storage = {
         console.log('[CloudBase] 更新云端数据成功');
       } else {
         const res = await collection.add({ data: pkg });
-        this.cloudDocId = res.id;
-        console.log('[CloudBase] 新增云端数据成功，docId:', res.id);
+        this.cloudDocId = res._id || res.id;
+        console.log('[CloudBase] 新增云端数据成功，docId:', this.cloudDocId);
       }
       this.cloudLastSync = new Date().toISOString();
       return true;
     } catch (e) {
       console.error('[CloudBase] 推送失败:', e);
+      this.cloudLastSyncError = '推送失败: ' + (e.message || String(e));
+      this._emitSyncStatus();
       return false;
     }
   },
@@ -275,7 +291,10 @@ const Storage = {
     this._emitSyncStatus();
     try {
       const localPkg = this._getLocalDataPackage();
-      const cloudDoc = await this.pullFromCloud();
+      const { doc: cloudDoc, error: pullError } = await this.pullFromCloud();
+      if (pullError) {
+        return { success: false, error: '拉取云端数据失败: ' + pullError };
+      }
       const cloudPkg = cloudDoc ? {
         data: cloudDoc.data,
         updatedAt: cloudDoc.updatedAt,
@@ -305,13 +324,21 @@ const Storage = {
 
       // 推回云端（确保云端也是最新合并结果）
       const pushSuccess = await this.pushToCloud(mergedPkg);
+      if (!pushSuccess) {
+        console.error('[CloudBase] 同步失败：推送云端数据失败');
+        return { success: false, error: '推送云端数据失败，请检查网络或 CloudBase 安全域名配置' };
+      }
 
       this.cloudLastSync = new Date().toISOString();
+      this.cloudLastSyncError = null;
+      this._emitSyncStatus();
       console.log('[CloudBase] 同步完成，来源:', source);
-      return { success: true, source: source, pushed: pushSuccess };
+      return { success: true, source: source };
     } catch (e) {
       console.error('[CloudBase] 同步失败:', e);
-      return { success: false, error: e.message };
+      this.cloudLastSyncError = e.message || String(e);
+      this._emitSyncStatus();
+      return { success: false, error: e.message || String(e) };
     } finally {
       this.cloudSyncing = false;
       this._emitSyncStatus();

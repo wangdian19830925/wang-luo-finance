@@ -258,6 +258,9 @@ const App = {
       } else {
         text = '未登录，请在下方登录以启用同步';
       }
+      if (status.lastError) {
+        text += '<br><span class="sync-error-text">错误: ' + status.lastError + '</span>';
+      }
       statusBox.innerHTML = '<span class="sync-status-text">' + text + '</span>';
     }
 
