@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-27-v103 -->
+  <!-- version: 2026-06-27-v104 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=103">
+  <link rel="stylesheet" href="./css/style.css?v=104">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -601,10 +601,10 @@
         </div>
       </div>
 
-      <!-- 卡片3：变量调整 -->
+      <!-- 卡片3a：基础参数 -->
       <div class="retirement-card">
         <div class="retirement-param-list">
-          <div class="retirement-param-item">
+          <div class="retirement-param-item retirement-param-mortgage-row">
             <div class="retirement-param-label">
               <span>🏠 房贷处理方式</span>
             </div>
@@ -663,6 +663,12 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
           </div>
+        </div>
+      </div>
+
+      <!-- 卡片3b：王典养老金 -->
+      <div class="retirement-card">
+        <div class="retirement-param-list">
           <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
               <span>🏦 王典的养老账户余额</span>
@@ -684,6 +690,12 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember1RetireAge" min="55" max="65" step="1" value="63">
           </div>
+        </div>
+      </div>
+
+      <!-- 卡片3c：Rowen养老金 -->
+      <div class="retirement-card">
+        <div class="retirement-param-list">
           <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
               <span>🏦 Rowen的养老账户余额</span>
@@ -1096,7 +1108,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=103"></script>
+  <script src="./js/storage.js?v=104"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1106,6 +1118,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=103"></script>
+  <script src="./js/app.js?v=104"></script>
 </body>
 </html>

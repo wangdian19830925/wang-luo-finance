@@ -3290,6 +3290,12 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   justify-content: center;
 }
 
+/* 房贷处理方式行 + 通胀/收益率行：均跨两列，保持水平对齐 */
+.retirement-param-mortgage-row,
+.retirement-param-inline-pair {
+  grid-column: 1 / -1;
+}
+
 /* 并排参数：两个 slider 左右并列，每个 slider 占约一半宽度 */
 .retirement-param-inline-pair {
   display: flex;
