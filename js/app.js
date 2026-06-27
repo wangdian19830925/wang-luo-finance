@@ -5256,105 +5256,53 @@ const App = {
   },
 
   // 计算今天退休的可行性
-  calculateRetirement(params) {
-    var today = new Date(); today.setHours(0,0,0,0);
-    var currentYear = today.getFullYear();
-    var currentAge = 43; // 1983 年生，2026 年
-    var endYear = currentYear + (params.lifeExpectancy - currentAge); // 模拟到预期寿命当年
-
-    // 1. 今天可用资产（只取现金+股票+基金，RSU/年金/保险今天均锁定）
-    var cash = this._sumCashAccounts();
-    var stocks = this._sumStocksCNY();
-    var funds = this._sumFundsCNY();
-    var liquidAssets = cash + stocks + funds;
-
-    // 调试：记录详细资产构成
-    var debug_assetBreakdown = {
-      cash: { total: cash, accounts: Storage.get(Storage.keys.cashAccounts) },
-      stocks: { total: stocks, items: Storage.get(Storage.keys.stocks), fxRates: this._getFxRates() },
-      funds: { total: funds, items: Storage.get(Storage.keys.funds) }
-    };
-
-    // 2. 房贷处理方式
-    var loans = Storage.get(Storage.keys.loans);
-    var mortgagePayoff = 0;
-    loans.forEach(function(l) { mortgagePayoff += parseFloat(l.balance || 0); });
-    var mortgagePayoffMode = params.mortgagePayoffMode || 'lump';
-    var mortgagePaymentSchedule = (mortgagePayoffMode === 'monthly')
-      ? this._buildMortgagePaymentSchedule(currentYear, endYear)
-      : {};
-    var initialCash = liquidAssets - (mortgagePayoffMode === 'lump' ? mortgagePayoff : 0);
-
-    // 3. 未来保费（按缴费区间，从今年起算）
-    var premiumSchedule = this._buildPremiumSchedule(currentYear, endYear);
-
-    // 4. 基本养老金预测（使用用户可调参数）
-    var pensionSchedule = this._buildPensionSchedule(currentYear, endYear, params);
-
-    // 5. 保险年金收入
-    var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, endYear);
-
-    // 6. 企业年金收入（仅王典）
-    var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, endYear);
-
-    // 7. 创赢未来万能险账户（两份，保底2%收益，60岁起可领取）
-    // 数据来源：Excel"领取核算"sheet，列U(典) + 列V(静)，60岁时合计约174万
-    var universalInsuranceBalance = 0;
-    var universalInsuranceWithdrawn = 0;
-    var UNIVERSAL_INSURANCE_START_AGE = 60;
-    // 60岁时的账户余额（来自Excel领取核算sheet，U+V列）
-    var universalBalanceAt60 = 695693.05 + 1045781.41; // 1741474.46 元
-
-    // 8. 逐年模拟
-    var years = [];
+  // 退休计算：核心模拟函数（纯函数，initialCash 作为参数）
+  // 返回：{ years: [...], minEndBalance: Number, runOutYear: Number|null }
+  _simulateRetirement(initialCash, currentYear, currentAge, endYear, params, schedules) {
     var balance = initialCash;
     var runOutYear = null;
-    var totalGapToEnd = 0;
-    var educationYears = Math.max(0, params.educationEndYear - currentYear); // 从今年到教育结束年份
+    var minEndBalance = Infinity;
+    var UNIVERSAL_INSURANCE_START_AGE = 60;
+    var universalBalanceAt60 = schedules.universalBalanceAt60;
+    var universalInsuranceBalance = 0;
+    var years = [];
 
     for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
 
-      // 创赢未来万能险：60岁起初始化余额，之后每年按2%复利
       if (age === UNIVERSAL_INSURANCE_START_AGE) {
         universalInsuranceBalance = universalBalanceAt60;
       } else if (age > UNIVERSAL_INSURANCE_START_AGE) {
         universalInsuranceBalance = universalInsuranceBalance * 1.02;
       }
 
-      var premium = premiumSchedule[year] || 0;
-      var mortgage = mortgagePaymentSchedule[year] || 0;
-      var education = (year <= currentYear + educationYears - 1) ? (params.annualEducation * 10000) : 0;
+      var premium = schedules.premiumSchedule[year] || 0;
+      var mortgage = schedules.mortgagePaymentSchedule[year] || 0;
+      var education = (year <= currentYear + Math.max(0, params.educationEndYear - currentYear) - 1) ? (params.annualEducation * 10000) : 0;
       var expense = (params.annualExpense * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
       var extraIncome = (params.annualExtraIncome * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
-      var pension = pensionSchedule[year] || 0;
-      var insurance = insuranceSchedule[year] || 0;
-      var enterpriseAnnuity = enterpriseAnnuitySchedule[year] || 0;
+      var pension = schedules.pensionSchedule[year] || 0;
+      var insurance = schedules.insuranceSchedule[year] || 0;
+      var enterpriseAnnuity = schedules.enterpriseAnnuitySchedule[year] || 0;
       var outflow = premium + mortgage + education + expense;
       var inflow = extraIncome + pension + insurance + enterpriseAnnuity;
       var netFlow = inflow - outflow;
       var investmentGain = balance * (params.investmentReturn / 100);
       var endBalance = balance + investmentGain + netFlow;
 
-      // 调试：打印每年详细收支
-      if (year <= 2035 || endBalance < 0) {
-        console.log('[退休计算] ' + year + '(年龄' + age + '): ' +
-          '期初=' + balance.toFixed(0) +
-          ' 投资收益=' + investmentGain.toFixed(0) +
-          ' 流入(工资+养老金+保险+年金)=' + inflow.toFixed(0) +
-          ' 流出(保费+房贷+教育+生活)=' + outflow.toFixed(0) +
-          ' 净现金流=' + netFlow.toFixed(0) +
-          ' 期末=' + endBalance.toFixed(0) +
-          (endBalance < 0 ? ' ***耗尽***' : ''));
-      }
-
-      // 创赢未来领取策略：当年其他收益不能满足支出时，从万能险账户领取补足
+      // 创赢未来领取策略
       var universalWithdrawal = 0;
       if (endBalance < 0 && universalInsuranceBalance > 0) {
         universalWithdrawal = Math.min(-endBalance, universalInsuranceBalance);
         universalInsuranceBalance -= universalWithdrawal;
-        universalInsuranceWithdrawn += universalWithdrawal;
         endBalance += universalWithdrawal;
+      }
+
+      if (runOutYear === null && endBalance < 0) {
+        runOutYear = year;
+      }
+      if (endBalance < minEndBalance) {
+        minEndBalance = endBalance;
       }
 
       years.push({
@@ -5366,35 +5314,94 @@ const App = {
         universalInsuranceBalance: universalInsuranceBalance
       });
 
-      if (runOutYear === null && endBalance < 0) {
-        runOutYear = year;
-      }
-      if (endBalance < 0) {
-        totalGapToEnd += Math.abs(endBalance);
-      }
       balance = endBalance;
     }
 
-    // 9. 结论判断
-    // 一旦任何一年余额变负（现金耗尽），今天就不能退休
-    // 不能因为后期养老金/万能险补足就让结论变成"可以退休"
-    var canRetire = runOutYear === null;
-    var shortfall = 0;
-    if (!canRetire) {
-      // 缺口 = 耗尽年份的缺口现值
-      var runOutIdx = years.findIndex(function(y) { return y.year === runOutYear; });
-      var runOutYearData = years[runOutIdx];
-      var r = params.investmentReturn / 100;
-      var n = runOutYear - currentYear;
-      shortfall = Math.abs(runOutYearData.endBalance) / Math.pow(1 + r, n);
-      // 调试：打印缺口计算详情
-      console.log('[退休计算] 缺口计算详情:');
-      console.log('  耗尽年份:', runOutYear, '（距今年数 n =', n, '年）');
-      console.log('  耗尽年份期末余额:', runOutYearData.endBalance.toFixed(2));
-      console.log('  年化收益率 r:', (r * 100).toFixed(1) + '%');
-      console.log('  折现因子 (1+r)^n:', Math.pow(1 + r, n).toFixed(4));
-      console.log('  缺口现值 = |' + runOutYearData.endBalance.toFixed(2) + '| / ' + Math.pow(1 + r, n).toFixed(4) + ' =', shortfall.toFixed(2));
+    return { years: years, minEndBalance: minEndBalance, runOutYear: runOutYear };
+  },
+
+  calculateRetirement(params) {
+    var today = new Date(); today.setHours(0,0,0,0);
+    var currentYear = today.getFullYear();
+    var currentAge = 43;
+    var endYear = currentYear + (params.lifeExpectancy - currentAge);
+
+    // 1. 今天可用资产
+    var cash = this._sumCashAccounts();
+    var stocks = this._sumStocksCNY();
+    var funds = this._sumFundsCNY();
+    var liquidAssets = cash + stocks + funds;
+
+    var debug_assetBreakdown = {
+      cash: { total: cash, accounts: Storage.get(Storage.keys.cashAccounts) },
+      stocks: { total: stocks, items: Storage.get(Storage.keys.stocks), fxRates: this._getFxRates() },
+      funds: { total: funds, items: Storage.get(Storage.keys.funds) }
+    };
+
+    // 2. 房贷
+    var loans = Storage.get(Storage.keys.loans);
+    var mortgagePayoff = 0;
+    loans.forEach(function(l) { mortgagePayoff += parseFloat(l.balance || 0); });
+    var mortgagePayoffMode = params.mortgagePayoffMode || 'lump';
+    var mortgagePaymentSchedule = (mortgagePayoffMode === 'monthly')
+      ? this._buildMortgagePaymentSchedule(currentYear, endYear)
+      : {};
+    var actualInitialCash = liquidAssets - (mortgagePayoffMode === 'lump' ? mortgagePayoff : 0);
+
+    // 3~6. 预计算所有时间表（与 initialCash 无关）
+    var premiumSchedule = this._buildPremiumSchedule(currentYear, endYear);
+    var pensionSchedule = this._buildPensionSchedule(currentYear, endYear, params);
+    var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, endYear);
+    var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, endYear);
+    var universalBalanceAt60 = 695693.05 + 1045781.41;
+
+    var schedules = {
+      premiumSchedule: premiumSchedule,
+      mortgagePaymentSchedule: mortgagePaymentSchedule,
+      pensionSchedule: pensionSchedule,
+      insuranceSchedule: insuranceSchedule,
+      enterpriseAnnuitySchedule: enterpriseAnnuitySchedule,
+      universalBalanceAt60: universalBalanceAt60
+    };
+
+    // 7. 二分搜索：找最小 initialCash，使得所有年份 minEndBalance >= 0
+    // 搜索范围：[actualInitialCash, actualInitialCash + 10000万]
+    var LO = actualInitialCash;
+    var HI = actualInitialCash + 100000000; // 上限 1 亿
+    var requiredInitialCash = actualInitialCash;
+    var MAX_ITER = 60;
+
+    var sim0 = this._simulateRetirement(actualInitialCash, currentYear, currentAge, endYear, params, schedules);
+    if (sim0.minEndBalance < 0) {
+      // 今天不能退休，需要搜索
+      var HI_LO_history = [];
+      for (var iter = 0; iter < MAX_ITER; iter++) {
+        var MID = LO + Math.round((HI - LO) / 2);
+        var sim = this._simulateRetirement(MID, currentYear, currentAge, endYear, params, schedules);
+        if (sim.minEndBalance >= 0) {
+          requiredInitialCash = MID;
+          HI = MID - 1;
+        } else {
+          LO = MID + 1;
+        }
+        HI_LO_history.push('iter=' + iter + ' [' + LO.toFixed(0) + ',' + HI.toFixed(0) + '] MID=' + MID.toFixed(0) + ' minBal=' + sim.minEndBalance.toFixed(0));
+        if (LO > HI) break;
+      }
+      console.log('[退休计算] 二分搜索过程:', HI_LO_history.join(' | '));
     }
+
+    var shortfall = requiredInitialCash - actualInitialCash;
+    var canRetire = shortfall <= 0;
+
+    // 用最终 requiredInitialCash 跑一次完整模拟（用于展示）
+    var simResult = this._simulateRetirement(requiredInitialCash, currentYear, currentAge, endYear, params, schedules);
+    var years = simResult.years;
+    var runOutYear = simResult.runOutYear;
+
+    console.log('[退休计算] 结果: actualInitialCash=' + actualInitialCash.toFixed(0)
+      + ' requiredInitialCash=' + requiredInitialCash.toFixed(0)
+      + ' shortfall=' + shortfall.toFixed(0)
+      + ' canRetire=' + canRetire);
 
     return {
       today: today,
@@ -5404,13 +5411,13 @@ const App = {
       mortgagePayoff: mortgagePayoff,
       mortgagePayoffMode: mortgagePayoffMode,
       mortgagePaymentSchedule: mortgagePaymentSchedule,
-      initialCash: initialCash,
+      initialCash: requiredInitialCash,
+      actualInitialCash: actualInitialCash,
       years: years,
       runOutYear: runOutYear,
       shortfall: shortfall,
       canRetire: canRetire,
       params: params,
-      // 调试数据：详细资产和收入构成
       debug: {
         assetBreakdown: debug_assetBreakdown,
         fxRates: this._getFxRates(),
