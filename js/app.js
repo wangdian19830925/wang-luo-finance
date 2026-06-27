@@ -5171,7 +5171,7 @@ const App = {
 
   _loadRetirementParams() {
     var defaults = {
-      annualExpense: 20, annualEducation: 10, educationEndAge: 22, annualExtraIncome: 0,
+      annualExpense: 20, annualEducation: 10, educationEndYear: 2035, annualExtraIncome: 0,
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
       pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
@@ -5194,7 +5194,7 @@ const App = {
     var inputs = {
       annualExpense: 'retirementParamAnnualExpense',
       annualEducation: 'retirementParamAnnualEducation',
-      educationEndAge: 'retirementParamEducationEndAge',
+      educationEndYear: 'retirementParamEducationEndYear',
       annualExtraIncome: 'retirementParamAnnualExtraIncome',
       inflation: 'retirementParamInflation',
       investmentReturn: 'retirementParamReturn',
@@ -5212,7 +5212,8 @@ const App = {
       if (!el) return;
       var text = value;
       if (key === 'inflation' || key === 'investmentReturn') text = value + ' %';
-      else if (key === 'lifeExpectancy' || key === 'educationEndAge') text = value + ' 岁';
+      else if (key === 'lifeExpectancy') text = value + ' 岁';
+      else if (key === 'educationEndYear') text = value + ' 年';
       else if (key === 'annualExpense' || key === 'annualEducation' || key === 'annualExtraIncome') text = value + ' 万';
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
@@ -5290,7 +5291,7 @@ const App = {
     var balance = initialCash;
     var runOutYear = null;
     var totalGapToEnd = 0;
-    var educationYears = Math.max(0, params.educationEndAge - currentAge); // 从当前年龄到教育结束年龄
+    var educationYears = Math.max(0, params.educationEndYear - currentYear); // 从今年到教育结束年份
 
     for (var year = currentYear; year <= 2050 + params.lifeExpectancy - 90; year++) {
       var age = currentAge + (year - currentYear);
@@ -5675,7 +5676,9 @@ const App = {
     }
     var m1Age = result.params.pensionMember1RetireAge || 63;
     var m2Age = result.params.pensionMember2RetireAge || 58;
-    var eduEndAge = result.params.educationEndAge || 22;
+    var eduEndYear = result.params.educationEndYear || 2035;
+    var eduEntry = result.years.find(function(y) { return y.year === eduEndYear; });
+    var eduEndAge = eduEntry ? eduEntry.age : 43 + (eduEndYear - 2026);
 
     // 顶部一行：保险年金 + Rowen退休 + 王典退休（扁平化小字，同行）
     addMilestone(60, '保险年金', '#f59e0b', true, 9);
