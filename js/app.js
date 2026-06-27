@@ -5148,7 +5148,7 @@ const App = {
   },
 
   _loadRetirementParams() {
-    var defaults = { annualExpense: 20, annualEducation: 10, annualExtraIncome: 0, inflation: 3, investmentReturn: 2, lifeExpectancy: 90 };
+    var defaults = { annualExpense: 20, annualEducation: 10, annualExtraIncome: 0, inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump' };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
       if (saved) defaults = Object.assign(defaults, JSON.parse(saved));
@@ -5194,6 +5194,20 @@ const App = {
         self.renderRetirementPage();
       });
     });
+
+    // 房贷还款方式单选
+    var radios = document.getElementsByName('retirementParamMortgageMode');
+    for (var i = 0; i < radios.length; i++) {
+      radios[i].checked = (radios[i].value === self._retirementParams.mortgagePayoffMode);
+      radios[i].addEventListener('change', function() {
+        if (this.checked) {
+          self._retirementParams.mortgagePayoffMode = this.value;
+          self._saveRetirementParams(self._retirementParams);
+          self._retirementCache = self.calculateRetirement(self._retirementParams);
+          self.renderRetirementPage();
+        }
+      });
+    }
   },
 
   // 计算今天退休的可行性
@@ -5208,12 +5222,15 @@ const App = {
     var funds = this._sumFundsCNY();
     var liquidAssets = cash + stocks + funds;
 
-    // 2. 立即还房贷
+    // 2. 房贷处理方式
     var loans = Storage.get(Storage.keys.loans);
     var mortgagePayoff = 0;
     loans.forEach(function(l) { mortgagePayoff += parseFloat(l.balance || 0); });
-
-    var initialCash = liquidAssets - mortgagePayoff;
+    var mortgagePayoffMode = params.mortgagePayoffMode || 'lump';
+    var mortgagePaymentSchedule = (mortgagePayoffMode === 'monthly')
+      ? this._buildMortgagePaymentSchedule(currentYear, params.lifeExpectancy)
+      : {};
+    var initialCash = liquidAssets - (mortgagePayoffMode === 'lump' ? mortgagePayoff : 0);
 
     // 3. 未来保费（按缴费区间，从今年起算）
     var premiumSchedule = this._buildPremiumSchedule(currentYear, params.lifeExpectancy);
@@ -5224,7 +5241,10 @@ const App = {
     // 5. 保险年金收入
     var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, params.lifeExpectancy);
 
-    // 6. 逐年模拟
+    // 6. 企业年金收入（仅王典）
+    var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, params.lifeExpectancy);
+
+    // 7. 逐年模拟
     var years = [];
     var balance = initialCash;
     var runOutYear = null;
@@ -5234,17 +5254,19 @@ const App = {
     for (var year = currentYear; year <= 2050 + params.lifeExpectancy - 90; year++) {
       var age = currentAge + (year - currentYear);
       var premium = premiumSchedule[year] || 0;
+      var mortgage = mortgagePaymentSchedule[year] || 0;
       var education = (year <= currentYear + educationYears - 1) ? (params.annualEducation * 10000) : 0;
       var expense = (params.annualExpense * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
       var extraIncome = (params.annualExtraIncome * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
       var pension = pensionSchedule[year] || 0;
       var insurance = insuranceSchedule[year] || 0;
-      var outflow = premium + education + expense;
-      var inflow = extraIncome + pension + insurance;
+      var enterpriseAnnuity = enterpriseAnnuitySchedule[year] || 0;
+      var outflow = premium + mortgage + education + expense;
+      var inflow = extraIncome + pension + insurance + enterpriseAnnuity;
       var netFlow = inflow - outflow;
       var endBalance = balance * (1 + params.investmentReturn / 100) + netFlow;
 
-      years.push({ year: year, age: age, startBalance: balance, endBalance: endBalance, inflow: inflow, outflow: outflow, premium: premium, education: education, expense: expense, pension: pension, insurance: insurance });
+      years.push({ year: year, age: age, startBalance: balance, endBalance: endBalance, inflow: inflow, outflow: outflow, premium: premium, mortgage: mortgage, education: education, expense: expense, pension: pension, insurance: insurance, enterpriseAnnuity: enterpriseAnnuity });
 
       if (runOutYear === null && endBalance < 0) {
         runOutYear = year;
@@ -5255,7 +5277,7 @@ const App = {
       balance = endBalance;
     }
 
-    // 7. 缺口计算（使资金刚好撑到寿命终点的现值）
+    // 8. 缺口计算（使资金刚好撑到寿命终点的现值）
     var canRetire = balance >= 0 && years[years.length - 1].endBalance >= 0;
     var shortfall = 0;
     if (!canRetire) {
@@ -5271,6 +5293,8 @@ const App = {
       currentAge: currentAge,
       liquidAssets: liquidAssets,
       mortgagePayoff: mortgagePayoff,
+      mortgagePayoffMode: mortgagePayoffMode,
+      mortgagePaymentSchedule: mortgagePaymentSchedule,
       initialCash: initialCash,
       years: years,
       runOutYear: runOutYear,
@@ -5382,6 +5406,106 @@ const App = {
     return schedule;
   },
 
+  // 企业年金领取收入（仅王典，配偶无）
+  _buildEnterpriseAnnuitySchedule(startYear, lifeExpectancy) {
+    var schedule = {};
+    var endYear = 2050 + lifeExpectancy - 90;
+    var annuities = Storage.get(Storage.keys.annuities);
+    if (!annuities || annuities.length === 0) return schedule;
+
+    // 按持仓比例加权年化收益
+    var totalBalance = 0;
+    var weightedReturn = 0;
+    annuities.forEach(function(a) {
+      var bal = parseFloat(a.balance) || 0;
+      var ret = parseFloat(a.annualReturn) || 5; // 无数据时默认 5%
+      totalBalance += bal;
+      weightedReturn += bal * ret;
+    });
+    if (totalBalance <= 0) return schedule;
+    weightedReturn = weightedReturn / totalBalance;
+
+    // 王典退休参数（配偶无企业年金）
+    var retireAge = 63;
+    var birthYear = 1983;
+    var retireYear = birthYear + retireAge;
+    var pm = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 }[retireAge] || 117;
+
+    // 从当前复利到退休时点的账户余额
+    var balance = totalBalance;
+    for (var y = startYear; y < retireYear; y++) {
+      balance = balance * (1 + weightedReturn / 100);
+    }
+
+    var monthly = balance / pm;
+    var remainingMonths = pm;
+    for (var year = retireYear; year <= endYear && remainingMonths > 0; year++) {
+      var monthsThisYear = Math.min(12, remainingMonths);
+      schedule[year] = (schedule[year] || 0) + monthly * monthsThisYear;
+      remainingMonths -= monthsThisYear;
+    }
+
+    return schedule;
+  },
+
+  // 房贷按月还款支出表
+  _buildMortgagePaymentSchedule(startYear, lifeExpectancy) {
+    var schedule = {};
+    var endYear = 2050 + lifeExpectancy - 90;
+    var loans = Storage.get(Storage.keys.loans);
+    var self = this;
+
+    loans.forEach(function(l) {
+      var balance = parseFloat(l.balance) || 0;
+      var rate = parseFloat(l.rate) || 0;
+      var monthly = parseFloat(l.monthlyPayment) || 0;
+      var remainingMonths = parseInt(l.remainingMonths) || 0;
+
+      // 未提供月供需估算
+      if (monthly <= 0) {
+        var total = parseFloat(l.total) || balance;
+        var months = parseInt(l.months) || 240;
+        if (rate > 0 && total > 0) {
+          var r = rate / 100 / 12;
+          monthly = total * r * Math.pow(1 + r, months) / (Math.pow(1 + r, months) - 1);
+        } else if (balance > 0) {
+          monthly = balance / 240;
+        }
+      }
+
+      // 未提供剩余期数时，根据 endDate 或余额估算
+      if (remainingMonths <= 0) {
+        if (l.endDate) {
+          var today = new Date();
+          var end = new Date(l.endDate);
+          remainingMonths = Math.max(0, Math.ceil((end - today) / (1000 * 60 * 60 * 24 * 30)));
+        } else if (balance > 0 && monthly > 0) {
+          remainingMonths = Math.ceil(balance / monthly);
+        } else {
+          remainingMonths = 240;
+        }
+      }
+
+      if (monthly <= 0 || remainingMonths <= 0) return;
+
+      var firstYearPartial = 12 - (new Date().getMonth() + 1) + 1; // 本年剩余月份（含当前月）
+      firstYearPartial = Math.max(1, Math.min(12, firstYearPartial));
+      var firstYearMonths = Math.min(firstYearPartial, remainingMonths);
+      if (firstYearMonths > 0) {
+        schedule[startYear] = (schedule[startYear] || 0) + monthly * firstYearMonths;
+        remainingMonths -= firstYearMonths;
+      }
+
+      for (var y = startYear + 1; y <= endYear && remainingMonths > 0; y++) {
+        var monthsThisYear = Math.min(12, remainingMonths);
+        schedule[y] = (schedule[y] || 0) + monthly * monthsThisYear;
+        remainingMonths -= monthsThisYear;
+      }
+    });
+
+    return schedule;
+  },
+
   renderRetirementPage() {
     var result = this._retirementCache;
     if (!result) return;
@@ -5402,13 +5526,18 @@ const App = {
     var grid = document.getElementById('retirementSummaryGrid');
     if (grid) {
       var items = [
-        { label: '今天可用资产（现金+股票+基金）', value: self.formatMoney(result.liquidAssets), cls: 'positive' },
-        { label: '立即还清房贷', value: '-' + self.formatMoney(result.mortgagePayoff).replace('¥', '¥'), cls: 'negative' },
-        { label: '剩余可投资金', value: self.formatMoney(result.initialCash), cls: result.initialCash >= 0 ? 'positive' : 'negative' },
-        { label: '首年保费支出', value: self.formatMoney((result.years[0] && result.years[0].premium) || 0), cls: 'negative' },
-        { label: '首年生活消费', value: self.formatMoney((result.years[0] && result.years[0].expense) || 0), cls: 'negative' },
-        { label: '首年子女教育', value: self.formatMoney((result.years[0] && result.years[0].education) || 0), cls: 'negative' }
+        { label: '今天可用资产（现金+股票+基金）', value: self.formatMoney(result.liquidAssets), cls: 'positive' }
       ];
+      if (result.mortgagePayoffMode === 'lump') {
+        items.push({ label: '立即还清房贷', value: '-' + self.formatMoney(result.mortgagePayoff).replace('¥', '¥'), cls: 'negative' });
+      } else {
+        items.push({ label: '继续按月还房贷（本金合计）', value: self.formatMoney(result.mortgagePayoff).replace('¥', '¥'), cls: 'neutral' });
+        items.push({ label: '首年房贷支出', value: '-' + self.formatMoney((result.years[0] && result.years[0].mortgage) || 0).replace('¥', '¥'), cls: 'negative' });
+      }
+      items.push({ label: '剩余可投资金', value: self.formatMoney(result.initialCash), cls: result.initialCash >= 0 ? 'positive' : 'negative' });
+      items.push({ label: '首年保费支出', value: self.formatMoney((result.years[0] && result.years[0].premium) || 0), cls: 'negative' });
+      items.push({ label: '首年生活消费', value: self.formatMoney((result.years[0] && result.years[0].expense) || 0), cls: 'negative' });
+      items.push({ label: '首年子女教育', value: self.formatMoney((result.years[0] && result.years[0].education) || 0), cls: 'negative' });
       if (!result.canRetire) {
         items.push({ label: '资金用光年份', value: result.runOutYear ? (result.runOutYear + ' 年') : '未耗尽', cls: 'danger' });
         items.push({ label: '当前缺口（现值）', value: self.formatMoney(result.shortfall), cls: 'danger' });
@@ -5424,6 +5553,7 @@ const App = {
     // 4. 假设说明
     var assumptions = document.getElementById('retirementAssumptions');
     if (assumptions) {
+      var mortgageText = result.mortgagePayoffMode === 'lump' ? '房贷一次性还清' : '房贷继续按月还款';
       assumptions.innerHTML = '<div class="retirement-assumption-title">计算假设</div>' +
         '<div class="retirement-assumption-list">' +
         '<span>通胀率 ' + result.params.inflation + '%</span>' +
@@ -5432,7 +5562,9 @@ const App = {
         '<span>王典 63 岁领养老金</span>' +
         '<span>配偶 58 岁领养老金</span>' +
         '<span>保险年金 60 岁起领</span>' +
-        '<span>RSU/年金/保险今日不取</span>' +
+        '<span>企业年金 63 岁起按月领</span>' +
+        '<span>' + mortgageText + '</span>' +
+        '<span>RSU/保险现金价值今日不取</span>' +
         '</div>';
     }
   },
@@ -5493,7 +5625,7 @@ const App = {
         keyMilestones.push('⚠️ 资金将在 <b>' + result.runOutYear + ' 年</b> 用光');
       }
       keyMilestones.push('60 岁开始领取保险年金');
-      keyMilestones.push('63 岁开始领取企业养老金');
+      keyMilestones.push('63 岁开始领取基本养老金+企业年金');
       if (result.runOutYear && result.runOutYear < 2043) {
         keyMilestones.push('等不到开始领取退休金/保险金的那一天');
       }

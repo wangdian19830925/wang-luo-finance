@@ -3244,6 +3244,42 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   text-align: center;
 }
 
+.retirement-radio-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.retirement-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.retirement-radio input[type="radio"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.retirement-radio:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.retirement-summary-item.neutral .retirement-summary-value {
+  color: var(--text-secondary);
+}
+
 @media (max-width: 768px) {
   .retirement-summary-grid {
     grid-template-columns: 1fr;
