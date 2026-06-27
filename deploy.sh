@@ -6,7 +6,7 @@ set -e
 
 if [ -z "$GITHUB_TOKEN" ]; then
   echo "ERROR: GITHUB_TOKEN environment variable not set"
-  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v102: 描述\""
+  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v103: 描述\""
   exit 1
 fi
 

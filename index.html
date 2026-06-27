@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-27-v102 -->
+  <!-- version: 2026-06-27-v103 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=102">
+  <link rel="stylesheet" href="./css/style.css?v=103">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -591,10 +591,6 @@
         <div class="retirement-chart-section">
           <div class="retirement-chart-header">
             <span>可投资产余额走势</span>
-            <span class="retirement-chart-legend">
-              <span class="retirement-chart-dot" style="background:#4ade80"></span>资产≥0
-              <span class="retirement-chart-dot" style="background:#ef4444"></span>缺口
-            </span>
           </div>
           <div class="retirement-chart-wrap" id="retirementChartWrap">
             <!-- SVG 曲线图 -->
@@ -602,9 +598,6 @@
           <div class="retirement-chart-note" id="retirementChartNote">
             <!-- 动态说明 -->
           </div>
-        </div>
-        <div class="retirement-assumptions" id="retirementAssumptions">
-          <!-- 通胀/收益假设 -->
         </div>
       </div>
 
@@ -670,7 +663,7 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
           </div>
-          <div class="retirement-param-item">
+          <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
               <span>🏦 王典的养老账户余额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember1BalanceValue">46.0 万</span>
@@ -691,7 +684,7 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember1RetireAge" min="55" max="65" step="1" value="63">
           </div>
-          <div class="retirement-param-item">
+          <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
               <span>🏦 Rowen的养老账户余额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember2BalanceValue">46.0 万</span>
@@ -1103,7 +1096,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=102"></script>
+  <script src="./js/storage.js?v=103"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1113,6 +1106,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=102"></script>
+  <script src="./js/app.js?v=103"></script>
 </body>
 </html>

@@ -5594,26 +5594,6 @@ const App = {
 
     // 3. 资金曲线
     this.renderRetirementChart(result);
-
-    // 4. 假设说明
-    var assumptions = document.getElementById('retirementAssumptions');
-    if (assumptions) {
-      var m1Bal = (result.params.pensionMember1Balance / 10000).toFixed(1);
-      var m2Bal = (result.params.pensionMember2Balance / 10000).toFixed(1);
-      var mortgageText = result.mortgagePayoffMode === 'lump' ? '房贷一次性还清' : '房贷继续按月还款';
-      assumptions.innerHTML = '<div class="retirement-assumption-title">计算假设</div>' +
-        '<div class="retirement-assumption-list">' +
-        '<span>通胀率 ' + result.params.inflation + '%</span>' +
-        '<span>投资年化收益 ' + result.params.investmentReturn + '%</span>' +
-        '<span>预计寿命 ' + result.params.lifeExpectancy + ' 岁</span>' +
-        '<span>王典 ' + result.params.pensionMember1RetireAge + ' 岁领养老金（账户 ' + m1Bal + ' 万）</span>' +
-        '<span>Rowen ' + result.params.pensionMember2RetireAge + ' 岁领养老金（账户 ' + m2Bal + ' 万）</span>' +
-        '<span>保险年金 60 岁起领</span>' +
-        '<span>企业年金 63 岁起按月领</span>' +
-        '<span>' + mortgageText + '</span>' +
-        '<span>RSU/保险现金价值今日不取</span>' +
-        '</div>';
-    }
   },
 
   renderRetirementChart(result) {
