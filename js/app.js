@@ -5333,7 +5333,20 @@ const App = {
       var outflow = premium + mortgage + education + expense;
       var inflow = extraIncome + pension + insurance + enterpriseAnnuity;
       var netFlow = inflow - outflow;
-      var endBalance = balance * (1 + params.investmentReturn / 100) + netFlow;
+      var investmentGain = balance * (params.investmentReturn / 100);
+      var endBalance = balance + investmentGain + netFlow;
+
+      // 调试：打印每年详细收支
+      if (year <= 2035 || endBalance < 0) {
+        console.log('[退休计算] ' + year + '(年龄' + age + '): ' +
+          '期初=' + balance.toFixed(0) +
+          ' 投资收益=' + investmentGain.toFixed(0) +
+          ' 流入(工资+养老金+保险+年金)=' + inflow.toFixed(0) +
+          ' 流出(保费+房贷+教育+生活)=' + outflow.toFixed(0) +
+          ' 净现金流=' + netFlow.toFixed(0) +
+          ' 期末=' + endBalance.toFixed(0) +
+          (endBalance < 0 ? ' ***耗尽***' : ''));
+      }
 
       // 创赢未来领取策略：当年其他收益不能满足支出时，从万能险账户领取补足
       var universalWithdrawal = 0;
@@ -5362,14 +5375,18 @@ const App = {
       balance = endBalance;
     }
 
-    // 8. 缺口计算（使资金刚好撑到寿命终点的现值）
-    var canRetire = balance >= 0 && years[years.length - 1].endBalance >= 0;
+    // 9. 结论判断
+    // 一旦任何一年余额变负（现金耗尽），今天就不能退休
+    // 不能因为后期养老金/万能险补足就让结论变成"可以退休"
+    var canRetire = runOutYear === null;
     var shortfall = 0;
     if (!canRetire) {
-      var last = years[years.length - 1];
+      // 缺口 = 耗尽年份的缺口现值
+      var runOutIdx = years.findIndex(function(y) { return y.year === runOutYear; });
+      var runOutYearData = years[runOutIdx];
       var r = params.investmentReturn / 100;
-      var n = last.year - currentYear;
-      shortfall = Math.abs(last.endBalance) / Math.pow(1 + r, n);
+      var n = runOutYear - currentYear;
+      shortfall = Math.abs(runOutYearData.endBalance) / Math.pow(1 + r, n);
     }
 
     return {
