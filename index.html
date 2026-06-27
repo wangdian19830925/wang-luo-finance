@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-27-v96 -->
+  <!-- version: 2026-06-27-v97 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=96">
+  <link rel="stylesheet" href="./css/style.css?v=97">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -633,6 +633,64 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamAnnualExpense" min="5" max="80" step="1" value="20">
           </div>
+          <div class="retirement-param-group-title">王典基本养老金</div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>养老金账户余额</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember1BalanceValue">46.0 万</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember1Balance" min="200000" max="800000" step="5000" value="460126.76">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>每月缴费金额</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember1MonthlyValue">2984 元</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember1Monthly" min="1000" max="10000" step="100" value="2984.16">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>累计缴费月数</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember1MonthsPaidValue">197 个月</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember1MonthsPaid" min="100" max="400" step="1" value="197">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>退休年龄</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember1RetireAgeValue">63 岁</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember1RetireAge" min="55" max="65" step="1" value="63">
+          </div>
+          <div class="retirement-param-group-title">配偶基本养老金</div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>养老金账户余额</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember2BalanceValue">46.0 万</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember2Balance" min="200000" max="800000" step="5000" value="460126.76">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>每月缴费金额</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember2MonthlyValue">2984 元</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember2Monthly" min="1000" max="10000" step="100" value="2984.16">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>累计缴费月数</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember2MonthsPaidValue">197 个月</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember2MonthsPaid" min="100" max="400" step="1" value="197">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>退休年龄</span>
+              <span class="retirement-param-value" id="retirementParamPensionMember2RetireAgeValue">58 岁</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamPensionMember2RetireAge" min="50" max="60" step="1" value="58">
+          </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
               <span>每年子女教育</span>
@@ -1060,7 +1118,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=96"></script>
+  <script src="./js/storage.js?v=97"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1070,6 +1128,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=96"></script>
+  <script src="./js/app.js?v=97"></script>
 </body>
 </html>

@@ -3237,6 +3237,15 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
 }
 
+.retirement-param-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
 .retirement-param-tip {
   margin-top: 14px;
   font-size: 12px;

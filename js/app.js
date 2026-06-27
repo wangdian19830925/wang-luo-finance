@@ -5099,10 +5099,10 @@ const App = {
   _retirementCalcTimer: null,
   _retirementParams: null,
 
-  // 基本养老保险（来自截图，成员2按相同）
+  // 基本养老保险（来自截图：本息总额 460,126.76，个人缴费 2,984.16/月，累计 197 个月；成员2先按相同）
   RETIREMENT_PENSION: {
-    member1: { name: '王典', birthYear: 1983, gender: 'male', retireAge: 63, accountBalance: 456097.17, monthsPaid: 197, monthlyContribution: 3479 },
-    member2: { name: '配偶', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 456097.17, monthsPaid: 197, monthlyContribution: 3479 }
+    member1: { name: '王典', birthYear: 1983, gender: 'male', retireAge: 63, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 },
+    member2: { name: '配偶', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 }
   },
 
   // 保险年金收入（以 Excel 领取核算为准，单位：元/年）
@@ -5148,7 +5148,12 @@ const App = {
   },
 
   _loadRetirementParams() {
-    var defaults = { annualExpense: 20, annualEducation: 10, annualExtraIncome: 0, inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump' };
+    var defaults = {
+      annualExpense: 20, annualEducation: 10, annualExtraIncome: 0,
+      inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
+      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1MonthsPaid: 197, pensionMember1RetireAge: 63,
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2MonthsPaid: 197, pensionMember2RetireAge: 58
+    };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
       if (saved) defaults = Object.assign(defaults, JSON.parse(saved));
@@ -5170,25 +5175,41 @@ const App = {
       annualExtraIncome: 'retirementParamAnnualExtraIncome',
       inflation: 'retirementParamInflation',
       investmentReturn: 'retirementParamReturn',
-      lifeExpectancy: 'retirementParamLifeExpectancy'
+      lifeExpectancy: 'retirementParamLifeExpectancy',
+      pensionMember1Balance: 'retirementParamPensionMember1Balance',
+      pensionMember1Monthly: 'retirementParamPensionMember1Monthly',
+      pensionMember1MonthsPaid: 'retirementParamPensionMember1MonthsPaid',
+      pensionMember1RetireAge: 'retirementParamPensionMember1RetireAge',
+      pensionMember2Balance: 'retirementParamPensionMember2Balance',
+      pensionMember2Monthly: 'retirementParamPensionMember2Monthly',
+      pensionMember2MonthsPaid: 'retirementParamPensionMember2MonthsPaid',
+      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge'
     };
 
-    function updateLabel(key, value, unit) {
+    function updateLabel(key, value) {
       var el = document.getElementById(inputs[key] + 'Value');
-      if (el) el.textContent = value + ' ' + unit;
+      if (!el) return;
+      var text = value;
+      if (key === 'inflation' || key === 'investmentReturn') text = value + ' %';
+      else if (key === 'lifeExpectancy') text = value + ' 岁';
+      else if (key === 'annualExpense' || key === 'annualEducation' || key === 'annualExtraIncome') text = value + ' 万';
+      else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
+      else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
+      else if (key.indexOf('MonthsPaid') >= 0) text = value + ' 个月';
+      else if (key.indexOf('RetireAge') >= 0) text = value + ' 岁';
+      el.textContent = text;
     }
 
     Object.keys(inputs).forEach(function(key) {
       var el = document.getElementById(inputs[key]);
       if (!el) return;
       el.value = self._retirementParams[key];
-      var unit = key === 'inflation' || key === 'investmentReturn' ? '%' : (key === 'lifeExpectancy' ? '岁' : '万');
-      updateLabel(key, el.value, unit);
+      updateLabel(key, el.value);
       el.addEventListener('input', function() {
         var val = parseFloat(el.value);
         if (isNaN(val)) return;
         self._retirementParams[key] = val;
-        updateLabel(key, val, unit);
+        updateLabel(key, val);
         self._saveRetirementParams(self._retirementParams);
         self._retirementCache = self.calculateRetirement(self._retirementParams);
         self.renderRetirementPage();
@@ -5235,8 +5256,8 @@ const App = {
     // 3. 未来保费（按缴费区间，从今年起算）
     var premiumSchedule = this._buildPremiumSchedule(currentYear, params.lifeExpectancy);
 
-    // 4. 基本养老金预测
-    var pensionSchedule = this._buildPensionSchedule(currentYear, params.lifeExpectancy);
+    // 4. 基本养老金预测（使用用户可调参数）
+    var pensionSchedule = this._buildPensionSchedule(currentYear, params.lifeExpectancy, params);
 
     // 5. 保险年金收入
     var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, params.lifeExpectancy);
@@ -5367,24 +5388,30 @@ const App = {
     return years;
   },
 
-  _buildPensionSchedule(startYear, lifeExpectancy) {
+  _buildPensionSchedule(startYear, lifeExpectancy, params) {
     var schedule = {};
-    var self = this;
-    Object.keys(this.RETIREMENT_PENSION).forEach(function(k) {
-      var p = self.RETIREMENT_PENSION[k];
-      var retireYear = p.birthYear + p.retireAge;
-      // 退休时个人账户余额（停止缴费，继续投资增值）
-      var balance = p.accountBalance;
+    var birthYear = 1983; // 两位成员均按 1983 年生处理
+    var members = [
+      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, monthsPaid: params.pensionMember1MonthsPaid, retireAge: params.pensionMember1RetireAge },
+      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, monthsPaid: params.pensionMember2MonthsPaid, retireAge: params.pensionMember2RetireAge }
+    ];
+    var endYear = 2050 + lifeExpectancy - 90;
+    var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
+
+    members.forEach(function(p) {
+      var retireYear = birthYear + p.retireAge;
+      // 退休时个人账户余额：当前余额复利 + 继续按月缴费
+      var balance = p.balance;
       for (var y = startYear; y < retireYear; y++) {
-        balance = balance * 1.02 + (p.monthlyContribution * 12);
+        balance = balance * 1.02 + (p.monthly * 12);
       }
       // 计发月数
-      var pm = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 }[p.retireAge] || 117;
+      var pm = pmMap[p.retireAge] || 117;
       var personalMonthly = balance / pm;
-      // 基础养老金（简化：社平工资 12000，缴费指数 1.5，年限 30 年）
-      var baseMonthly = 12000 * (1 + 1.5) / 2 * 30 * 0.01;
+      // 基础养老金：缴费年限 = 已缴月数/12 + 从现在开始到退休的年数
+      var yearsPaidAtRetirement = p.monthsPaid / 12 + (retireYear - startYear);
+      var baseMonthly = 12000 * (1 + 1.5) / 2 * yearsPaidAtRetirement * 0.01;
       var monthly = personalMonthly + baseMonthly;
-      var endYear = 2050 + lifeExpectancy - 90;
       for (var y = retireYear; y <= endYear; y++) {
         schedule[y] = (schedule[y] || 0) + (monthly * 12);
       }
@@ -5553,14 +5580,16 @@ const App = {
     // 4. 假设说明
     var assumptions = document.getElementById('retirementAssumptions');
     if (assumptions) {
+      var m1Bal = (result.params.pensionMember1Balance / 10000).toFixed(1);
+      var m2Bal = (result.params.pensionMember2Balance / 10000).toFixed(1);
       var mortgageText = result.mortgagePayoffMode === 'lump' ? '房贷一次性还清' : '房贷继续按月还款';
       assumptions.innerHTML = '<div class="retirement-assumption-title">计算假设</div>' +
         '<div class="retirement-assumption-list">' +
         '<span>通胀率 ' + result.params.inflation + '%</span>' +
         '<span>投资年化收益 ' + result.params.investmentReturn + '%</span>' +
         '<span>预计寿命 ' + result.params.lifeExpectancy + ' 岁</span>' +
-        '<span>王典 63 岁领养老金</span>' +
-        '<span>配偶 58 岁领养老金</span>' +
+        '<span>王典 ' + result.params.pensionMember1RetireAge + ' 岁领养老金（账户 ' + m1Bal + ' 万）</span>' +
+        '<span>配偶 ' + result.params.pensionMember2RetireAge + ' 岁领养老金（账户 ' + m2Bal + ' 万）</span>' +
         '<span>保险年金 60 岁起领</span>' +
         '<span>企业年金 63 岁起按月领</span>' +
         '<span>' + mortgageText + '</span>' +
