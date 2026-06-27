@@ -5171,7 +5171,7 @@ const App = {
 
   _loadRetirementParams() {
     var defaults = {
-      annualExpense: 20, annualEducation: 10, annualExtraIncome: 0,
+      annualExpense: 20, annualEducation: 10, educationEndAge: 22, annualExtraIncome: 0,
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
       pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
@@ -5194,6 +5194,7 @@ const App = {
     var inputs = {
       annualExpense: 'retirementParamAnnualExpense',
       annualEducation: 'retirementParamAnnualEducation',
+      educationEndAge: 'retirementParamEducationEndAge',
       annualExtraIncome: 'retirementParamAnnualExtraIncome',
       inflation: 'retirementParamInflation',
       investmentReturn: 'retirementParamReturn',
@@ -5211,7 +5212,7 @@ const App = {
       if (!el) return;
       var text = value;
       if (key === 'inflation' || key === 'investmentReturn') text = value + ' %';
-      else if (key === 'lifeExpectancy') text = value + ' 岁';
+      else if (key === 'lifeExpectancy' || key === 'educationEndAge') text = value + ' 岁';
       else if (key === 'annualExpense' || key === 'annualEducation' || key === 'annualExtraIncome') text = value + ' 万';
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
@@ -5289,7 +5290,7 @@ const App = {
     var balance = initialCash;
     var runOutYear = null;
     var totalGapToEnd = 0;
-    var educationYears = Math.max(0, 2035 - currentYear + 1); // 2026-2035 含头含尾
+    var educationYears = Math.max(0, params.educationEndAge - currentAge); // 从当前年龄到教育结束年龄
 
     for (var year = currentYear; year <= 2050 + params.lifeExpectancy - 90; year++) {
       var age = currentAge + (year - currentYear);
@@ -5601,8 +5602,8 @@ const App = {
     // 1) 只画到预期寿命对应的年份
     var allYears = result.years;
     var lifeExp = result.params.lifeExpectancy;
-    // 找到 age == lifeExpectancy 的年份索引
-    var lifeIdx = allYears.findIndex(function(y) { return y.age === lifeExp; });
+    // 找到 age >= lifeExp 的第一个索引（年龄可能跳步，用 >=）
+    var lifeIdx = allYears.findIndex(function(y) { return y.age >= lifeExp; });
     if (lifeIdx < 0) lifeIdx = allYears.length - 1;
     var years = allYears.slice(0, lifeIdx + 1);
 
@@ -5615,12 +5616,13 @@ const App = {
     var maxVal = Math.max.apply(null, values);
     var minVal = Math.min.apply(null, values);
 
-    // 2) 纵轴上限约 400 万，从 0 起始，不需要正负对称
+    // 2) 纵轴：画全曲线（含负值），上限约400万，下限跟随最小值留边距
     var yMax = Math.max(maxVal * 1.12, 4000000);
-    var yMin = 0;
+    var yMin = Math.min(minVal * 1.15, -100000); // 至少显示到-10万，但不强制为0
+    if (yMin > 0) yMin = 0; // 如果全为正则下限为0
     var yRange = yMax - yMin || 1;
 
-    var width = 720, height = 280, padLeft = 78, padRight = 24, padTop = 26, padBottom = 52;
+    var width = 720, height = 300, padLeft = 78, padRight = 24, padTop = 28, padBottom = 52;
     var chartW = width - padLeft - padRight;
     var chartH = height - padTop - padBottom;
 
@@ -5643,9 +5645,9 @@ const App = {
     for (var t = 0; t <= yTicks; t++) {
       var v = yMax - t * (yRange / yTicks);
       var yPos = padTop + chartH * (t / yTicks);
-      gridLines += '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>';
+      gridLines += '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(148,163,184,0.08)" stroke-width="1"/>';
       var labelWan = (v / 10000).toFixed(v >= 1000000 ? 0 : 1);
-      gridLines += '<text x="' + (padLeft - 10) + '" y="' + (yPos + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#64748b">' + labelWan + '万</text>';
+      gridLines += '<text x="' + (padLeft - 10) + '" y="' + (yPos + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#475569">' + labelWan + '万</text>';
     }
 
     // 4) 横轴标签：更细的刻度（约每 5 年一个），确保包含首尾
@@ -5653,76 +5655,88 @@ const App = {
     var xLabels = '';
     function drawXLabel(idx) {
       var xPos = px(idx);
-      xLabels += '<line x1="' + xPos.toFixed(1) + '" y1="' + (height - padBottom) + '" x2="' + xPos.toFixed(1) + '" y2="' + (height - padBottom + 5) + '" stroke="#64748b" stroke-width="1"/>';
-      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 18).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#64748b">' + years[idx].year + '年</text>';
-      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 30).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#475569">' + years[idx].age + '岁</text>';
+      xLabels += '<line x1="' + xPos.toFixed(1) + '" y1="' + (height - padBottom) + '" x2="' + xPos.toFixed(1) + '" y2="' + (height - padBottom + 5) + '" stroke="#334155" stroke-width="1"/>';
+      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 18).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">' + years[idx].year + '年</text>';
+      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 30).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#334155">' + years[idx].age + '岁</text>';
     }
     // 每 5 年一个刻度
     for (var i = 0; i < years.length; i += xLabelInterval) drawXLabel(i);
     if ((years.length - 1) % xLabelInterval !== 0) drawXLabel(years.length - 1);
 
-    // 5) 关键事件虚线标注 — 标签不含岁数
+    // 5) 关键事件虚线标注 — 扁平黑暗风格
     var milestones = '';
-    function addMilestone(age, label, color, top) {
+    function addMilestone(age, label, color, top, fontSize) {
+      fontSize = fontSize || 10;
       var idx = years.findIndex(function(y) { return y.age === age; });
       if (idx < 0) return;
       var mx = px(idx);
-      var my = py(years[idx].endBalance);
-      milestones += '<line x1="' + mx.toFixed(1) + '" y1="' + padTop + '" x2="' + mx.toFixed(1) + '" y2="' + (height - padBottom) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.35"/>';
-      milestones += '<text x="' + mx.toFixed(1) + '" y="' + (top ? padTop + 12 : height - padBottom - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="' + color + '">' + label + '</text>';
+      milestones += '<line x1="' + mx.toFixed(1) + '" y1="' + padTop + '" x2="' + mx.toFixed(1) + '" y2="' + (height - padBottom) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.30"/>';
+      milestones += '<text x="' + mx.toFixed(1) + '" y="' + (top ? padTop + 14 : height - padBottom - 8).toFixed(1) + '" text-anchor="middle" font-size="' + fontSize + '" fill="' + color + '" font-weight="500">' + label + '</text>';
     }
-    // 使用参数中的退休年龄动态确定虚线位置
-    var m1Age = result.params.pensionMember1RetireAge || 63; // 王典
-    var m2Age = result.params.pensionMember2RetireAge || 58; // Rowen
-    addMilestone(m2Age, 'Rowen退休', '#22d3ee', false);
-    addMilestone(60, '保险年金', '#fbbf24', true);
-    addMilestone(m1Age, '王典退休', '#4ade80', true);
+    var m1Age = result.params.pensionMember1RetireAge || 63;
+    var m2Age = result.params.pensionMember2RetireAge || 58;
+    var eduEndAge = result.params.educationEndAge || 22;
+
+    // 顶部一行：保险年金 + Rowen退休 + 王典退休（扁平化小字，同行）
+    addMilestone(60, '保险年金', '#f59e0b', true, 9);
+    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);
+    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);
+
+    // 教育支出结束虚线（底部）
+    addMilestone(eduEndAge, '教育结束', '#a78bfa', false, 9);
 
     if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
       var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });
       if (runIdx >= 0) {
         var runX = px(runIdx);
         var runY = py(years[runIdx].endBalance);
-        milestones += '<circle cx="' + runX.toFixed(1) + '" cy="' + runY.toFixed(1) + '" r="4" fill="#ef4444" stroke="#0a0a14" stroke-width="2"/>';
-        milestones += '<text x="' + runX.toFixed(1) + '" y="' + (runY - 10).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#ef4444">' + result.runOutYear + '年资金耗尽</text>';
+        milestones += '<circle cx="' + runX.toFixed(1) + '" cy="' + runY.toFixed(1) + '" r="4" fill="#ef4444" stroke="#0f172a" stroke-width="1.5"/>';
+        milestones += '<text x="' + runX.toFixed(1) + '" y="' + (runY - 10).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#f87171" font-weight="500">' + result.runOutYear + '年耗尽</text>';
       }
     }
 
-    // 6) 区域颜色：绿=资产≥0，红=资金缺口；零线以上全绿渐变，零线以下全红渐变
+    // 6) SVG 渲染 — 扁平黑暗风格
+    var zeroRatio = ((yMax - yMin > 0) ? ((yMax - 0) / (yMax - yMin)) : 0.5) * 100;
     var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="retirement-chart-svg">' +
       '<defs>' +
-      '<linearGradient id="retirementArea" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="#4ade80" stop-opacity="0.30"/>' +
-      '<stop offset="' + ((yMax / yRange) * 100).toFixed(1) + '%" stop-color="#4ade80" stop-opacity="0.05"/>' +
-      '<stop offset="' + ((yMax / yRange) * 100).toFixed(1) + '%" stop-color="#ef4444" stop-opacity="0.05"/>' +
-      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.25"/>' +
+      '<linearGradient id="retArea" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#4ade80" stop-opacity="0.20"/>' +
+      '<stop offset="' + Math.max(0, zeroRatio).toFixed(1) + '%" stop-color="#4ade80" stop-opacity="0.03"/>' +
+      '<stop offset="' + Math.max(0, zeroRatio).toFixed(1) + '%" stop-color="#ef4444" stop-opacity="0.03"/>' +
+      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.20"/>' +
       '</linearGradient>' +
       '</defs>' +
       gridLines +
-      '<line x1="' + padLeft + '" y1="' + zeroLineY + '" x2="' + (width - padRight) + '" y2="' + zeroLineY + '" stroke="rgba(255,255,255,0.30)" stroke-width="1.5"/>' +
-      '<path d="' + areaD + '" fill="url(#retirementArea)"/>' +
-      '<path d="' + pathD + '" fill="none" stroke="#4ade80" stroke-width="2.5"/>' +
+      // 零线（虚线风格）
+      '<line x1="' + padLeft + '" y1="' + zeroLineY + '" x2="' + (width - padRight) + '" y2="' + zeroLineY + '" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>' +
+      // 面积填充
+      '<path d="' + areaD + '" fill="url(#retArea)"/>' +
+      // 曲线本身
+      '<path d="' + pathD + '" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
       milestones +
       xLabels +
-      '<line x1="' + padLeft + '" y1="' + (height - padBottom) + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="#475569" stroke-width="1"/>' +
-      '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (height - padBottom) + '" stroke="#475569" stroke-width="1"/>' +
-      '<text x="' + (width / 2).toFixed(1) + '" y="' + (height - 6).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#64748b">年份 / 年龄</text>' +
-      '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">可投资产余额（万元）</text>' +
+      // 坐标轴框
+      '<line x1="' + padLeft + '" y1="' + (height - padBottom) + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="#334155" stroke-width="1"/>' +
+      '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (height - padBottom) + '" stroke="#334155" stroke-width="1"/>' +
+      // 轴标题
+      '<text x="' + (width / 2).toFixed(1) + '" y="' + (height - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">年份 / 年龄</text>' +
+      '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">余额（万元）</text>' +
       '</svg>';
 
     wrap.innerHTML = svg;
 
+    // 7) 图例说明 — 扁平黑暗风格
     if (note) {
-      var keyMilestones = [];
+      var notes = [];
       if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
-        keyMilestones.push('⚠️ 资金将在 <b>' + result.runOutYear + ' 年</b> 用光');
+        notes.push('<span style="color:#f87171;font-weight:500">⚠ 资金将在 ' + result.runOutYear + ' 年耗尽</span>');
       } else {
-        keyMilestones.push('✅ 按当前参数可支撑至 ' + lifeExp + ' 岁');
+        notes.push('<span style="color:#4ade80;font-weight:500">✓ 可支撑至 ' + lifeExp + ' 岁</span>');
       }
-      keyMilestones.push('🟢 绿色=可投资产≥0');
-      keyMilestones.push('🔴 红色=资金缺口');
-      keyMilestones.push('··· 虚线=关键事件节点');
-      note.innerHTML = keyMilestones.join(' · ');
+      notes.push('<span style="color:#64748b">● 绿色 = 资产 ≥ 0</span>');
+      notes.push('<span style="color:#64748b">● 红色 = 缺口</span>');
+      notes.push('<span style="color:#475569">╎ 虚线 = 关键事件</span>');
+      note.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:11px;line-height:1.8">' + notes.join('') + '</div>';
     }
   },
 
