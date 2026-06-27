@@ -2544,6 +2544,11 @@ const App = {
       var overlay = document.getElementById("sidebarOverlay"); if (overlay) overlay.addEventListener("click", () => this.closeSidebar());
       // 返回按钮：回到 Dashboard
       var homeBtn = document.getElementById("homeBtn"); if (homeBtn) homeBtn.addEventListener("click", () => this.navigateTo("dashboard"));
+      // 顶部二级菜单入口：通知管理 / 设置
+      var headerAlertsBtn = document.getElementById("headerAlertsBtn");
+      if (headerAlertsBtn) headerAlertsBtn.addEventListener("click", () => this.navigateTo("alerts"));
+      var headerSettingsBtn = document.getElementById("headerSettingsBtn");
+      if (headerSettingsBtn) headerSettingsBtn.addEventListener("click", () => this.navigateTo("settings"));
       // 侧边栏固定/取消固定
       var pinBtn = document.getElementById("sidebarPinBtn");
       if (pinBtn) {
@@ -5312,7 +5317,7 @@ const App = {
         year: year, age: age, startBalance: balance, endBalance: endBalance,
         inflow: inflow, outflow: outflow, premium: premium, mortgage: mortgage,
         education: education, expense: expense, pension: pension, insurance: insurance,
-        enterpriseAnnuity: enterpriseAnnuity,
+        enterpriseAnnuity: enterpriseAnnuity, investmentGain: investmentGain,
         universalWithdrawal: universalWithdrawal,
         universalInsuranceBalance: universalInsuranceBalance
       });
@@ -5877,10 +5882,10 @@ const App = {
     var eduEndAge = eduEntry ? eduEntry.age : 43 + (eduEndYear - 2026);
 
     // 顶部：关键事件标注（扁平化小字，错开两行避免重叠）
-    addMilestone(60, '保险年金', '#f59e0b', true, 9);       // 第一行
-    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);   // 第一行
-    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);     // 第一行
-    addMilestone(eduEndAge, '教育结束', '#a78bfa', true, 9, 12); // 第二行（y偏移12px）
+    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);       // 第一行
+    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);         // 第一行
+    addMilestone(60, '保险年金', '#f59e0b', true, 9, 12);       // 第二行
+    addMilestone(eduEndAge, '教育结束', '#a78bfa', true, 9, 12); // 第二行
 
     if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
       var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });

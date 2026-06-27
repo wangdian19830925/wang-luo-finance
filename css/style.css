@@ -147,7 +147,7 @@ body {
   user-select: none;
 }
 
-.home-btn, .sidebar-pin-btn, .settings-btn {
+.home-btn, .sidebar-pin-btn, .settings-btn, .alerts-btn {
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -163,7 +163,7 @@ body {
   flex-shrink: 0;
 }
 
-.home-btn:hover, .sidebar-pin-btn:hover, .settings-btn:hover {
+.home-btn:hover, .sidebar-pin-btn:hover, .settings-btn:hover, .alerts-btn:hover {
   background: var(--bg-input);
   color: var(--text-primary);
 }
