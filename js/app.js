@@ -5287,7 +5287,8 @@ const App = {
       var outflow = premium + mortgage + education + expense;
       var inflow = extraIncome + pension + insurance + enterpriseAnnuity;
       var netFlow = inflow - outflow;
-      var investmentGain = balance * (params.investmentReturn / 100);
+      // 投资收益只对正资产计算；资产为负时不应再按收益率滚雪球（否则出现"收益越高负债越多"的反直觉现象）
+      var investmentGain = balance > 0 ? balance * (params.investmentReturn / 100) : 0;
       var endBalance = balance + investmentGain + netFlow;
 
       // 创赢未来领取策略
