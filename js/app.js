@@ -5516,10 +5516,11 @@ const App = {
 
     members.forEach(function(p) {
       var retireYear = birthYear + p.retireAge;
-      // 退休时个人账户余额：当前余额复利 + 继续按月缴费
+      // 如果今天退休：后续不再工作，养老金账户只按 2% 复利增长，不再追加缴费
+      // 缴费年限也只计算到当前年份（或退休当年，取较早者）
       var balance = p.balance;
       for (var y = startYear; y < retireYear; y++) {
-        balance = balance * 1.02 + (p.monthly * 12);
+        balance = balance * 1.02;
       }
       // 计发月数（只是计算除数，不是领取期限；养老金终身发放）
       var pm = pmMap[p.retireAge] || 117;
@@ -5527,7 +5528,7 @@ const App = {
       // 基础养老金
       // 公式：月领 = 退休时计发基数 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
       var avgSalaryAtRetirement = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear - 2025);
-      var contributionYears = retireYear - contributionStartYear;
+      var contributionYears = Math.max(0, Math.min(startYear, retireYear) - contributionStartYear);
       var baseMonthly = avgSalaryAtRetirement * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
       var monthly = personalMonthly + baseMonthly;
       for (var y = retireYear; y <= endYear; y++) {
