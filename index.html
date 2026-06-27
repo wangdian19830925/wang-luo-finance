@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-26-v87 -->
+  <!-- version: 2026-06-27-v95 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=94">
+  <link rel="stylesheet" href="./css/style.css?v=95">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -60,6 +60,9 @@
       </li>
       <li class="nav-item" data-page="annuity">
         <span class="nav-icon"><svg class="icon"><use href="#icon-annuity"/></svg></span>年金管理
+      </li>
+      <li class="nav-item" data-page="retirement">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-piggy"/></svg></span>退休计算
       </li>
       <li class="nav-item" data-page="alerts">
         <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>通知管理
@@ -568,6 +571,93 @@
       </div>
     </section>
 
+    <!-- 退休计算页面 -->
+    <section class="page" id="page-retirement">
+      <div class="page-header">
+        <h2>退休计算</h2>
+      </div>
+
+      <!-- 卡片1：结论 -->
+      <div class="retirement-card retirement-conclusion" id="retirementConclusion">
+        <div class="retirement-conclusion-loading">正在计算…</div>
+      </div>
+
+      <!-- 卡片2：计算明细 + 资金曲线 -->
+      <div class="retirement-card">
+        <h3 class="retirement-section-title">计算明细</h3>
+        <div class="retirement-summary-grid" id="retirementSummaryGrid">
+          <!-- 动态渲染 -->
+        </div>
+        <div class="retirement-chart-section">
+          <div class="retirement-chart-header">
+            <span>资金使用曲线</span>
+            <span class="retirement-chart-legend">
+              <span class="retirement-chart-dot" style="background:#ef4444"></span>资金缺口
+            </span>
+          </div>
+          <div class="retirement-chart-wrap" id="retirementChartWrap">
+            <!-- SVG 曲线图 -->
+          </div>
+          <div class="retirement-chart-note" id="retirementChartNote">
+            <!-- 动态说明 -->
+          </div>
+        </div>
+        <div class="retirement-assumptions" id="retirementAssumptions">
+          <!-- 通胀/收益假设 -->
+        </div>
+      </div>
+
+      <!-- 卡片3：参数调整 -->
+      <div class="retirement-card">
+        <h3 class="retirement-section-title">参数调整</h3>
+        <div class="retirement-param-list">
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>每年家庭消费</span>
+              <span class="retirement-param-value" id="retirementParamAnnualExpenseValue">20 万</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamAnnualExpense" min="5" max="80" step="1" value="20">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>每年子女教育</span>
+              <span class="retirement-param-value" id="retirementParamAnnualEducationValue">10 万</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamAnnualEducation" min="0" max="30" step="1" value="10">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>每年额外收入</span>
+              <span class="retirement-param-value" id="retirementParamAnnualExtraIncomeValue">0 万</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamAnnualExtraIncome" min="0" max="50" step="1" value="0">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>通货膨胀率</span>
+              <span class="retirement-param-value" id="retirementParamInflationValue">3 %</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamInflation" min="1" max="8" step="0.5" value="3">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>投资年化收益</span>
+              <span class="retirement-param-value" id="retirementParamReturnValue">2 %</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamReturn" min="0" max="6" step="0.5" value="2">
+          </div>
+          <div class="retirement-param-item">
+            <div class="retirement-param-label">
+              <span>预计寿命</span>
+              <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
+            </div>
+            <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
+          </div>
+        </div>
+        <div class="retirement-param-tip">调整后上方卡片会自动联动更新</div>
+      </div>
+    </section>
+
     <!-- 通知管理页面 -->
     <section class="page" id="page-alerts">
       <div class="page-header">
@@ -782,6 +872,18 @@
       <path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </symbol>
 
+    <!-- 退休：存钱罐 -->
+    <symbol id="icon-piggy" viewBox="0 0 24 24">
+      <path d="M7.5 7.5C8 6 9.5 5 11 5c2.5 0 4.5 1.5 5 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M4 13.5c0-3.5 3.5-6.5 8-6.5s8 3 8 6.5-3.5 6.5-8 6.5-8-3-8-6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      <ellipse cx="16" cy="11.5" rx="1.8" ry="1.8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="16.5" cy="11.5" r="0.5" fill="currentColor"/>
+      <path d="M13 7.5v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M6 16.5c-1 0-1.5-1-1.5-2.5S5 11.5 6 11.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="7" y1="18" x2="7" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="17" y1="18" x2="17" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+
     <!-- 通知：几何铃铛 -->
     <symbol id="icon-notify" viewBox="0 0 24 24">
       <path d="M6 9a6 6 0 0112 0v3l2.5 3.5H3.5L6 12V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
@@ -943,7 +1045,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=94"></script>
+  <script src="./js/storage.js?v=95"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -953,6 +1055,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=94"></script>
+  <script src="./js/app.js?v=95"></script>
 </body>
 </html>
