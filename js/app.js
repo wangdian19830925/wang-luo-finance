@@ -5920,9 +5920,53 @@ const App = {
       '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">余额（万元）</text>' +
       '</svg>';
 
-    wrap.innerHTML = svg;
+    // 7) 收支明细堆积面积图（消费 vs 收益，不同颜色）
+    var cfHeight = 110, cfPadTop = 18, cfPadBottom = 28;
+    var cfChartH = cfHeight - cfPadTop - cfPadBottom;
+    var cfMaxIn = Math.max.apply(null, years.map(function(y) { return y.inflow + y.investmentGain; }));
+    var cfMaxOut = Math.max.apply(null, years.map(function(y) { return y.outflow; }));
+    var cfMax = Math.max(cfMaxIn, cfMaxOut, 100000); // 至少显示到 10万
 
-    // 7) 图例说明 — 扁平黑暗风格
+    var cfZeroY = cfPadTop + cfChartH / 2;
+    function cfpy(v) { return cfZeroY - (v / cfMax) * (cfChartH / 2); }
+
+    var incomePath = 'M' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1);
+    for (var i = 0; i < years.length; i++) { incomePath += ' L' + px(i).toFixed(1) + ' ' + cfpy(years[i].inflow + years[i].investmentGain).toFixed(1); }
+    incomePath += ' L' + px(years.length - 1).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' L' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' Z';
+
+    var expensePath = 'M' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1);
+    for (var i = 0; i < years.length; i++) { expensePath += ' L' + px(i).toFixed(1) + ' ' + cfpy(-years[i].outflow).toFixed(1); }
+    expensePath += ' L' + px(years.length - 1).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' L' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' Z';
+
+    var cfGrid = '';
+    cfGrid += '<line x1="' + padLeft + '" y1="' + cfpy(cfMax).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(cfMax).toFixed(1) + '" stroke="rgba(148,163,184,0.08)" stroke-width="1"/>';
+    cfGrid += '<text x="' + (padLeft - 10) + '" y="' + (cfpy(cfMax) + 4).toFixed(1) + '" text-anchor="end" font-size="9" fill="#475569">+' + (cfMax / 10000).toFixed(0) + '万</text>';
+    cfGrid += '<line x1="' + padLeft + '" y1="' + cfpy(-cfMax).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(-cfMax).toFixed(1) + '" stroke="rgba(148,163,184,0.08)" stroke-width="1"/>';
+    cfGrid += '<text x="' + (padLeft - 10) + '" y="' + (cfpy(-cfMax) + 4).toFixed(1) + '" text-anchor="end" font-size="9" fill="#475569">-' + (cfMax / 10000).toFixed(0) + '万</text>';
+
+    var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:120px;min-width:680px">' +
+      '<defs>' +
+      '<linearGradient id="cfIncomeArea" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>' +
+      '<stop offset="100%" stop-color="#22c55e" stop-opacity="0.05"/>' +
+      '</linearGradient>' +
+      '<linearGradient id="cfExpenseArea" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#ef4444" stop-opacity="0.05"/>' +
+      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.35"/>' +
+      '</linearGradient>' +
+      '</defs>' +
+      cfGrid +
+      '<line x1="' + padLeft + '" y1="' + cfpy(0).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(0).toFixed(1) + '" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>' +
+      '<path d="' + expensePath + '" fill="url(#cfExpenseArea)"/>' +
+      '<path d="' + incomePath + '" fill="url(#cfIncomeArea)"/>' +
+      '<path d="' + expensePath + '" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linejoin="round"/>' +
+      '<path d="' + incomePath + '" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linejoin="round"/>' +
+      '<text x="' + (width / 2).toFixed(1) + '" y="' + (cfHeight - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
+      '</svg>';
+
+    wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + '</div>';
+
+    // 8) 图例说明 — 扁平黑暗风格
     if (note) {
       var notes = [];
       if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
@@ -5932,6 +5976,8 @@ const App = {
       }
       notes.push('<span style="color:#64748b">● 绿色 = 资产 ≥ 0</span>');
       notes.push('<span style="color:#64748b">● 红色 = 缺口</span>');
+      notes.push('<span style="color:#22c55e">● 浅绿 = 年度收益</span>');
+      notes.push('<span style="color:#ef4444">● 浅红 = 年度消费</span>');
       notes.push('<span style="color:#475569">╎ 虚线 = 关键事件</span>');
       note.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:11px;line-height:1.8">' + notes.join('') + '</div>';
     }
