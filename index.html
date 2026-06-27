@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-27-v121 -->
+  <!-- version: 2026-06-27-v122 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=121">
+  <link rel="stylesheet" href="./css/style.css?v=122">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -22,12 +22,6 @@
     <div class="header-right">
       <button class="home-btn" id="homeBtn" title="返回资产总览" style="display:none;">
         <svg class="icon"><use href="#icon-home"/></svg>
-      </button>
-      <button class="alerts-btn" id="headerAlertsBtn" title="通知管理">
-        <svg class="icon"><use href="#icon-alerts"/></svg>
-      </button>
-      <button class="settings-btn" id="headerSettingsBtn" title="设置">
-        <svg class="icon"><use href="#icon-settings"/></svg>
       </button>
       <button class="sync-btn" id="syncBtn" title="云端同步状态">
         <svg class="icon" id="syncIcon"><use href="#icon-sync"/></svg>
@@ -734,6 +728,7 @@
           </div>
         </div>
       </div>
+    </section>
 
     <!-- 通知管理页面 -->
     <section class="page" id="page-alerts">
@@ -1132,6 +1127,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=121"></script>
+  <script src="./js/app.js?v=122"></script>
 </body>
 </html>

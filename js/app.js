@@ -2544,11 +2544,6 @@ const App = {
       var overlay = document.getElementById("sidebarOverlay"); if (overlay) overlay.addEventListener("click", () => this.closeSidebar());
       // 返回按钮：回到 Dashboard
       var homeBtn = document.getElementById("homeBtn"); if (homeBtn) homeBtn.addEventListener("click", () => this.navigateTo("dashboard"));
-      // 顶部二级菜单入口：通知管理 / 设置
-      var headerAlertsBtn = document.getElementById("headerAlertsBtn");
-      if (headerAlertsBtn) headerAlertsBtn.addEventListener("click", () => this.navigateTo("alerts"));
-      var headerSettingsBtn = document.getElementById("headerSettingsBtn");
-      if (headerSettingsBtn) headerSettingsBtn.addEventListener("click", () => this.navigateTo("settings"));
       // 侧边栏固定/取消固定
       var pinBtn = document.getElementById("sidebarPinBtn");
       if (pinBtn) {
@@ -5318,6 +5313,7 @@ const App = {
         inflow: inflow, outflow: outflow, premium: premium, mortgage: mortgage,
         education: education, expense: expense, pension: pension, insurance: insurance,
         enterpriseAnnuity: enterpriseAnnuity, investmentGain: investmentGain,
+        extraIncome: extraIncome,
         universalWithdrawal: universalWithdrawal,
         universalInsuranceBalance: universalInsuranceBalance
       });
@@ -5925,8 +5921,8 @@ const App = {
       '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">余额（万元）</text>' +
       '</svg>';
 
-    // 7) 收支明细堆积面积图（消费 vs 收益，不同颜色）
-    var cfHeight = 110, cfPadTop = 18, cfPadBottom = 28;
+    // 7) 收支明细堆积面积图（按分项多色堆叠）
+    var cfHeight = 120, cfPadTop = 18, cfPadBottom = 34;
     var cfChartH = cfHeight - cfPadTop - cfPadBottom;
     var cfMaxIn = Math.max.apply(null, years.map(function(y) { return y.inflow + y.investmentGain; }));
     var cfMaxOut = Math.max.apply(null, years.map(function(y) { return y.outflow; }));
@@ -5935,13 +5931,44 @@ const App = {
     var cfZeroY = cfPadTop + cfChartH / 2;
     function cfpy(v) { return cfZeroY - (v / cfMax) * (cfChartH / 2); }
 
-    var incomePath = 'M' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1);
-    for (var i = 0; i < years.length; i++) { incomePath += ' L' + px(i).toFixed(1) + ' ' + cfpy(years[i].inflow + years[i].investmentGain).toFixed(1); }
-    incomePath += ' L' + px(years.length - 1).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' L' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' Z';
+    // 收入分项（从下往上堆叠）
+    var incomeLayers = [
+      { key: 'extraIncome', label: '其他收入', color: '#94a3b8' },
+      { key: 'pension', label: '基本养老金', color: '#38bdf8' },
+      { key: 'insurance', label: '保险年金', color: '#a78bfa' },
+      { key: 'enterpriseAnnuity', label: '企业年金', color: '#34d399' },
+      { key: 'investmentGain', label: '投资收益', color: '#fbbf24' }
+    ];
+    // 支出分项（从上往下堆叠，即向下）
+    var expenseLayers = [
+      { key: 'expense', label: '生活消费', color: '#f87171' },
+      { key: 'education', label: '教育消费', color: '#fb923c' },
+      { key: 'mortgage', label: '房贷', color: '#22d3ee' },
+      { key: 'premium', label: '购买保险', color: '#f472b6' }
+    ];
 
-    var expensePath = 'M' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1);
-    for (var i = 0; i < years.length; i++) { expensePath += ' L' + px(i).toFixed(1) + ' ' + cfpy(-years[i].outflow).toFixed(1); }
-    expensePath += ' L' + px(years.length - 1).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' L' + px(0).toFixed(1) + ' ' + cfpy(0).toFixed(1) + ' Z';
+    function buildStackedArea(layers, isExpense) {
+      var areas = [];
+      var running = years.map(function() { return 0; });
+      layers.forEach(function(layer) {
+        var bottom = running.slice();
+        var top = years.map(function(y, i) { return running[i] + (y[layer.key] || 0); });
+        var d = 'M' + px(0).toFixed(1) + ' ' + cfpy(isExpense ? -bottom[0] : top[0]).toFixed(1);
+        for (var i = 1; i < years.length; i++) {
+          d += ' L' + px(i).toFixed(1) + ' ' + cfpy(isExpense ? -bottom[i] : top[i]).toFixed(1);
+        }
+        for (var i = years.length - 1; i >= 0; i--) {
+          d += ' L' + px(i).toFixed(1) + ' ' + cfpy(isExpense ? -top[i] : bottom[i]).toFixed(1);
+        }
+        d += ' Z';
+        areas.push({ d: d, color: layer.color, label: layer.label });
+        running = top;
+      });
+      return areas;
+    }
+
+    var incomeAreas = buildStackedArea(incomeLayers, false);
+    var expenseAreas = buildStackedArea(expenseLayers, true);
 
     var cfGrid = '';
     cfGrid += '<line x1="' + padLeft + '" y1="' + cfpy(cfMax).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(cfMax).toFixed(1) + '" stroke="rgba(148,163,184,0.08)" stroke-width="1"/>';
@@ -5949,29 +5976,33 @@ const App = {
     cfGrid += '<line x1="' + padLeft + '" y1="' + cfpy(-cfMax).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(-cfMax).toFixed(1) + '" stroke="rgba(148,163,184,0.08)" stroke-width="1"/>';
     cfGrid += '<text x="' + (padLeft - 10) + '" y="' + (cfpy(-cfMax) + 4).toFixed(1) + '" text-anchor="end" font-size="9" fill="#475569">-' + (cfMax / 10000).toFixed(0) + '万</text>';
 
-    var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:120px;min-width:680px">' +
-      '<defs>' +
-      '<linearGradient id="cfIncomeArea" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>' +
-      '<stop offset="100%" stop-color="#22c55e" stop-opacity="0.05"/>' +
-      '</linearGradient>' +
-      '<linearGradient id="cfExpenseArea" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="#ef4444" stop-opacity="0.05"/>' +
-      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.35"/>' +
-      '</linearGradient>' +
-      '</defs>' +
+    var cfPathsHtml = '';
+    incomeAreas.concat(expenseAreas).forEach(function(area) {
+      cfPathsHtml += '<path d="' + area.d + '" fill="' + area.color + '" fill-opacity="0.35" stroke="' + area.color + '" stroke-width="1" stroke-linejoin="round" stroke-opacity="0.7"/>';
+    });
+
+    var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:130px;min-width:680px">' +
       cfGrid +
       '<line x1="' + padLeft + '" y1="' + cfpy(0).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(0).toFixed(1) + '" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>' +
-      '<path d="' + expensePath + '" fill="url(#cfExpenseArea)"/>' +
-      '<path d="' + incomePath + '" fill="url(#cfIncomeArea)"/>' +
-      '<path d="' + expensePath + '" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linejoin="round"/>' +
-      '<path d="' + incomePath + '" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linejoin="round"/>' +
+      cfPathsHtml +
       '<text x="' + (width / 2).toFixed(1) + '" y="' + (cfHeight - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
       '</svg>';
 
-    wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + '</div>';
+    // 堆积图图例
+    var cfLegend = '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;font-size:11px;line-height:1.4;">';
+    cfLegend += '<span style="color:#64748b;font-weight:500;">收入：</span>';
+    incomeLayers.forEach(function(l) {
+      cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
+    });
+    cfLegend += '<span style="color:#64748b;font-weight:500;margin-left:6px;">支出：</span>';
+    expenseLayers.forEach(function(l) {
+      cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
+    });
+    cfLegend += '</div>';
 
-    // 8) 图例说明 — 扁平黑暗风格
+    wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + cfLegend + '</div>';
+
+    // 8) 图例说明 — 扁平黑暗风格（余额曲线）
     if (note) {
       var notes = [];
       if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
@@ -5981,8 +6012,6 @@ const App = {
       }
       notes.push('<span style="color:#64748b">● 绿色 = 资产 ≥ 0</span>');
       notes.push('<span style="color:#64748b">● 红色 = 缺口</span>');
-      notes.push('<span style="color:#22c55e">● 浅绿 = 年度收益</span>');
-      notes.push('<span style="color:#ef4444">● 浅红 = 年度消费</span>');
       notes.push('<span style="color:#475569">╎ 虚线 = 关键事件</span>');
       note.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:11px;line-height:1.8">' + notes.join('') + '</div>';
     }
