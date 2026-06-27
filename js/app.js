@@ -5177,9 +5177,7 @@ const App = {
       annualExpense: 20, annualEducation: 10, educationEndYear: 2035, annualExtraIncome: 0,
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
-      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58,
-      pensionAvgSocialSalary: 12000, // 社平工资（元/月）
-      pensionContributionIndex: 1.5 // 缴费指数
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
     };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
@@ -5209,9 +5207,7 @@ const App = {
       pensionMember1RetireAge: 'retirementParamPensionMember1RetireAge',
       pensionMember2Balance: 'retirementParamPensionMember2Balance',
       pensionMember2Monthly: 'retirementParamPensionMember2Monthly',
-      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge',
-      pensionAvgSocialSalary: 'retirementParamPensionAvgSocialSalary',
-      pensionContributionIndex: 'retirementParamPensionContributionIndex'
+      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge'
     };
 
     function updateLabel(key, value) {
@@ -5225,8 +5221,6 @@ const App = {
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
       else if (key.indexOf('RetireAge') >= 0) text = value + ' 岁';
-      else if (key === 'pensionAvgSocialSalary') text = value + ' 元/月';
-      else if (key === 'pensionContributionIndex') text = value;
       el.textContent = text;
     }
 
@@ -5469,14 +5463,20 @@ const App = {
 
   _buildPensionSchedule(startYear, endYear, params) {
     var schedule = {};
-    var birthYear = 1983; // 两位成员均按 1983 年生处理
+    var birthYear = 1983;
     var members = [
       { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge },
       { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge }
     ];
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
-    // 已累计缴费年限（截图：197 个月 ≈ 16.4 年，不再作为可调变量）
-    var yearsPaidFixed = 197 / 12;
+    // 缴费起始年（2008年）
+    var contributionStartYear = 2008;
+    // 2025年上海计发基数（社平工资）
+    var baseAvgSalary2025 = 12434;
+    // 社平工资年增长率（预估）
+    var avgSalaryGrowthRate = 0.05;
+    // 平均缴费指数（按3倍上限缴）
+    var avgContributionIndex = 3.0;
 
     members.forEach(function(p) {
       var retireYear = birthYear + p.retireAge;
@@ -5488,23 +5488,20 @@ const App = {
       // 计发月数（只是计算除数，不是领取期限；养老金终身发放）
       var pm = pmMap[p.retireAge] || 117;
       var personalMonthly = balance / pm;
-      // 基础养老金：缴费年限 = 已缴年数 + 从现在开始到退休的年数
-      // 公式：基础养老金月领 = (社平工资 + 指数化工资) / 2 × 缴费年限 × 1%
-      var yearsPaidAtRetirement = yearsPaidFixed + (retireYear - startYear);
-      var avgSocialSalary = params.pensionAvgSocialSalary || 12000; // 社平工资（元/月）
-      var contributionIndex = params.pensionContributionIndex || 1.5; // 缴费指数
-      var baseMonthly = avgSocialSalary * (1 + contributionIndex) / 2 * yearsPaidAtRetirement * 0.01;
+      // 基础养老金
+      // 公式：月领 = 退休时计发基数 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
+      var avgSalaryAtRetirement = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear - 2025);
+      var contributionYears = retireYear - contributionStartYear;
+      var baseMonthly = avgSalaryAtRetirement * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
       var monthly = personalMonthly + baseMonthly;
       for (var y = retireYear; y <= endYear; y++) {
         schedule[y] = (schedule[y] || 0) + (monthly * 12);
       }
     });
     // C186709225（友邦优享年年金）已失效，现金价值约5000元锁定在个人养老金账户，60岁时一次性领取
-    var pensionCashValueAge = 60;
-    var pensionCashValueYear = birthYear + pensionCashValueAge;
-    var pensionCashValue = 5000; // 元
+    var pensionCashValueYear = birthYear + 60;
     if (pensionCashValueYear >= startYear && pensionCashValueYear <= endYear) {
-      schedule[pensionCashValueYear] = (schedule[pensionCashValueYear] || 0) + pensionCashValue;
+      schedule[pensionCashValueYear] = (schedule[pensionCashValueYear] || 0) + 5000;
     }
     return schedule;
   },
