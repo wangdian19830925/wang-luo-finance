@@ -5393,15 +5393,16 @@ const App = {
     var shortfall = requiredInitialCash - actualInitialCash;
     var canRetire = shortfall <= 0;
 
-    // 用最终 requiredInitialCash 跑一次完整模拟（用于展示）
-    var simResult = this._simulateRetirement(requiredInitialCash, currentYear, currentAge, endYear, params, schedules);
-    var years = simResult.years;
-    var runOutYear = simResult.runOutYear;
+    // 用实际资产跑模拟（用于画曲线，反映真实情况——可能有红有绿）
+    var actualSim = this._simulateRetirement(actualInitialCash, currentYear, currentAge, endYear, params, schedules);
+    var years = actualSim.years;
+    var runOutYear = actualSim.runOutYear;
 
     console.log('[退休计算] 结果: actualInitialCash=' + actualInitialCash.toFixed(0)
       + ' requiredInitialCash=' + requiredInitialCash.toFixed(0)
       + ' shortfall=' + shortfall.toFixed(0)
-      + ' canRetire=' + canRetire);
+      + ' canRetire=' + canRetire
+      + ' runOutYear=' + runOutYear);
 
     return {
       today: today,
@@ -5738,15 +5739,14 @@ const App = {
               + '</tr>';
           });
           rows += '</tbody></table>';
-          // 缺口计算说明
+          // 缺口计算说明（二分搜索算法）
           var note = '<div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.8;">'
-            + '<div style="color:#fbbf24;font-weight:600;margin-bottom:6px;">缺口计算说明</div>'
-            + '耗尽年份：' + result.runOutYear + '年<br>'
-            + '耗尽年份期末余额：' + self.formatMoney(result.years[result.years.findIndex(function(y){return y.year===result.runOutYear})].endBalance) + '<br>'
-            + '年化收益率：' + result.params.investmentReturn + '%<br>'
-            + '距今年数：' + (result.runOutYear - result.currentYear) + '年<br>'
-            + '折现因子：(1+' + (result.params.investmentReturn/100) + ')^' + (result.runOutYear - result.currentYear) + ' = ' + Math.pow(1+result.params.investmentReturn/100, result.runOutYear-result.currentYear).toFixed(4) + '<br>'
-            + '<span style="color:#f87171;font-weight:600;">缺口现值 = |耗尽年余额| / 折现因子 = ' + self.formatMoney(result.shortfall) + '</span>'
+            + '<div style="color:#fbbf24;font-weight:600;margin-bottom:6px;">缺口计算说明（二分搜索）</div>'
+            + '算法：通过二分搜索找到最小的 initialCash，使得所有年份期末余额 ≥ 0<br>'
+            + '搜索范围：[actualInitialCash, actualInitialCash + 1亿]<br>'
+            + '当前实际资产：' + self.formatMoney(result.actualInitialCash) + '<br>'
+            + '所需最小资产：' + self.formatMoney(result.initialCash) + '<br>'
+            + '<span style="color:#f87171;font-weight:600;">缺口 = 所需最小资产 - 当前实际资产 = ' + self.formatMoney(result.shortfall) + '</span>'
             + '</div>';
           wrap.innerHTML = rows + note;
         } else {
