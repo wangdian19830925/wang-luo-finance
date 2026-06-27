@@ -106,6 +106,7 @@ def main():
         ("docs/测试报告-v95.md", "docs/测试报告-v95.md", False),
         ("docs/测试报告-v96.md", "docs/测试报告-v96.md", False),
         ("docs/测试报告-v97.md", "docs/测试报告-v97.md", False),
+        ("docs/测试报告-v98.md", "docs/测试报告-v98.md", False),
     ]
 
     # Build current tree

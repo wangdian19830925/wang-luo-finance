@@ -5102,7 +5102,7 @@ const App = {
   // 基本养老保险（来自截图：本息总额 460,126.76，个人缴费 2,984.16/月，累计 197 个月；成员2先按相同）
   RETIREMENT_PENSION: {
     member1: { name: '王典', birthYear: 1983, gender: 'male', retireAge: 63, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 },
-    member2: { name: '配偶', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 }
+    member2: { name: 'Rowen', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 }
   },
 
   // 保险年金收入（以 Excel 领取核算为准，单位：元/年）
@@ -5151,8 +5151,8 @@ const App = {
     var defaults = {
       annualExpense: 20, annualEducation: 10, annualExtraIncome: 0,
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
-      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1MonthsPaid: 197, pensionMember1RetireAge: 63,
-      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2MonthsPaid: 197, pensionMember2RetireAge: 58
+      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
     };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
@@ -5178,11 +5178,9 @@ const App = {
       lifeExpectancy: 'retirementParamLifeExpectancy',
       pensionMember1Balance: 'retirementParamPensionMember1Balance',
       pensionMember1Monthly: 'retirementParamPensionMember1Monthly',
-      pensionMember1MonthsPaid: 'retirementParamPensionMember1MonthsPaid',
       pensionMember1RetireAge: 'retirementParamPensionMember1RetireAge',
       pensionMember2Balance: 'retirementParamPensionMember2Balance',
       pensionMember2Monthly: 'retirementParamPensionMember2Monthly',
-      pensionMember2MonthsPaid: 'retirementParamPensionMember2MonthsPaid',
       pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge'
     };
 
@@ -5195,7 +5193,6 @@ const App = {
       else if (key === 'annualExpense' || key === 'annualEducation' || key === 'annualExtraIncome') text = value + ' 万';
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
-      else if (key.indexOf('MonthsPaid') >= 0) text = value + ' 个月';
       else if (key.indexOf('RetireAge') >= 0) text = value + ' 岁';
       el.textContent = text;
     }
@@ -5392,11 +5389,13 @@ const App = {
     var schedule = {};
     var birthYear = 1983; // 两位成员均按 1983 年生处理
     var members = [
-      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, monthsPaid: params.pensionMember1MonthsPaid, retireAge: params.pensionMember1RetireAge },
-      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, monthsPaid: params.pensionMember2MonthsPaid, retireAge: params.pensionMember2RetireAge }
+      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge },
+      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge }
     ];
     var endYear = 2050 + lifeExpectancy - 90;
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
+    // 已累计缴费年限（截图：197 个月 ≈ 16.4 年，不再作为可调变量）
+    var yearsPaidFixed = 197 / 12;
 
     members.forEach(function(p) {
       var retireYear = birthYear + p.retireAge;
@@ -5408,8 +5407,8 @@ const App = {
       // 计发月数
       var pm = pmMap[p.retireAge] || 117;
       var personalMonthly = balance / pm;
-      // 基础养老金：缴费年限 = 已缴月数/12 + 从现在开始到退休的年数
-      var yearsPaidAtRetirement = p.monthsPaid / 12 + (retireYear - startYear);
+      // 基础养老金：缴费年限 = 已缴年数 + 从现在开始到退休的年数
+      var yearsPaidAtRetirement = yearsPaidFixed + (retireYear - startYear);
       var baseMonthly = 12000 * (1 + 1.5) / 2 * yearsPaidAtRetirement * 0.01;
       var monthly = personalMonthly + baseMonthly;
       for (var y = retireYear; y <= endYear; y++) {
@@ -5433,7 +5432,7 @@ const App = {
     return schedule;
   },
 
-  // 企业年金领取收入（仅王典，配偶无）
+  // 企业年金领取收入（仅王典，Rowen 无）
   _buildEnterpriseAnnuitySchedule(startYear, lifeExpectancy) {
     var schedule = {};
     var endYear = 2050 + lifeExpectancy - 90;
@@ -5452,7 +5451,7 @@ const App = {
     if (totalBalance <= 0) return schedule;
     weightedReturn = weightedReturn / totalBalance;
 
-    // 王典退休参数（配偶无企业年金）
+    // 王典退休参数（Rowen 无企业年金）
     var retireAge = 63;
     var birthYear = 1983;
     var retireYear = birthYear + retireAge;
@@ -5589,7 +5588,7 @@ const App = {
         '<span>投资年化收益 ' + result.params.investmentReturn + '%</span>' +
         '<span>预计寿命 ' + result.params.lifeExpectancy + ' 岁</span>' +
         '<span>王典 ' + result.params.pensionMember1RetireAge + ' 岁领养老金（账户 ' + m1Bal + ' 万）</span>' +
-        '<span>配偶 ' + result.params.pensionMember2RetireAge + ' 岁领养老金（账户 ' + m2Bal + ' 万）</span>' +
+        '<span>Rowen ' + result.params.pensionMember2RetireAge + ' 岁领养老金（账户 ' + m2Bal + ' 万）</span>' +
         '<span>保险年金 60 岁起领</span>' +
         '<span>企业年金 63 岁起按月领</span>' +
         '<span>' + mortgageText + '</span>' +
@@ -5599,6 +5598,7 @@ const App = {
   },
 
   renderRetirementChart(result) {
+    var self = this;
     var wrap = document.getElementById('retirementChartWrap');
     var note = document.getElementById('retirementChartNote');
     if (!wrap) return;
@@ -5612,16 +5612,19 @@ const App = {
     var values = years.map(function(y) { return y.endBalance; });
     var maxVal = Math.max.apply(null, values);
     var minVal = Math.min.apply(null, values);
-    var range = Math.max(maxVal, Math.abs(minVal)) || 1;
-    var zeroY = maxVal / range; // 0 在 SVG 中的比例位置
 
-    var width = 680, height = 240, padLeft = 50, padRight = 20, padTop = 20, padBottom = 40;
+    // 让纵轴始终包含 0，并留出 12% 边距
+    var yMax = Math.max(maxVal * 1.12, Math.abs(minVal) * 1.12, 1);
+    var yMin = Math.min(0, minVal * 1.12);
+    var yRange = yMax - yMin || 1;
+
+    var width = 720, height = 280, padLeft = 78, padRight = 24, padTop = 26, padBottom = 52;
     var chartW = width - padLeft - padRight;
     var chartH = height - padTop - padBottom;
 
     var xStep = chartW / (years.length - 1);
     function px(i) { return padLeft + i * xStep; }
-    function py(v) { return padTop + chartH * (1 - v / range); }
+    function py(v) { return padTop + chartH * (1 - (v - yMin) / yRange); }
 
     var pathD = 'M' + px(0).toFixed(1) + ' ' + py(years[0].endBalance).toFixed(1);
     for (var i = 1; i < years.length; i++) {
@@ -5631,19 +5634,75 @@ const App = {
     var zeroLineY = py(0).toFixed(1);
     var areaD = pathD + ' L' + px(years.length - 1).toFixed(1) + ' ' + zeroLineY + ' L' + px(0).toFixed(1) + ' ' + zeroLineY + ' Z';
 
+    // 纵轴刻度：生成 5 条等分线，单位用“万”
+    var gridLines = '';
+    var yTicks = 5;
+    for (var t = 0; t <= yTicks; t++) {
+      var v = yMax - t * (yRange / yTicks);
+      var yPos = padTop + chartH * (t / yTicks);
+      gridLines += '<line x1="' + padLeft + '" y1="' + yPos.toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + yPos.toFixed(1) + '" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>';
+      var labelWan = (v / 10000).toFixed(v >= 1000000 || v <= -1000000 ? 0 : 1);
+      gridLines += '<text x="' + (padLeft - 10) + '" y="' + (yPos + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#64748b">' + labelWan + '万</text>';
+    }
+
+    // 横轴标签：约 5 个，确保包含首尾
+    var xLabelCount = 5;
+    var labelStep = Math.max(1, Math.ceil((years.length - 1) / (xLabelCount - 1)));
+    var xLabels = '';
+    function drawXLabel(idx) {
+      var xPos = px(idx);
+      xLabels += '<line x1="' + xPos.toFixed(1) + '" y1="' + (height - padBottom) + '" x2="' + xPos.toFixed(1) + '" y2="' + (height - padBottom + 5) + '" stroke="#64748b" stroke-width="1"/>';
+      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 18).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#64748b">' + years[idx].year + '年</text>';
+      xLabels += '<text x="' + xPos.toFixed(1) + '" y="' + (height - padBottom + 30).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#475569">' + years[idx].age + '岁</text>';
+    }
+    for (var i = 0; i < years.length; i += labelStep) drawXLabel(i);
+    if ((years.length - 1) % labelStep !== 0) drawXLabel(years.length - 1);
+
+    // 关键事件标注
+    var milestones = '';
+    function addMilestone(age, label, color, top) {
+      var idx = years.findIndex(function(y) { return y.age === age; });
+      if (idx < 0) return;
+      var mx = px(idx);
+      var my = py(years[idx].endBalance);
+      milestones += '<line x1="' + mx.toFixed(1) + '" y1="' + padTop + '" x2="' + mx.toFixed(1) + '" y2="' + (height - padBottom) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.35"/>';
+      milestones += '<text x="' + mx.toFixed(1) + '" y="' + (top ? padTop + 12 : height - padBottom - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="' + color + '">' + label + '</text>';
+    }
+    addMilestone(60, '60岁保险年金', '#fbbf24', true);
+    addMilestone(63, '63岁退休', '#4ade80', true);
+    addMilestone(58, '58岁Rowen退休', '#22d3ee', false);
+    addMilestone(69, '69岁一次性', '#fbbf24', false);
+    addMilestone(80, '80岁一次性', '#fbbf24', false);
+
+    if (result.runOutYear) {
+      var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });
+      if (runIdx >= 0) {
+        var runX = px(runIdx);
+        var runY = py(years[runIdx].endBalance);
+        milestones += '<circle cx="' + runX.toFixed(1) + '" cy="' + runY.toFixed(1) + '" r="4" fill="#ef4444" stroke="#0a0a14" stroke-width="2"/>';
+        milestones += '<text x="' + runX.toFixed(1) + '" y="' + (runY - 10).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#ef4444">' + result.runOutYear + '年资金耗尽</text>';
+      }
+    }
+
     var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="retirement-chart-svg">' +
       '<defs>' +
       '<linearGradient id="retirementArea" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="#4ade80" stop-opacity="0.25"/>' +
-      '<stop offset="' + (zeroY * 100).toFixed(1) + '%" stop-color="#4ade80" stop-opacity="0.05"/>' +
-      '<stop offset="' + (zeroY * 100).toFixed(1) + '%" stop-color="#ef4444" stop-opacity="0.05"/>' +
-      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.2"/>' +
+      '<stop offset="0%" stop-color="#4ade80" stop-opacity="0.30"/>' +
+      '<stop offset="' + ((yMax / yRange) * 100).toFixed(1) + '%" stop-color="#4ade80" stop-opacity="0.05"/>' +
+      '<stop offset="' + ((yMax / yRange) * 100).toFixed(1) + '%" stop-color="#ef4444" stop-opacity="0.05"/>' +
+      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.25"/>' +
       '</linearGradient>' +
       '</defs>' +
-      '<line x1="' + padLeft + '" y1="' + zeroLineY + '" x2="' + (width - padRight) + '" y2="' + zeroLineY + '" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4 4"/>' +
+      gridLines +
+      '<line x1="' + padLeft + '" y1="' + zeroLineY + '" x2="' + (width - padRight) + '" y2="' + zeroLineY + '" stroke="rgba(255,255,255,0.30)" stroke-width="1.5"/>' +
       '<path d="' + areaD + '" fill="url(#retirementArea)"/>' +
       '<path d="' + pathD + '" fill="none" stroke="#4ade80" stroke-width="2.5"/>' +
-      '<line x1="' + (width - padRight) + '" y1="' + padTop + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="rgba(255,255,255,0.06)"/>' +
+      milestones +
+      xLabels +
+      '<line x1="' + padLeft + '" y1="' + (height - padBottom) + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="#475569" stroke-width="1"/>' +
+      '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (height - padBottom) + '" stroke="#475569" stroke-width="1"/>' +
+      '<text x="' + (width / 2).toFixed(1) + '" y="' + (height - 6).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#64748b">年份 / 年龄</text>' +
+      '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">可投资产余额（万元）</text>' +
       '</svg>';
 
     wrap.innerHTML = svg;
@@ -5652,12 +5711,12 @@ const App = {
       var keyMilestones = [];
       if (result.runOutYear) {
         keyMilestones.push('⚠️ 资金将在 <b>' + result.runOutYear + ' 年</b> 用光');
+      } else {
+        keyMilestones.push('✅ 按当前参数可支撑至 ' + result.params.lifeExpectancy + ' 岁');
       }
-      keyMilestones.push('60 岁开始领取保险年金');
-      keyMilestones.push('63 岁开始领取基本养老金+企业年金');
-      if (result.runOutYear && result.runOutYear < 2043) {
-        keyMilestones.push('等不到开始领取退休金/保险金的那一天');
-      }
+      keyMilestones.push('绿色区域=可投资产≥0');
+      keyMilestones.push('红色区域=资金缺口');
+      keyMilestones.push('虚线=退休/年金关键节点');
       note.innerHTML = keyMilestones.join(' · ');
     }
   },
