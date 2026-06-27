@@ -3263,6 +3263,55 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   border-bottom: 1px solid var(--border);
 }
 
+/* 堆叠参数：同一 grid cell 内上下放置两个紧凑 slider（如通胀+收益） */
+.retirement-param-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+
+.retirement-param-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retirement-param-mini .retirement-param-range {
+  margin-top: 0;
+}
+
+/* 分组标题行：标题与单个参数在同一行并列（如“王典基本养老金 | 账户余额”） */
+.retirement-param-group-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+
+.retirement-param-group-row .retirement-param-group-title {
+  grid-column: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  white-space: nowrap;
+}
+
+.retirement-param-group-row .retirement-param-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retirement-param-group-row .retirement-param-label {
+  margin-bottom: 0;
+}
+
 .retirement-param-tip {
   margin-top: 14px;
   font-size: 12px;
@@ -3317,6 +3366,22 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   .retirement-param-item.retirement-param-fullwidth,
   .retirement-param-group-title {
     grid-column: auto;
+  }
+
+  .retirement-param-group-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .retirement-param-group-row .retirement-param-group-title {
+    width: 100%;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .retirement-param-group-row .retirement-param-inline {
+    width: 100%;
   }
 
   .retirement-conclusion-success,
