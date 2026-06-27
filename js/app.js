@@ -5177,7 +5177,9 @@ const App = {
       annualExpense: 20, annualEducation: 10, educationEndYear: 2035, annualExtraIncome: 0,
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
-      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58,
+      pensionAvgSocialSalary: 12000, // 社平工资（元/月）
+      pensionContributionIndex: 1.5 // 缴费指数
     };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
@@ -5207,7 +5209,9 @@ const App = {
       pensionMember1RetireAge: 'retirementParamPensionMember1RetireAge',
       pensionMember2Balance: 'retirementParamPensionMember2Balance',
       pensionMember2Monthly: 'retirementParamPensionMember2Monthly',
-      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge'
+      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge',
+      pensionAvgSocialSalary: 'retirementParamPensionAvgSocialSalary',
+      pensionContributionIndex: 'retirementParamPensionContributionIndex'
     };
 
     function updateLabel(key, value) {
@@ -5221,6 +5225,8 @@ const App = {
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
       else if (key.indexOf('RetireAge') >= 0) text = value + ' 岁';
+      else if (key === 'pensionAvgSocialSalary') text = value + ' 元/月';
+      else if (key === 'pensionContributionIndex') text = value;
       el.textContent = text;
     }
 
@@ -5479,17 +5485,27 @@ const App = {
       for (var y = startYear; y < retireYear; y++) {
         balance = balance * 1.02 + (p.monthly * 12);
       }
-      // 计发月数
+      // 计发月数（只是计算除数，不是领取期限；养老金终身发放）
       var pm = pmMap[p.retireAge] || 117;
       var personalMonthly = balance / pm;
       // 基础养老金：缴费年限 = 已缴年数 + 从现在开始到退休的年数
+      // 公式：基础养老金月领 = (社平工资 + 指数化工资) / 2 × 缴费年限 × 1%
       var yearsPaidAtRetirement = yearsPaidFixed + (retireYear - startYear);
-      var baseMonthly = 12000 * (1 + 1.5) / 2 * yearsPaidAtRetirement * 0.01;
+      var avgSocialSalary = params.pensionAvgSocialSalary || 12000; // 社平工资（元/月）
+      var contributionIndex = params.pensionContributionIndex || 1.5; // 缴费指数
+      var baseMonthly = avgSocialSalary * (1 + contributionIndex) / 2 * yearsPaidAtRetirement * 0.01;
       var monthly = personalMonthly + baseMonthly;
       for (var y = retireYear; y <= endYear; y++) {
         schedule[y] = (schedule[y] || 0) + (monthly * 12);
       }
     });
+    // C186709225（友邦优享年年金）已失效，现金价值约5000元锁定在个人养老金账户，60岁时一次性领取
+    var pensionCashValueAge = 60;
+    var pensionCashValueYear = birthYear + pensionCashValueAge;
+    var pensionCashValue = 5000; // 元
+    if (pensionCashValueYear >= startYear && pensionCashValueYear <= endYear) {
+      schedule[pensionCashValueYear] = (schedule[pensionCashValueYear] || 0) + pensionCashValue;
+    }
     return schedule;
   },
 
