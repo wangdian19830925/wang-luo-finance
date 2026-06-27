@@ -5672,10 +5672,84 @@ const App = {
       }
       grid.innerHTML = items.map(function(it) {
         return '<div class="retirement-summary-item ' + it.cls + '"><div class="retirement-summary-label">' + self.escapeHtml(it.label) + '</div><div class="retirement-summary-value">' + it.value + '</div></div>';
-      }).join('');
+      }).join('') + '<button id="btnRetireDetail" class="action-btn" style="margin-top:12px;width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;">查看计算详情</button>';
     }
 
-    // 3. 资金曲线
+    // 3. 计算详情面板（初始隐藏）
+    var detailWrap = document.getElementById('retirementDetailWrap');
+    if (!detailWrap) {
+      detailWrap = document.createElement('div');
+      detailWrap.id = 'retirementDetailWrap';
+      detailWrap.style.display = 'none';
+      detailWrap.style.marginTop = '16px';
+      detailWrap.style.padding = '16px';
+      detailWrap.style.background = '#0f172a';
+      detailWrap.style.borderRadius = '12px';
+      detailWrap.style.border = '1px solid #1e293b';
+      detailWrap.style.maxHeight = '500px';
+      detailWrap.style.overflowY = 'auto';
+      var chartWrap = document.getElementById('retirementChartWrap');
+      if (chartWrap && chartWrap.parentNode) {
+        chartWrap.parentNode.insertBefore(detailWrap, chartWrap);
+      }
+    }
+    // 绑定按钮事件
+    var btnDetail = document.getElementById('btnRetireDetail');
+    if (btnDetail && !btnDetail._bound) {
+      btnDetail._bound = true;
+      btnDetail.onclick = function() {
+        var wrap = document.getElementById('retirementDetailWrap');
+        if (!wrap) return;
+        if (wrap.style.display === 'none') {
+          wrap.style.display = 'block';
+          btnDetail.textContent = '收起计算详情';
+          // 渲染详情表格
+          var result = self._retirementCache;
+          if (!result) return;
+          var rows = '<table style="width:100%;font-size:11px;color:#cbd5e1;border-collapse:collapse;">'
+            + '<thead><tr style="background:#1e293b;position:sticky;top:0;">'
+            + '<th style="padding:4px 6px;text-align:left;">年份</th>'
+            + '<th style="padding:4px 6px;text-align:right;">年龄</th>'
+            + '<th style="padding:4px 6px;text-align:right;">期初余额</th>'
+            + '<th style="padding:4px 6px;text-align:right;">投资收益</th>'
+            + '<th style="padding:4px 6px;text-align:right;">流入</th>'
+            + '<th style="padding:4px 6px;text-align:right;">流出</th>'
+            + '<th style="padding:4px 6px;text-align:right;">净现金流</th>'
+            + '<th style="padding:4px 6px;text-align:right;">期末余额</th>'
+            + '</tr></thead><tbody>';
+          result.years.forEach(function(y) {
+            var cls = y.endBalance < 0 ? ' style="color:#f87171;"' : (y.endBalance > 0 ? ' style="color:#4ade80;"' : '');
+            rows += '<tr' + cls + '>'
+              + '<td style="padding:3px 6px;">' + y.year + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + y.age + '岁</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.startBalance) + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.startBalance * (result.params.investmentReturn/100)) + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.inflow) + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.outflow) + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.inflow - y.outflow) + '</td>'
+              + '<td style="padding:3px 6px;text-align:right;">' + self.formatMoney(y.endBalance) + '</td>'
+              + '</tr>';
+          });
+          rows += '</tbody></table>';
+          // 缺口计算说明
+          var note = '<div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.8;">'
+            + '<div style="color:#fbbf24;font-weight:600;margin-bottom:6px;">缺口计算说明</div>'
+            + '耗尽年份：' + result.runOutYear + '年<br>'
+            + '耗尽年份期末余额：' + self.formatMoney(result.years[result.years.findIndex(function(y){return y.year===result.runOutYear})].endBalance) + '<br>'
+            + '年化收益率：' + result.params.investmentReturn + '%<br>'
+            + '距今年数：' + (result.runOutYear - result.currentYear) + '年<br>'
+            + '折现因子：(1+' + (result.params.investmentReturn/100) + ')^' + (result.runOutYear - result.currentYear) + ' = ' + Math.pow(1+result.params.investmentReturn/100, result.runOutYear-result.currentYear).toFixed(4) + '<br>'
+            + '<span style="color:#f87171;font-weight:600;">缺口现值 = |耗尽年余额| / 折现因子 = ' + self.formatMoney(result.shortfall) + '</span>'
+            + '</div>';
+          wrap.innerHTML = rows + note;
+        } else {
+          wrap.style.display = 'none';
+          btnDetail.textContent = '查看计算详情';
+        }
+      };
+    }
+
+    // 4. 资金曲线
     this.renderRetirementChart(result);
   },
 
