@@ -5922,7 +5922,7 @@ const App = {
       '</svg>';
 
     // 7) 收支明细堆积面积图（按分项多色堆叠）
-    var cfHeight = 120, cfPadTop = 18, cfPadBottom = 34;
+    var cfHeight = 190, cfPadTop = 18, cfPadBottom = 52;
     var cfChartH = cfHeight - cfPadTop - cfPadBottom;
     var cfMaxIn = Math.max.apply(null, years.map(function(y) { return y.inflow + y.investmentGain; }));
     var cfMaxOut = Math.max.apply(null, years.map(function(y) { return y.outflow; }));
@@ -5981,23 +5981,40 @@ const App = {
       cfPathsHtml += '<path d="' + area.d + '" fill="' + area.color + '" fill-opacity="0.35" stroke="' + area.color + '" stroke-width="1" stroke-linejoin="round" stroke-opacity="0.7"/>';
     });
 
-    var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:130px;min-width:680px">' +
+    // 与上方走势图对齐的横轴刻度
+    var cfXAxis = '';
+    function drawCfXLabel(idx) {
+      var xPos = px(idx);
+      cfXAxis += '<line x1="' + xPos.toFixed(1) + '" y1="' + (cfHeight - cfPadBottom) + '" x2="' + xPos.toFixed(1) + '" y2="' + (cfHeight - cfPadBottom + 5) + '" stroke="#334155" stroke-width="1"/>';
+      cfXAxis += '<text x="' + xPos.toFixed(1) + '" y="' + (cfHeight - cfPadBottom + 18).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">' + years[idx].year + '年</text>';
+      cfXAxis += '<text x="' + xPos.toFixed(1) + '" y="' + (cfHeight - cfPadBottom + 30).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#334155">' + years[idx].age + '岁</text>';
+    }
+    for (var i = 0; i < years.length; i += xLabelInterval) drawCfXLabel(i);
+    if ((years.length - 1) % xLabelInterval !== 0) drawCfXLabel(years.length - 1);
+
+    var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:' + cfHeight + 'px;min-width:680px">' +
       cfGrid +
       '<line x1="' + padLeft + '" y1="' + cfpy(0).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(0).toFixed(1) + '" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>' +
+      '<line x1="' + padLeft + '" y1="' + (cfHeight - cfPadBottom) + '" x2="' + (width - padRight) + '" y2="' + (cfHeight - cfPadBottom) + '" stroke="#334155" stroke-width="1"/>' +
       cfPathsHtml +
-      '<text x="' + (width / 2).toFixed(1) + '" y="' + (cfHeight - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
+      cfXAxis +
+      '<text x="' + (padLeft + 4) + '" y="' + (cfPadTop - 4).toFixed(1) + '" text-anchor="start" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
       '</svg>';
 
-    // 堆积图图例
-    var cfLegend = '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;font-size:11px;line-height:1.4;">';
+    // 堆积图图例：收入、支出分两行
+    var cfLegend = '<div style="display:flex;flex-direction:column;gap:8px;align-items:center;font-size:11px;line-height:1.4;">';
+    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;">';
     cfLegend += '<span style="color:#64748b;font-weight:500;">收入：</span>';
     incomeLayers.forEach(function(l) {
       cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
     });
-    cfLegend += '<span style="color:#64748b;font-weight:500;margin-left:6px;">支出：</span>';
+    cfLegend += '</div>';
+    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;">';
+    cfLegend += '<span style="color:#64748b;font-weight:500;">支出：</span>';
     expenseLayers.forEach(function(l) {
       cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
     });
+    cfLegend += '</div>';
     cfLegend += '</div>';
 
     wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + cfLegend + '</div>';

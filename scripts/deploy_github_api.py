@@ -116,7 +116,11 @@ def main():
         ("docs/测试报告-v106.md", "docs/测试报告-v106.md", False),
         ("docs/测试报告-v107.md", "docs/测试报告-v107.md", False),
         ("docs/测试报告-v121.md", "docs/测试报告-v121.md", False),
+        ("docs/测试报告-v123.md", "docs/测试报告-v123.md", False),
         ("tests/loan_calc_tests.js", "tests/loan_calc_tests.js", False),
+        ("tests/run_tests.js", "tests/run_tests.js", False),
+        ("tests/integration_tests.js", "tests/integration_tests.js", False),
+        ("tests/smoke_test.js", "tests/smoke_test.js", False),
     ]
 
     # Build current tree
