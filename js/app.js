@@ -4677,12 +4677,13 @@ const App = {
   //   elapsed: 已还期数,
   //   total: 总期数,
   //   paidPrincipal: 已还本金,
-  //   remainingPrincipal: 剩余本金,
+  //   remainingPrincipal: 剩余本金（按原还款计划推算）,
   //   percent: 还款进度百分比,
-  //   monthlyPayment: 月供,
+  //   monthlyPayment: 当前月供（基于剩余本金与剩余期数重新计算）,
   //   nextPayDate: 下次还款日,
   //   monthsRemaining: 剩余期数,
-  //   totalInterest: 累计利息,
+  //   totalInterest: 已还累计利息,
+  //   remainingInterest: 剩余应还利息,
   //   isFinished: 是否已还清,
   //   basis: 计算依据描述字符串
   // }
@@ -4726,14 +4727,14 @@ const App = {
       return {
         elapsed: 0, total: 0, paidPrincipal: 0, remainingPrincipal: total,
         percent: 0, monthlyPayment: 0, nextPayDate: null, monthsRemaining: 0,
-        totalInterest: 0, isFinished: false, basis: '数据不完整'
+        totalInterest: 0, remainingInterest: 0, isFinished: false, basis: '数据不完整'
       };
     }
 
-    var monthly = this.calcMonthlyPayment(total, rate, months);
     var mr = rate / 100 / 12;
+    var principalPerMonth = total / months;
 
-    // 已还期数
+    // 已还期数（基于日期推算）
     var elapsed = 0;
     if (startDate) {
       if (today < startDate) {
@@ -4751,41 +4752,60 @@ const App = {
     var isFinished = elapsed >= months;
     var paidPrincipal = 0;
     var totalInterest = 0;
+    var remainingPrincipal = 0;
 
     if (mode === 'equal-principal') {
-      // 等额本金：每月本金固定 = total / months
-      var principalPerMonth = total / months;
+      // 等额本金：每月本金固定
       paidPrincipal = principalPerMonth * elapsed;
       if (isFinished) paidPrincipal = total;
-      // 累计利息 = mr * Σ(总-(i-1)*principalPerMonth) = mr * (months*total - principalPerMonth*elapsed*(elapsed-1)/2)
-      // 这里只算已还期数的累计利息
+      // 已还累计利息 = mr * Σ(总-(i-1)*principalPerMonth)
       var sumRemaining = 0;
       for (var i = 0; i < elapsed; i++) {
         sumRemaining += (total - i * principalPerMonth);
       }
       totalInterest = mr * sumRemaining;
+      remainingPrincipal = Math.max(0, total - paidPrincipal);
     } else {
-      // 等额本息：逐期推算剩余本金
+      // 等额本息：用原始月供逐期推算剩余本金
+      var origMonthly = this.calcMonthlyPayment(total, rate, months);
       var balance = total;
       for (var j = 0; j < elapsed; j++) {
         var interest = balance * mr;
-        var principalPart = monthly - interest;
+        var principalPart = origMonthly - interest;
         balance -= principalPart;
         if (balance < 0.01) balance = 0;
         paidPrincipal += principalPart;
         totalInterest += interest;
       }
       if (isFinished) paidPrincipal = total;
+      remainingPrincipal = Math.max(0, balance);
     }
 
-    var remainingPrincipal = Math.max(0, total - paidPrincipal);
     var percent = total > 0 ? (paidPrincipal / total * 100) : 0;
     var nextPayDate = startDate ? getNextPayDate(startDate, payDay, today) : null;
     var monthsRemaining = Math.max(0, months - elapsed);
 
+    // 基于剩余本金与剩余期数重新计算当前月供 / 剩余利息
+    var monthlyPayment = 0;
+    var remainingInterest = 0;
+    if (monthsRemaining > 0) {
+      if (mode === 'equal-principal') {
+        // 等额本金：当前月还款 = 固定本金 + 当前剩余本金产生的利息（逐月递减）
+        monthlyPayment = principalPerMonth + remainingPrincipal * mr;
+        // 剩余利息 = mr * Σ(remainingPrincipal - k*principalPerMonth), k=0..monthsRemaining-1
+        remainingInterest = mr * (monthsRemaining * remainingPrincipal -
+          principalPerMonth * monthsRemaining * (monthsRemaining - 1) / 2);
+      } else {
+        // 等额本息：用剩余本金和剩余期数重新计算月供
+        monthlyPayment = this.calcMonthlyPayment(remainingPrincipal, rate, monthsRemaining);
+        remainingInterest = monthlyPayment * monthsRemaining - remainingPrincipal;
+      }
+    }
+    if (remainingInterest < 0) remainingInterest = 0;
+
     var basis = term + '年' + (mode === 'equal-principal' ? '等额本金' : '等额本息') +
                 ' · 利率 ' + rate.toFixed(2) + '%' +
-                ' · ' + startStr + ' 起 · 每月 ' + payDay + ' 号';
+                ' · ' + startStr + ' 起 · 每月 ' + payDay + '号';
 
     return {
       elapsed: elapsed,
@@ -4793,10 +4813,11 @@ const App = {
       paidPrincipal: paidPrincipal,
       remainingPrincipal: remainingPrincipal,
       percent: percent,
-      monthlyPayment: monthly,
+      monthlyPayment: monthlyPayment,
       nextPayDate: nextPayDate,
       monthsRemaining: monthsRemaining,
       totalInterest: totalInterest,
+      remainingInterest: remainingInterest,
       isFinished: isFinished,
       basis: basis
     };
@@ -4872,6 +4893,7 @@ const App = {
       pHtml += '<div>利率: <b>' + totalSafe(loan.rate).toFixed(2) + '%</b>' + (loan.rateType ? " (" + loan.rateType + ")" : "") + '</div>';
       pHtml += '<div>月供: <b>' + self.formatMoney(prog.monthlyPayment) + '</b></div>';
       pHtml += '<div>剩余期数: <b>' + prog.monthsRemaining + '月</b> / ' + prog.total + '月</div>';
+      pHtml += '<div>剩余利息: <b class="text-warning">' + self.formatMoney(prog.remainingInterest) + '</b></div>';
       pHtml += '<div>期限: ' + (loan.startDate || "—") + ' → ' + (loan.endDate || "—") + '</div>';
       if (prog.nextPayDate) {
         pHtml += '<div>下次还款: ' + formatDate(prog.nextPayDate) + '</div>';
@@ -4881,7 +4903,7 @@ const App = {
       // 计算依据
       pHtml += '<div class="loan-card-basis">';
       if (isAuto) {
-        pHtml += '<span class="basis-icon">⚙️</span> 自动推算: ' + prog.basis + ' · 已还 ' + prog.elapsed + ' 期';
+        pHtml += '<span class="basis-icon">⚙️</span> 自动推算: ' + prog.basis + ' · 已还 ' + prog.elapsed + ' 期 · 剩余利息 ' + self.formatMoney(prog.remainingInterest).replace('¥', '') + ' 元';
       } else {
         pHtml += '<span class="basis-icon">✋</span> 手动输入: 数据未参与自动推算';
         // 显示保存按钮（仅手动模式）
@@ -5482,12 +5504,17 @@ const App = {
     var self = this;
 
     loans.forEach(function(l) {
+      // 优先用 calcLoanProgress 自动推算当前月供与剩余期数（基于等额本息/等额本金 + 剩余期数）
+      var prog = self.calcLoanProgress(l);
+      var monthly = prog.monthlyPayment || 0;
+      var remainingMonths = prog.monthsRemaining || 0;
+
+      // 兜底：如果 calcLoanProgress 未算出，再尝试 loan 对象上的手动字段
+      if (monthly <= 0) monthly = parseFloat(l.monthlyPayment) || 0;
+      if (remainingMonths <= 0) remainingMonths = parseInt(l.remainingMonths) || 0;
+
       var balance = parseFloat(l.balance) || 0;
       var rate = parseFloat(l.rate) || 0;
-      var monthly = parseFloat(l.monthlyPayment) || 0;
-      var remainingMonths = parseInt(l.remainingMonths) || 0;
-
-      // 未提供月供需估算
       if (monthly <= 0) {
         var total = parseFloat(l.total) || balance;
         var months = parseInt(l.months) || 240;
@@ -5498,18 +5525,10 @@ const App = {
           monthly = balance / 240;
         }
       }
-
-      // 未提供剩余期数时，根据 endDate 或余额估算
-      if (remainingMonths <= 0) {
-        if (l.endDate) {
-          var today = new Date();
-          var end = new Date(l.endDate);
-          remainingMonths = Math.max(0, Math.ceil((end - today) / (1000 * 60 * 60 * 24 * 30)));
-        } else if (balance > 0 && monthly > 0) {
-          remainingMonths = Math.ceil(balance / monthly);
-        } else {
-          remainingMonths = 240;
-        }
+      if (remainingMonths <= 0 && l.endDate) {
+        var today = new Date();
+        var end = new Date(l.endDate);
+        remainingMonths = Math.max(0, Math.ceil((end - today) / (1000 * 60 * 60 * 24 * 30)));
       }
 
       if (monthly <= 0 || remainingMonths <= 0) return;
