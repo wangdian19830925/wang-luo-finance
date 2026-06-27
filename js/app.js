@@ -2602,7 +2602,7 @@ const App = {
     if (target) target.classList.add("active");
     document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
     document.querySelectorAll(".bottom-nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
-    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", alerts:"通知管理", settings:"设置与数据同步" };
+    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", retirement:"退休计算", alerts:"通知管理", settings:"设置与数据同步" };
     document.getElementById("headerTitle").textContent = titles[page] || "家庭资产管理";
     // 非 Dashboard 页面显示返回按钮
     var homeBtn = document.getElementById("homeBtn");
@@ -2611,7 +2611,7 @@ const App = {
   },
 
   loadPageData(page) {
-    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), alerts:()=>this.loadAlertsPage(), settings:()=>this.onSettingsPageShow() };
+    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), retirement:()=>this.loadRetirementPage(), alerts:()=>this.loadAlertsPage(), settings:()=>this.onSettingsPageShow() };
     if (f[page]) f[page]();
   },
 
@@ -5092,6 +5092,413 @@ const App = {
         '</div>';
     });
     detailList.innerHTML = detailHtml;
+  },
+
+  // ── 退休计算 ──
+  // 基于当前资产，回答：今天能不能退休？还差多少钱？
+  _retirementCalcTimer: null,
+  _retirementParams: null,
+
+  // 基本养老保险（来自截图，成员2按相同）
+  RETIREMENT_PENSION: {
+    member1: { name: '王典', birthYear: 1983, gender: 'male', retireAge: 63, accountBalance: 456097.17, monthsPaid: 197, monthlyContribution: 3479 },
+    member2: { name: '配偶', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 456097.17, monthsPaid: 197, monthlyContribution: 3479 }
+  },
+
+  // 保险年金收入（以 Excel 领取核算为准，单位：元/年）
+  // 年龄 -> { annual, lumpSum }
+  RETIREMENT_INSURANCE_INCOME: (function() {
+    var map = {};
+    for (var age = 60; age <= 69; age++) { map[age] = { annual: 93115 }; }
+    map[69] = { annual: 93115, lumpSum: 208700 }; // 2052 年双赢两全一次性领取
+    for (var age = 70; age <= 79; age++) { map[age] = { annual: 93115 }; }
+    map[80] = { annual: 60000, lumpSum: 600000 }; // 80 岁重疾返还（60 万）+ 友未来继续
+    for (var age = 81; age <= 100; age++) { map[age] = { annual: 60000 }; }
+    return map;
+  })(),
+
+  // 初始化退休计算（30 秒延迟，降低同步负载）
+  scheduleRetirementCalculation() {
+    var self = this;
+    if (this._retirementCalcTimer) clearTimeout(this._retirementCalcTimer);
+    this._retirementCalcTimer = setTimeout(function() {
+      console.log('[退休计算] 30 秒延迟结束，开始计算');
+      self._retirementParams = self._loadRetirementParams();
+      self._retirementCache = self.calculateRetirement(self._retirementParams);
+      if (self.currentPage === 'retirement') {
+        self.renderRetirementPage();
+      }
+    }, 30000);
+  },
+
+  loadRetirementPage() {
+    var self = this;
+    // 恢复参数控件
+    this._retirementParams = this._loadRetirementParams();
+    this._bindRetirementInputs();
+
+    // 如果还没有缓存，立即计算一次（用户首次进入）
+    if (!this._retirementCache) {
+      this._retirementCache = this.calculateRetirement(this._retirementParams);
+    }
+    this.renderRetirementPage();
+
+    // 30 秒后基于最新数据重新计算（异步，不阻塞）
+    this.scheduleRetirementCalculation();
+  },
+
+  _loadRetirementParams() {
+    var defaults = { annualExpense: 20, annualEducation: 10, annualExtraIncome: 0, inflation: 3, investmentReturn: 2, lifeExpectancy: 90 };
+    try {
+      var saved = localStorage.getItem('fm_retirement_params');
+      if (saved) defaults = Object.assign(defaults, JSON.parse(saved));
+    } catch(e) {}
+    return defaults;
+  },
+
+  _saveRetirementParams(params) {
+    try {
+      localStorage.setItem('fm_retirement_params', JSON.stringify(params));
+    } catch(e) {}
+  },
+
+  _bindRetirementInputs() {
+    var self = this;
+    var inputs = {
+      annualExpense: 'retirementParamAnnualExpense',
+      annualEducation: 'retirementParamAnnualEducation',
+      annualExtraIncome: 'retirementParamAnnualExtraIncome',
+      inflation: 'retirementParamInflation',
+      investmentReturn: 'retirementParamReturn',
+      lifeExpectancy: 'retirementParamLifeExpectancy'
+    };
+
+    function updateLabel(key, value, unit) {
+      var el = document.getElementById(inputs[key] + 'Value');
+      if (el) el.textContent = value + ' ' + unit;
+    }
+
+    Object.keys(inputs).forEach(function(key) {
+      var el = document.getElementById(inputs[key]);
+      if (!el) return;
+      el.value = self._retirementParams[key];
+      var unit = key === 'inflation' || key === 'investmentReturn' ? '%' : (key === 'lifeExpectancy' ? '岁' : '万');
+      updateLabel(key, el.value, unit);
+      el.addEventListener('input', function() {
+        var val = parseFloat(el.value);
+        if (isNaN(val)) return;
+        self._retirementParams[key] = val;
+        updateLabel(key, val, unit);
+        self._saveRetirementParams(self._retirementParams);
+        self._retirementCache = self.calculateRetirement(self._retirementParams);
+        self.renderRetirementPage();
+      });
+    });
+  },
+
+  // 计算今天退休的可行性
+  calculateRetirement(params) {
+    var today = new Date(); today.setHours(0,0,0,0);
+    var currentYear = today.getFullYear();
+    var currentAge = 43; // 1983 年生，2026 年
+
+    // 1. 今天可用资产（只取现金+股票+基金，RSU/年金/保险今天均锁定）
+    var cash = this._sumCashAccounts();
+    var stocks = this._sumStocksCNY();
+    var funds = this._sumFundsCNY();
+    var liquidAssets = cash + stocks + funds;
+
+    // 2. 立即还房贷
+    var loans = Storage.get(Storage.keys.loans);
+    var mortgagePayoff = 0;
+    loans.forEach(function(l) { mortgagePayoff += parseFloat(l.balance || 0); });
+
+    var initialCash = liquidAssets - mortgagePayoff;
+
+    // 3. 未来保费（按缴费区间，从今年起算）
+    var premiumSchedule = this._buildPremiumSchedule(currentYear, params.lifeExpectancy);
+
+    // 4. 基本养老金预测
+    var pensionSchedule = this._buildPensionSchedule(currentYear, params.lifeExpectancy);
+
+    // 5. 保险年金收入
+    var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, params.lifeExpectancy);
+
+    // 6. 逐年模拟
+    var years = [];
+    var balance = initialCash;
+    var runOutYear = null;
+    var totalGapToEnd = 0;
+    var educationYears = Math.max(0, 2035 - currentYear + 1); // 2026-2035 含头含尾
+
+    for (var year = currentYear; year <= 2050 + params.lifeExpectancy - 90; year++) {
+      var age = currentAge + (year - currentYear);
+      var premium = premiumSchedule[year] || 0;
+      var education = (year <= currentYear + educationYears - 1) ? (params.annualEducation * 10000) : 0;
+      var expense = (params.annualExpense * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
+      var extraIncome = (params.annualExtraIncome * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
+      var pension = pensionSchedule[year] || 0;
+      var insurance = insuranceSchedule[year] || 0;
+      var outflow = premium + education + expense;
+      var inflow = extraIncome + pension + insurance;
+      var netFlow = inflow - outflow;
+      var endBalance = balance * (1 + params.investmentReturn / 100) + netFlow;
+
+      years.push({ year: year, age: age, startBalance: balance, endBalance: endBalance, inflow: inflow, outflow: outflow, premium: premium, education: education, expense: expense, pension: pension, insurance: insurance });
+
+      if (runOutYear === null && endBalance < 0) {
+        runOutYear = year;
+      }
+      if (endBalance < 0) {
+        totalGapToEnd += Math.abs(endBalance);
+      }
+      balance = endBalance;
+    }
+
+    // 7. 缺口计算（使资金刚好撑到寿命终点的现值）
+    var canRetire = balance >= 0 && years[years.length - 1].endBalance >= 0;
+    var shortfall = 0;
+    if (!canRetire) {
+      var last = years[years.length - 1];
+      var r = params.investmentReturn / 100;
+      var n = last.year - currentYear;
+      shortfall = Math.abs(last.endBalance) / Math.pow(1 + r, n);
+    }
+
+    return {
+      today: today,
+      currentYear: currentYear,
+      currentAge: currentAge,
+      liquidAssets: liquidAssets,
+      mortgagePayoff: mortgagePayoff,
+      initialCash: initialCash,
+      years: years,
+      runOutYear: runOutYear,
+      shortfall: shortfall,
+      canRetire: canRetire,
+      params: params
+    };
+  },
+
+  _sumCashAccounts() {
+    var accounts = Storage.get(Storage.keys.cashAccounts);
+    return accounts.reduce(function(sum, a) { return sum + (parseFloat(a.balance) || 0); }, 0);
+  },
+
+  _sumStocksCNY() {
+    var rates = this._getFxRates();
+    var stocks = Storage.get(Storage.keys.stocks);
+    var total = 0;
+    var self = this;
+    stocks.forEach(function(s) {
+      var rate = 1;
+      if (s.currency === 'USD') rate = rates.USDCNY;
+      else if (s.currency === 'HKD') rate = rates.HKDCNY;
+      total += (parseFloat(s.currentPrice || s.price || 0) || 0) * (parseInt(s.shares) || 0) * rate;
+    });
+    return total;
+  },
+
+  _sumFundsCNY() {
+    var funds = Storage.get(Storage.keys.funds);
+    return funds.reduce(function(sum, f) { return sum + (parseFloat(f.holdValue || f.marketValue || 0) || 0); }, 0);
+  },
+
+  _buildPremiumSchedule(startYear, lifeExpectancy) {
+    var schedule = {};
+    var endYear = 2050 + lifeExpectancy - 90; // 映射到 90 岁
+    var insurance = Storage.get(Storage.keys.insurance);
+    var self = this;
+
+    insurance.forEach(function(p) {
+      var years = self._parsePayPeriodYears(p.payPeriod);
+      if (!years || years.length === 0) {
+        // 每年单独购买：持续计入
+        if (p.payPeriod && p.payPeriod.indexOf('每年') >= 0) {
+          for (var y = startYear; y <= endYear; y++) {
+            schedule[y] = (schedule[y] || 0) + (parseFloat(p.premium) || 0);
+          }
+        }
+        return;
+      }
+      // 有明确缴费区间
+      years.forEach(function(y) {
+        if (y >= startYear && y <= endYear) {
+          schedule[y] = (schedule[y] || 0) + (parseFloat(p.premium) || 0);
+        }
+      });
+    });
+    return schedule;
+  },
+
+  _parsePayPeriodYears(payPeriod) {
+    if (!payPeriod) return null;
+    // 匹配 "2023-2032 · 10年"
+    var m = payPeriod.match(/(\d{4})\s*-\s*(\d{4})/);
+    if (!m) return null;
+    var start = parseInt(m[1]);
+    var end = parseInt(m[2]);
+    var years = [];
+    for (var y = start; y <= end; y++) years.push(y);
+    return years;
+  },
+
+  _buildPensionSchedule(startYear, lifeExpectancy) {
+    var schedule = {};
+    var self = this;
+    Object.keys(this.RETIREMENT_PENSION).forEach(function(k) {
+      var p = self.RETIREMENT_PENSION[k];
+      var retireYear = p.birthYear + p.retireAge;
+      // 退休时个人账户余额（停止缴费，继续投资增值）
+      var balance = p.accountBalance;
+      for (var y = startYear; y < retireYear; y++) {
+        balance = balance * 1.02 + (p.monthlyContribution * 12);
+      }
+      // 计发月数
+      var pm = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 }[p.retireAge] || 117;
+      var personalMonthly = balance / pm;
+      // 基础养老金（简化：社平工资 12000，缴费指数 1.5，年限 30 年）
+      var baseMonthly = 12000 * (1 + 1.5) / 2 * 30 * 0.01;
+      var monthly = personalMonthly + baseMonthly;
+      var endYear = 2050 + lifeExpectancy - 90;
+      for (var y = retireYear; y <= endYear; y++) {
+        schedule[y] = (schedule[y] || 0) + (monthly * 12);
+      }
+    });
+    return schedule;
+  },
+
+  _buildInsuranceIncomeSchedule(startYear, lifeExpectancy) {
+    var schedule = {};
+    var endYear = 2050 + lifeExpectancy - 90;
+    var self = this;
+    for (var year = startYear; year <= endYear; year++) {
+      var age = 43 + (year - startYear);
+      var income = self.RETIREMENT_INSURANCE_INCOME[age];
+      if (income) {
+        schedule[year] = (income.annual || 0) + (income.lumpSum || 0);
+      }
+    }
+    return schedule;
+  },
+
+  renderRetirementPage() {
+    var result = this._retirementCache;
+    if (!result) return;
+    var self = this;
+
+    // 1. 结论卡片
+    var conclusion = document.getElementById('retirementConclusion');
+    if (conclusion) {
+      if (result.canRetire) {
+        conclusion.innerHTML = '<div class="retirement-conclusion-success">今天可以退休，🎉🎉🎉</div>';
+      } else {
+        var gapText = result.shortfall > 0 ? '还差 ' + self.formatMoney(result.shortfall).replace('¥', '') + ' 元' : '资金将在 ' + result.runOutYear + ' 年用光';
+        conclusion.innerHTML = '<div class="retirement-conclusion-fail">今天不能退休，' + gapText + '</div>';
+      }
+    }
+
+    // 2. 计算明细
+    var grid = document.getElementById('retirementSummaryGrid');
+    if (grid) {
+      var items = [
+        { label: '今天可用资产（现金+股票+基金）', value: self.formatMoney(result.liquidAssets), cls: 'positive' },
+        { label: '立即还清房贷', value: '-' + self.formatMoney(result.mortgagePayoff).replace('¥', '¥'), cls: 'negative' },
+        { label: '剩余可投资金', value: self.formatMoney(result.initialCash), cls: result.initialCash >= 0 ? 'positive' : 'negative' },
+        { label: '首年保费支出', value: self.formatMoney((result.years[0] && result.years[0].premium) || 0), cls: 'negative' },
+        { label: '首年生活消费', value: self.formatMoney((result.years[0] && result.years[0].expense) || 0), cls: 'negative' },
+        { label: '首年子女教育', value: self.formatMoney((result.years[0] && result.years[0].education) || 0), cls: 'negative' }
+      ];
+      if (!result.canRetire) {
+        items.push({ label: '资金用光年份', value: result.runOutYear ? (result.runOutYear + ' 年') : '未耗尽', cls: 'danger' });
+        items.push({ label: '当前缺口（现值）', value: self.formatMoney(result.shortfall), cls: 'danger' });
+      }
+      grid.innerHTML = items.map(function(it) {
+        return '<div class="retirement-summary-item ' + it.cls + '"><div class="retirement-summary-label">' + self.escapeHtml(it.label) + '</div><div class="retirement-summary-value">' + it.value + '</div></div>';
+      }).join('');
+    }
+
+    // 3. 资金曲线
+    this.renderRetirementChart(result);
+
+    // 4. 假设说明
+    var assumptions = document.getElementById('retirementAssumptions');
+    if (assumptions) {
+      assumptions.innerHTML = '<div class="retirement-assumption-title">计算假设</div>' +
+        '<div class="retirement-assumption-list">' +
+        '<span>通胀率 ' + result.params.inflation + '%</span>' +
+        '<span>投资年化收益 ' + result.params.investmentReturn + '%</span>' +
+        '<span>预计寿命 ' + result.params.lifeExpectancy + ' 岁</span>' +
+        '<span>王典 63 岁领养老金</span>' +
+        '<span>配偶 58 岁领养老金</span>' +
+        '<span>保险年金 60 岁起领</span>' +
+        '<span>RSU/年金/保险今日不取</span>' +
+        '</div>';
+    }
+  },
+
+  renderRetirementChart(result) {
+    var wrap = document.getElementById('retirementChartWrap');
+    var note = document.getElementById('retirementChartNote');
+    if (!wrap) return;
+
+    var years = result.years;
+    if (years.length === 0) {
+      wrap.innerHTML = '<div class="empty-tip">暂无数据</div>';
+      return;
+    }
+
+    var values = years.map(function(y) { return y.endBalance; });
+    var maxVal = Math.max.apply(null, values);
+    var minVal = Math.min.apply(null, values);
+    var range = Math.max(maxVal, Math.abs(minVal)) || 1;
+    var zeroY = maxVal / range; // 0 在 SVG 中的比例位置
+
+    var width = 680, height = 240, padLeft = 50, padRight = 20, padTop = 20, padBottom = 40;
+    var chartW = width - padLeft - padRight;
+    var chartH = height - padTop - padBottom;
+
+    var xStep = chartW / (years.length - 1);
+    function px(i) { return padLeft + i * xStep; }
+    function py(v) { return padTop + chartH * (1 - v / range); }
+
+    var pathD = 'M' + px(0).toFixed(1) + ' ' + py(years[0].endBalance).toFixed(1);
+    for (var i = 1; i < years.length; i++) {
+      pathD += ' L' + px(i).toFixed(1) + ' ' + py(years[i].endBalance).toFixed(1);
+    }
+
+    var zeroLineY = py(0).toFixed(1);
+    var areaD = pathD + ' L' + px(years.length - 1).toFixed(1) + ' ' + zeroLineY + ' L' + px(0).toFixed(1) + ' ' + zeroLineY + ' Z';
+
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="retirement-chart-svg">' +
+      '<defs>' +
+      '<linearGradient id="retirementArea" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#4ade80" stop-opacity="0.25"/>' +
+      '<stop offset="' + (zeroY * 100).toFixed(1) + '%" stop-color="#4ade80" stop-opacity="0.05"/>' +
+      '<stop offset="' + (zeroY * 100).toFixed(1) + '%" stop-color="#ef4444" stop-opacity="0.05"/>' +
+      '<stop offset="100%" stop-color="#ef4444" stop-opacity="0.2"/>' +
+      '</linearGradient>' +
+      '</defs>' +
+      '<line x1="' + padLeft + '" y1="' + zeroLineY + '" x2="' + (width - padRight) + '" y2="' + zeroLineY + '" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="4 4"/>' +
+      '<path d="' + areaD + '" fill="url(#retirementArea)"/>' +
+      '<path d="' + pathD + '" fill="none" stroke="#4ade80" stroke-width="2.5"/>' +
+      '<line x1="' + (width - padRight) + '" y1="' + padTop + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="rgba(255,255,255,0.06)"/>' +
+      '</svg>';
+
+    wrap.innerHTML = svg;
+
+    if (note) {
+      var keyMilestones = [];
+      if (result.runOutYear) {
+        keyMilestones.push('⚠️ 资金将在 <b>' + result.runOutYear + ' 年</b> 用光');
+      }
+      keyMilestones.push('60 岁开始领取保险年金');
+      keyMilestones.push('63 岁开始领取企业养老金');
+      if (result.runOutYear && result.runOutYear < 2043) {
+        keyMilestones.push('等不到开始领取退休金/保险金的那一天');
+      }
+      note.innerHTML = keyMilestones.join(' · ');
+    }
   },
 
   // ── 通知管理（iOS 风格日历） ──
