@@ -2999,6 +2999,274 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* ============================================
+   退休计算页面
+   ============================================ */
+
+.retirement-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--card-padding);
+  margin-bottom: var(--section-gap);
+  box-shadow: var(--shadow);
+}
+
+.retirement-conclusion {
+  text-align: center;
+  padding: 28px 20px;
+}
+
+.retirement-conclusion-loading {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+.retirement-conclusion-success {
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.retirement-conclusion-fail {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.retirement-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.retirement-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.retirement-summary-item {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  border: 1px solid var(--border);
+}
+
+.retirement-summary-item.positive {
+  border-left: 3px solid var(--accent);
+}
+
+.retirement-summary-item.negative {
+  border-left: 3px solid var(--danger);
+}
+
+.retirement-summary-item.danger {
+  border-left: 3px solid #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.retirement-summary-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.retirement-summary-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.retirement-summary-item.positive .retirement-summary-value {
+  color: var(--accent);
+}
+
+.retirement-summary-item.negative .retirement-summary-value {
+  color: var(--danger);
+}
+
+.retirement-summary-item.danger .retirement-summary-value {
+  color: #ef4444;
+}
+
+.retirement-chart-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.retirement-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.retirement-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.retirement-chart-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.retirement-chart-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  padding: 10px;
+}
+
+.retirement-chart-svg {
+  width: 100%;
+  min-width: 640px;
+  height: 240px;
+  display: block;
+}
+
+.retirement-chart-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.retirement-assumptions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.retirement-assumption-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.retirement-assumption-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.retirement-assumption-list span {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+
+.retirement-param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.retirement-param-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retirement-param-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.retirement-param-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.retirement-param-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  outline: none;
+}
+
+.retirement-param-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
+}
+
+.retirement-param-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
+}
+
+.retirement-param-tip {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .retirement-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .retirement-conclusion-success,
+  .retirement-conclusion-fail {
+    font-size: 18px;
+  }
+
+  .retirement-chart-svg {
+    min-width: 560px;
+    height: 200px;
+  }
+
+  .retirement-chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* ============================================
    余额编辑弹窗
    ============================================ */
 
