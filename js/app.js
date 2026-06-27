@@ -5257,6 +5257,7 @@ const App = {
     var today = new Date(); today.setHours(0,0,0,0);
     var currentYear = today.getFullYear();
     var currentAge = 43; // 1983 年生，2026 年
+    var endYear = currentYear + (params.lifeExpectancy - currentAge); // 模拟到预期寿命当年
 
     // 1. 今天可用资产（只取现金+股票+基金，RSU/年金/保险今天均锁定）
     var cash = this._sumCashAccounts();
@@ -5270,21 +5271,21 @@ const App = {
     loans.forEach(function(l) { mortgagePayoff += parseFloat(l.balance || 0); });
     var mortgagePayoffMode = params.mortgagePayoffMode || 'lump';
     var mortgagePaymentSchedule = (mortgagePayoffMode === 'monthly')
-      ? this._buildMortgagePaymentSchedule(currentYear, params.lifeExpectancy)
+      ? this._buildMortgagePaymentSchedule(currentYear, endYear)
       : {};
     var initialCash = liquidAssets - (mortgagePayoffMode === 'lump' ? mortgagePayoff : 0);
 
     // 3. 未来保费（按缴费区间，从今年起算）
-    var premiumSchedule = this._buildPremiumSchedule(currentYear, params.lifeExpectancy);
+    var premiumSchedule = this._buildPremiumSchedule(currentYear, endYear);
 
     // 4. 基本养老金预测（使用用户可调参数）
-    var pensionSchedule = this._buildPensionSchedule(currentYear, params.lifeExpectancy, params);
+    var pensionSchedule = this._buildPensionSchedule(currentYear, endYear, params);
 
     // 5. 保险年金收入
-    var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, params.lifeExpectancy);
+    var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, endYear);
 
     // 6. 企业年金收入（仅王典）
-    var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, params.lifeExpectancy);
+    var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, endYear);
 
     // 7. 逐年模拟
     var years = [];
@@ -5292,7 +5293,6 @@ const App = {
     var runOutYear = null;
     var totalGapToEnd = 0;
     var educationYears = Math.max(0, params.educationEndYear - currentYear); // 从今年到教育结束年份
-    var endYear = currentYear + (params.lifeExpectancy - currentAge); // 模拟到预期寿命当年
 
     for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
@@ -5371,9 +5371,8 @@ const App = {
     return funds.reduce(function(sum, f) { return sum + (parseFloat(f.holdValue || f.marketValue || 0) || 0); }, 0);
   },
 
-  _buildPremiumSchedule(startYear, lifeExpectancy) {
+  _buildPremiumSchedule(startYear, endYear) {
     var schedule = {};
-    var endYear = 2050 + lifeExpectancy - 90; // 映射到 90 岁
     var insurance = Storage.get(Storage.keys.insurance);
     var self = this;
 
@@ -5410,14 +5409,13 @@ const App = {
     return years;
   },
 
-  _buildPensionSchedule(startYear, lifeExpectancy, params) {
+  _buildPensionSchedule(startYear, endYear, params) {
     var schedule = {};
     var birthYear = 1983; // 两位成员均按 1983 年生处理
     var members = [
       { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge },
       { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge }
     ];
-    var endYear = 2050 + lifeExpectancy - 90;
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
     // 已累计缴费年限（截图：197 个月 ≈ 16.4 年，不再作为可调变量）
     var yearsPaidFixed = 197 / 12;
@@ -5443,9 +5441,8 @@ const App = {
     return schedule;
   },
 
-  _buildInsuranceIncomeSchedule(startYear, lifeExpectancy) {
+  _buildInsuranceIncomeSchedule(startYear, endYear) {
     var schedule = {};
-    var endYear = 2050 + lifeExpectancy - 90;
     var self = this;
     for (var year = startYear; year <= endYear; year++) {
       var age = 43 + (year - startYear);
@@ -5458,9 +5455,8 @@ const App = {
   },
 
   // 企业年金领取收入（仅王典，Rowen 无）
-  _buildEnterpriseAnnuitySchedule(startYear, lifeExpectancy) {
+  _buildEnterpriseAnnuitySchedule(startYear, endYear) {
     var schedule = {};
-    var endYear = 2050 + lifeExpectancy - 90;
     var annuities = Storage.get(Storage.keys.annuities);
     if (!annuities || annuities.length === 0) return schedule;
 
@@ -5500,9 +5496,8 @@ const App = {
   },
 
   // 房贷按月还款支出表
-  _buildMortgagePaymentSchedule(startYear, lifeExpectancy) {
+  _buildMortgagePaymentSchedule(startYear, endYear) {
     var schedule = {};
-    var endYear = 2050 + lifeExpectancy - 90;
     var loans = Storage.get(Storage.keys.loans);
     var self = this;
 
