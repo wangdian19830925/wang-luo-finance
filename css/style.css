@@ -3117,6 +3117,61 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   color: var(--text-secondary);
 }
 
+.retirement-detail-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.retirement-detail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.retirement-detail-panel {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  max-height: 500px;
+  overflow-y: auto;
+}
+.retirement-detail-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+.retirement-detail-panel th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.retirement-detail-panel td {
+  padding: 5px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+.retirement-detail-panel .detail-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 12px 0 6px 0;
+}
+.retirement-detail-panel .detail-subtotal {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .retirement-chart-legend {
   display: flex;
   align-items: center;

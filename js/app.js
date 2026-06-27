@@ -5265,6 +5265,13 @@ const App = {
     var funds = this._sumFundsCNY();
     var liquidAssets = cash + stocks + funds;
 
+    // 调试：记录详细资产构成
+    var debug_assetBreakdown = {
+      cash: { total: cash, accounts: Storage.get(Storage.keys.cashAccounts) },
+      stocks: { total: stocks, items: Storage.get(Storage.keys.stocks), fxRates: this._getFxRates() },
+      funds: { total: funds, items: Storage.get(Storage.keys.funds) }
+    };
+
     // 2. 房贷处理方式
     var loans = Storage.get(Storage.keys.loans);
     var mortgagePayoff = 0;
@@ -5343,7 +5350,17 @@ const App = {
       runOutYear: runOutYear,
       shortfall: shortfall,
       canRetire: canRetire,
-      params: params
+      params: params,
+      // 调试数据：详细资产和收入构成
+      debug: {
+        assetBreakdown: debug_assetBreakdown,
+        fxRates: this._getFxRates(),
+        premiumSchedule: premiumSchedule,
+        pensionSchedule: pensionSchedule,
+        insuranceSchedule: insuranceSchedule,
+        enterpriseAnnuitySchedule: enterpriseAnnuitySchedule,
+        mortgagePaymentSchedule: mortgagePaymentSchedule,
+      }
     };
   },
 
@@ -5595,6 +5612,31 @@ const App = {
     var wrap = document.getElementById('retirementChartWrap');
     var note = document.getElementById('retirementChartNote');
     if (!wrap) return;
+
+    // 调试：打印详细数据到控制台
+    if (result && result.debug) {
+      console.log('%c[退休计算] 详细数据', 'font-weight:bold;font-size:14px;color:#3b82f6;');
+      console.log('[资产] 现金: ¥' + (result.debug.assetBreakdown.cash.total/10000).toFixed(2) + '万');
+      console.log('[资产] 股票:', result.debug.assetBreakdown.stocks.items.map(function(s) {
+        var rate = 1;
+        if (s.currency === 'USD') rate = result.debug.fxRates.USDCNY;
+        else if (s.currency === 'HKD') rate = result.debug.fxRates.HKDCNY;
+        var marketValue = (parseFloat(s.currentPrice) || 0) * (parseInt(s.shares) || 0) * rate;
+        return s.code + ' ' + s.name + ': ' + s.shares + '股 × ¥' + parseFloat(s.currentPrice || 0).toFixed(2) + ' = ¥' + (marketValue/10000).toFixed(2) + '万';
+      }));
+      console.log('[资产] 基金合计: ¥' + (result.debug.assetBreakdown.funds.total/10000).toFixed(2) + '万');
+      console.log('[汇率] USD/CNY:', result.debug.fxRates.USDCNY, 'HKD/CNY:', result.debug.fxRates.HKDCNY);
+      console.log('[参数] 投资年化收益:', result.params.investmentReturn + '%', '通货膨胀:', result.params.inflation + '%');
+      // 打印未来收入摘要
+      var pensionYears = Object.keys(result.debug.pensionSchedule).filter(function(y) { return result.debug.pensionSchedule[y] > 0; });
+      if (pensionYears.length > 0) {
+        console.log('[养老金] 开始年份:', Math.min.apply(null, pensionYears), '首年金额: ¥' + (result.debug.pensionSchedule[pensionYears[0]]/10000).toFixed(2) + '万');
+      }
+      var insuranceYears = Object.keys(result.debug.insuranceSchedule).filter(function(y) { return result.debug.insuranceSchedule[y] > 0; });
+      if (insuranceYears.length > 0) {
+        console.log('[保险年金] 开始年份:', Math.min.apply(null, insuranceYears), '首年金额: ¥' + (result.debug.insuranceSchedule[insuranceYears[0]]/10000).toFixed(2) + '万');
+      }
+    }
 
     // 1) 只画到预期寿命对应的年份
     var allYears = result.years;

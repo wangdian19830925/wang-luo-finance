@@ -412,7 +412,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v108'
+      clientVersion: 'v109'
     };
   },
 
