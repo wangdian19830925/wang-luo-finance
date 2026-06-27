@@ -110,6 +110,7 @@ def main():
         ("docs/测试报告-v99.md", "docs/测试报告-v99.md", False),
         ("docs/测试报告-v100.md", "docs/测试报告-v100.md", False),
         ("docs/测试报告-v101.md", "docs/测试报告-v101.md", False),
+        ("docs/测试报告-v102.md", "docs/测试报告-v102.md", False),
         ("tests/loan_calc_tests.js", "tests/loan_calc_tests.js", False),
     ]
 

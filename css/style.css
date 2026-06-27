@@ -3271,6 +3271,26 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   justify-content: center;
 }
 
+/* 并排参数：两个 slider 左右并列，每个 slider 占约一半宽度 */
+.retirement-param-inline-pair {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.retirement-param-inline-pair .retirement-param-mini {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.retirement-param-inline-pair .retirement-param-range {
+  margin-top: 0;
+}
+
 .retirement-param-mini {
   display: flex;
   flex-direction: column;
