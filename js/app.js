@@ -5387,6 +5387,13 @@ const App = {
       var r = params.investmentReturn / 100;
       var n = runOutYear - currentYear;
       shortfall = Math.abs(runOutYearData.endBalance) / Math.pow(1 + r, n);
+      // 调试：打印缺口计算详情
+      console.log('[退休计算] 缺口计算详情:');
+      console.log('  耗尽年份:', runOutYear, '（距今年数 n =', n, '年）');
+      console.log('  耗尽年份期末余额:', runOutYearData.endBalance.toFixed(2));
+      console.log('  年化收益率 r:', (r * 100).toFixed(1) + '%');
+      console.log('  折现因子 (1+r)^n:', Math.pow(1 + r, n).toFixed(4));
+      console.log('  缺口现值 = |' + runOutYearData.endBalance.toFixed(2) + '| / ' + Math.pow(1 + r, n).toFixed(4) + ' =', shortfall.toFixed(2));
     }
 
     return {
