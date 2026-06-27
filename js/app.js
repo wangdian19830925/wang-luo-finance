@@ -5131,11 +5131,14 @@ const App = {
   // 年龄 -> { annual, lumpSum }
   RETIREMENT_INSURANCE_INCOME: (function() {
     var map = {};
-    for (var age = 60; age <= 69; age++) { map[age] = { annual: 93115 }; }
-    map[69] = { annual: 93115, lumpSum: 208700 }; // 2052 年双赢两全一次性领取
-    for (var age = 70; age <= 79; age++) { map[age] = { annual: 93115 }; }
-    map[80] = { annual: 60000, lumpSum: 600000 }; // 80 岁重疾返还（60 万）+ 友未来继续
-    for (var age = 81; age <= 100; age++) { map[age] = { annual: 60000 }; }
+    // 60-80岁：友享年年20551 + 友未来×2共60000 + 悦享年12564 = 93115/年
+    for (var age = 60; age <= 80; age++) { map[age] = { annual: 93115 }; }
+    // 69岁（2052年）加双赢两全一次性领取
+    map[69] = { annual: 93115, lumpSum: 208700 }; // 104400+104300
+    // 81-85岁：友享年年和悦享年已结束，只剩友未来×2 = 60000/年
+    for (var age = 81; age <= 85; age++) { map[age] = { annual: 60000 }; }
+    // 86岁及以上：友未来也结束，无确定年金收入
+    for (var age = 86; age <= 100; age++) { map[age] = { annual: 0 }; }
     return map;
   })(),
 
@@ -5294,7 +5297,15 @@ const App = {
     // 6. 企业年金收入（仅王典）
     var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, endYear);
 
-    // 7. 逐年模拟
+    // 7. 创赢未来万能险账户（两份，保底2%收益，60岁起可领取）
+    // 数据来源：Excel"领取核算"sheet，列U(典) + 列V(静)，60岁时合计约174万
+    var universalInsuranceBalance = 0;
+    var universalInsuranceWithdrawn = 0;
+    var UNIVERSAL_INSURANCE_START_AGE = 60;
+    // 60岁时的账户余额（来自Excel领取核算sheet，U+V列）
+    var universalBalanceAt60 = 695693.05 + 1045781.41; // 1741474.46 元
+
+    // 8. 逐年模拟
     var years = [];
     var balance = initialCash;
     var runOutYear = null;
@@ -5303,6 +5314,14 @@ const App = {
 
     for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
+
+      // 创赢未来万能险：60岁起初始化余额，之后每年按2%复利
+      if (age === UNIVERSAL_INSURANCE_START_AGE) {
+        universalInsuranceBalance = universalBalanceAt60;
+      } else if (age > UNIVERSAL_INSURANCE_START_AGE) {
+        universalInsuranceBalance = universalInsuranceBalance * 1.02;
+      }
+
       var premium = premiumSchedule[year] || 0;
       var mortgage = mortgagePaymentSchedule[year] || 0;
       var education = (year <= currentYear + educationYears - 1) ? (params.annualEducation * 10000) : 0;
@@ -5316,7 +5335,23 @@ const App = {
       var netFlow = inflow - outflow;
       var endBalance = balance * (1 + params.investmentReturn / 100) + netFlow;
 
-      years.push({ year: year, age: age, startBalance: balance, endBalance: endBalance, inflow: inflow, outflow: outflow, premium: premium, mortgage: mortgage, education: education, expense: expense, pension: pension, insurance: insurance, enterpriseAnnuity: enterpriseAnnuity });
+      // 创赢未来领取策略：当年其他收益不能满足支出时，从万能险账户领取补足
+      var universalWithdrawal = 0;
+      if (endBalance < 0 && universalInsuranceBalance > 0) {
+        universalWithdrawal = Math.min(-endBalance, universalInsuranceBalance);
+        universalInsuranceBalance -= universalWithdrawal;
+        universalInsuranceWithdrawn += universalWithdrawal;
+        endBalance += universalWithdrawal;
+      }
+
+      years.push({
+        year: year, age: age, startBalance: balance, endBalance: endBalance,
+        inflow: inflow, outflow: outflow, premium: premium, mortgage: mortgage,
+        education: education, expense: expense, pension: pension, insurance: insurance,
+        enterpriseAnnuity: enterpriseAnnuity,
+        universalWithdrawal: universalWithdrawal,
+        universalInsuranceBalance: universalInsuranceBalance
+      });
 
       if (runOutYear === null && endBalance < 0) {
         runOutYear = year;
