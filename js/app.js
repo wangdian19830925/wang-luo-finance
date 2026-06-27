@@ -5292,8 +5292,9 @@ const App = {
     var runOutYear = null;
     var totalGapToEnd = 0;
     var educationYears = Math.max(0, params.educationEndYear - currentYear); // 从今年到教育结束年份
+    var endYear = currentYear + (params.lifeExpectancy - currentAge); // 模拟到预期寿命当年
 
-    for (var year = currentYear; year <= 2050 + params.lifeExpectancy - 90; year++) {
+    for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
       var premium = premiumSchedule[year] || 0;
       var mortgage = mortgagePaymentSchedule[year] || 0;
@@ -5666,13 +5667,15 @@ const App = {
 
     // 5) 关键事件虚线标注 — 扁平黑暗风格
     var milestones = '';
-    function addMilestone(age, label, color, top, fontSize) {
+    function addMilestone(age, label, color, top, fontSize, yOffset) {
       fontSize = fontSize || 10;
+      yOffset = yOffset || 0;
       var idx = years.findIndex(function(y) { return y.age === age; });
       if (idx < 0) return;
       var mx = px(idx);
       milestones += '<line x1="' + mx.toFixed(1) + '" y1="' + padTop + '" x2="' + mx.toFixed(1) + '" y2="' + (height - padBottom) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.30"/>';
-      milestones += '<text x="' + mx.toFixed(1) + '" y="' + (top ? padTop + 14 : height - padBottom - 8).toFixed(1) + '" text-anchor="middle" font-size="' + fontSize + '" fill="' + color + '" font-weight="500">' + label + '</text>';
+      var textY = top ? (padTop + 14 + yOffset) : (height - padBottom - 8);
+      milestones += '<text x="' + mx.toFixed(1) + '" y="' + textY.toFixed(1) + '" text-anchor="middle" font-size="' + fontSize + '" fill="' + color + '" font-weight="500">' + label + '</text>';
     }
     var m1Age = result.params.pensionMember1RetireAge || 63;
     var m2Age = result.params.pensionMember2RetireAge || 58;
@@ -5680,13 +5683,11 @@ const App = {
     var eduEntry = result.years.find(function(y) { return y.year === eduEndYear; });
     var eduEndAge = eduEntry ? eduEntry.age : 43 + (eduEndYear - 2026);
 
-    // 顶部一行：保险年金 + Rowen退休 + 王典退休（扁平化小字，同行）
-    addMilestone(60, '保险年金', '#f59e0b', true, 9);
-    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);
-    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);
-
-    // 教育支出结束虚线（底部）
-    addMilestone(eduEndAge, '教育结束', '#a78bfa', false, 9);
+    // 顶部：关键事件标注（扁平化小字，错开两行避免重叠）
+    addMilestone(60, '保险年金', '#f59e0b', true, 9);       // 第一行
+    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);   // 第一行
+    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);     // 第一行
+    addMilestone(eduEndAge, '教育结束', '#a78bfa', true, 9, 12); // 第二行（y偏移12px）
 
     if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
       var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });
