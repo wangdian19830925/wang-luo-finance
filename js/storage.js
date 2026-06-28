@@ -415,7 +415,7 @@ const Storage = {
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v146',
+      clientVersion: 'v147',
       _passwordHash: pwdHash,
       _passwordEnabled: pwdEnabled
     };
@@ -473,7 +473,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v146' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v147' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -580,32 +580,70 @@ const Storage = {
     return merged;
   },
 
-  // 从云端拉取数据（使用固定文档ID）
+  // 从云端拉取数据（优先固定 ID；失败或无数据时回退到 where 查询）
   async pullFromCloud() {
     if (!this.cloudSyncEnabled || !this.cloudDb) return { doc: null, count: 0, error: 'CloudBase 未初始化' };
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     const FIXED_DOC_ID = 'finance_data';
+
+    const parseDoc = async (doc) => {
+      if (doc.jsonData && typeof doc.jsonData === 'string') {
+        try {
+          doc.data = JSON.parse(doc.jsonData);
+        } catch (parseErr) {
+          console.warn('[CloudBase] jsonData 解析失败:', parseErr.message || parseErr);
+          doc.data = null;
+        }
+      }
+      let count = 0;
+      if (doc.data) {
+        Object.keys(doc.data).forEach(k => {
+          if (Array.isArray(doc.data[k])) count += doc.data[k].length;
+        });
+      }
+      return count;
+    };
+
     try {
-      const res = await collection.doc(FIXED_DOC_ID).get();
-      if (res.data) {
-        const doc = res.data;
-        // 兼容新格式：jsonData 是打包后的 JSON 字符串；旧格式直接是 data 字段
-        if (doc.jsonData && typeof doc.jsonData === 'string') {
-          try {
-            doc.data = JSON.parse(doc.jsonData);
-          } catch (parseErr) {
-            console.warn('[CloudBase] jsonData 解析失败:', parseErr.message || parseErr);
-            doc.data = null;
+      let doc = null;
+      let count = 0;
+
+      // 方案1：固定 ID 读取
+      try {
+        const res = await collection.doc(FIXED_DOC_ID).get();
+        if (res.data) {
+          doc = res.data;
+          count = await parseDoc(doc);
+          console.log('[CloudBase] 拉取到固定 ID 文档，docId:', FIXED_DOC_ID, '总记录数:', count, '字段:', Object.keys(doc).join(','));
+        }
+      } catch (fixedErr) {
+        console.warn('[CloudBase] 固定 ID 读取失败:', fixedErr.message || fixedErr);
+      }
+
+      // 方案2：固定 ID 无有效数据时，回退到 where 查询随机 ID 文档
+      if (!doc || (!doc.jsonData && !doc.data)) {
+        try {
+          const res = await collection.where({ docId: FIXED_DOC_ID }).get();
+          if (res.data && res.data.length > 0) {
+            const sorted = res.data.slice().sort((a, b) => {
+              const ta = new Date(b.updatedAt || 0).getTime();
+              const tb = new Date(a.updatedAt || 0).getTime();
+              return ta - tb;
+            });
+            const latest = sorted[0];
+            if (latest) {
+              doc = latest;
+              count = await parseDoc(doc);
+              console.log('[CloudBase] 从 where 查询拉取到最新文档，docId:', latest._id, '总记录数:', count, '条数:', res.data.length);
+            }
           }
+        } catch (whereErr) {
+          console.warn('[CloudBase] where 查询失败:', whereErr.message || whereErr);
         }
-        this.cloudDocId = FIXED_DOC_ID;
-        let count = 0;
-        if (doc.data) {
-          Object.keys(doc.data).forEach(k => {
-            if (Array.isArray(doc.data[k])) count += doc.data[k].length;
-          });
-        }
-        console.log('[CloudBase] 拉取到云端数据，docId:', FIXED_DOC_ID, '总记录数:', count, '字段:', Object.keys(doc).join(','));
+      }
+
+      if (doc) {
+        this.cloudDocId = doc._id || FIXED_DOC_ID;
         console.log('[CloudBase] 云端文档详情:', JSON.stringify({
           _id: doc._id,
           updatedAt: doc.updatedAt,
@@ -618,14 +656,10 @@ const Storage = {
         }));
         return { doc: doc, count: count, error: null };
       }
+
       console.log('[CloudBase] 云端无数据');
       return { doc: null, count: 0, error: null };
     } catch (e) {
-      // 文档可能不存在（首次使用）
-      if (e.message && (e.message.includes('document not found') || e.message.includes('not exist'))) {
-        console.log('[CloudBase] 云端无数据（文档不存在）');
-        return { doc: null, count: 0, error: null };
-      }
       console.error('[CloudBase] 拉取失败:', e);
       this.cloudLastSyncError = '拉取失败: ' + (e.message || String(e));
       this._emitSyncStatus();
@@ -633,15 +667,15 @@ const Storage = {
     }
   },
 
-  // 推送数据到云端（使用固定文档ID，确保所有设备同步到同一文档）
+  // 推送数据到云端（create 为主，add 随机 ID 回退，避免 set/update 的异常）
   async pushToCloud(pkg) {
     if (!this.cloudSyncEnabled || !this.cloudDb) return false;
     if (!pkg) pkg = this._getLocalDataPackage();
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     const FIXED_DOC_ID = 'finance_data';
     try {
-      // 把复杂嵌套数据序列化为 JSON 字符串，避免 CloudBase v2 SDK 对嵌套对象/数组的写入异常
       const docData = {
+        docId: FIXED_DOC_ID, // 用于 where 查询回退
         jsonData: JSON.stringify(pkg.data || {}),
         updatedAt: pkg.updatedAt,
         clientVersion: pkg.clientVersion
@@ -653,64 +687,114 @@ const Storage = {
       const payloadSize = JSON.stringify(docData).length;
       console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
 
-      // 始终使用 set() 覆盖写，确保云端文档与本地数据完全一致。
-      // v2 SDK 的 update() 在已有损坏文档上多次出现字段丢失，set() 更可靠。
-      let pushRes = await docRef.set(docData);
-      console.log('[CloudBase] set 成功, res:', pushRes);
+      // 删除旧固定 ID 文档，避免损坏文档影响写入
+      try {
+        await docRef.remove();
+        console.log('[CloudBase] 已删除旧固定 ID 文档');
+      } catch (removeErr) {
+        console.warn('[CloudBase] 删除旧固定 ID 文档失败（可能不存在）:', removeErr.message || removeErr);
+      }
 
-      this.cloudDocId = FIXED_DOC_ID;
+      // 方案1：create（调用 database.addDocument）创建固定 ID 文档
+      let pushRes;
+      let usedRandomId = false;
+      try {
+        pushRes = await docRef.create(docData);
+        console.log('[CloudBase] create 成功, res:', pushRes);
+        this.cloudDocId = FIXED_DOC_ID;
+      } catch (createErr) {
+        console.warn('[CloudBase] create 失败，回退到 collection.add:', createErr.message || createErr);
+        // 方案2：随机 ID 创建，通过 docId 字段供查询
+        const addRes = await collection.add(docData);
+        console.log('[CloudBase] add 成功, res:', addRes);
+        this.cloudDocId = (addRes && (addRes.id || addRes._id)) || null;
+        usedRandomId = true;
+      }
+
       this.cloudLastSync = new Date().toISOString();
 
-      // 推送后立即验证，防止 SDK 返回成功但实际未写入
+      // 推送后验证
       let verificationPassed = false;
+      let verifyDoc = null;
       try {
         const verifyRes = await docRef.get();
         if (verifyRes && verifyRes.data) {
           const v = verifyRes.data;
-          let vCount = 0;
-          let dataSource = 'none';
-          if (v.jsonData && typeof v.jsonData === 'string') {
-            dataSource = 'jsonData';
-            try {
-              const parsed = JSON.parse(v.jsonData);
-              Object.keys(parsed).forEach(k => {
-                if (Array.isArray(parsed[k])) vCount += parsed[k].length;
-              });
-            } catch (parseErr) {
-              console.warn('[CloudBase] 验证时 jsonData 解析失败:', parseErr.message || parseErr);
-            }
-          } else if (v.data) {
-            dataSource = 'data';
-            Object.keys(v.data).forEach(k => {
-              if (Array.isArray(v.data[k])) vCount += v.data[k].length;
-            });
-          }
-          console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!v.jsonData, 'data字段存在:', !!v.data, '总记录数:', vCount, 'pwdHash存在:', v._passwordHash !== undefined, 'pwdEnabled:', v._passwordEnabled);
-          const localCount = pkg.data ? Object.keys(pkg.data).reduce((sum, k) => sum + (Array.isArray(pkg.data[k]) ? pkg.data[k].length : 0), 0) : 0;
-          if (vCount > 0 || localCount === 0) {
+          if (v.jsonData || v.data) {
+            verifyDoc = v;
             verificationPassed = true;
-          } else if (vCount === 0 && localCount > 0) {
-            console.error('[CloudBase] 警告：推送后云端数据为空，可能存在 SDK 写入异常');
+            console.log('[CloudBase] 固定 ID 读取验证通过');
+          }
+        }
+        // 固定 ID 读取失败且使用了随机 ID 时，尝试 where 查询
+        if (!verificationPassed && usedRandomId) {
+          const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
+          if (queryRes && queryRes.data && queryRes.data.length > 0) {
+            const sorted = queryRes.data.slice().sort((a, b) => {
+              const ta = new Date(b.updatedAt || 0).getTime();
+              const tb = new Date(a.updatedAt || 0).getTime();
+              return ta - tb;
+            });
+            const latest = sorted[0];
+            if (latest && (latest.jsonData || latest.data)) {
+              verifyDoc = latest;
+              verificationPassed = true;
+              console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length);
+            }
           }
         }
       } catch (verifyErr) {
         console.warn('[CloudBase] 推送后验证失败:', verifyErr.message || verifyErr);
       }
 
-      // 验证失败：云端文档可能已损坏，删除后重建
-      if (!verificationPassed) {
-        console.warn('[CloudBase] 验证未通过，尝试删除并重建云端文档');
-        try {
-          await docRef.remove();
-          console.log('[CloudBase] 已删除损坏文档');
-        } catch (removeErr) {
-          console.warn('[CloudBase] 删除文档失败（可能已不存在）:', removeErr.message || removeErr);
+      if (verificationPassed && verifyDoc) {
+        let vCount = 0;
+        let dataSource = 'none';
+        if (verifyDoc.jsonData && typeof verifyDoc.jsonData === 'string') {
+          dataSource = 'jsonData';
+          try {
+            const parsed = JSON.parse(verifyDoc.jsonData);
+            Object.keys(parsed).forEach(k => {
+              if (Array.isArray(parsed[k])) vCount += parsed[k].length;
+            });
+          } catch (parseErr) {
+            console.warn('[CloudBase] 验证时 jsonData 解析失败:', parseErr.message || parseErr);
+          }
+        } else if (verifyDoc.data) {
+          dataSource = 'data';
+          Object.keys(verifyDoc.data).forEach(k => {
+            if (Array.isArray(verifyDoc.data[k])) vCount += verifyDoc.data[k].length;
+          });
         }
-        pushRes = await docRef.set(docData);
-        console.log('[CloudBase] 重建文档 set 成功, res:', pushRes);
+        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash存在:', verifyDoc._passwordHash !== undefined, 'pwdEnabled:', verifyDoc._passwordEnabled);
+      } else {
+        console.error('[CloudBase] 警告：推送后验证未通过，云端可能仍未写入数据');
       }
 
-      console.log('[CloudBase] 推送云端数据成功, docId:', FIXED_DOC_ID);
+      // 清理历史随机 ID 文档（只保留最近2个）
+      if (usedRandomId) {
+        try {
+          const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
+          if (queryRes && queryRes.data && queryRes.data.length > 2) {
+            const sorted = queryRes.data.slice().sort((a, b) => {
+              const ta = new Date(b.updatedAt || 0).getTime();
+              const tb = new Date(a.updatedAt || 0).getTime();
+              return ta - tb;
+            });
+            const toDelete = sorted.slice(2);
+            for (const oldDoc of toDelete) {
+              if (oldDoc && oldDoc._id) {
+                await collection.doc(oldDoc._id).remove();
+              }
+            }
+            console.log('[CloudBase] 已清理旧文档:', toDelete.length);
+          }
+        } catch (cleanupErr) {
+          console.warn('[CloudBase] 清理旧文档失败:', cleanupErr.message || cleanupErr);
+        }
+      }
+
+      console.log('[CloudBase] 推送云端数据成功, docId:', this.cloudDocId || FIXED_DOC_ID);
       return true;
     } catch (e) {
       console.error('[CloudBase] 推送失败:', e);
