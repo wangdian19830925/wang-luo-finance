@@ -130,6 +130,12 @@ const App = {
       } else if (!restoreResult.success) {
         console.warn('[App] 会话未恢复:', restoreResult.reason);
       }
+      // v153: 同步完成后刷新所有页面和密码 UI
+      // 原因：restoreSession 内部完成了 syncWithCloud，会把云端密码写入 localStorage，
+      //       但如果不刷新 UI，设置页的密码状态仍显示旧的"未设置"
+      console.log('[App] 同步完成，刷新所有页面和密码UI');
+      this.refreshAllPages();
+      this.renderPasswordSection();
     } catch (e) {
       console.error('[App] CloudBase 初始化异常:', e);
     }
@@ -7235,20 +7241,21 @@ const App = {
   },
 
   getPasswordConfig() {
-    if (this._passwordConfig) return this._passwordConfig;
+    // v153: 去掉内存缓存，每次从 localStorage 实时读取
+    // 原因：initCloudBase 同步完成前 getPasswordConfig 可能被调用并缓存了 {enabled:false,hash:null}，
+    //       同步完成后 localStorage 已更新但缓存不会失效，导致 UI 始终显示"未设置密码"
     try {
       this._migratePasswordConfig();
       var hash = localStorage.getItem("finance_password_hash") || null;
       var enabled = localStorage.getItem("finance_password_enabled") === 'true';
-      this._passwordConfig = { enabled: enabled, hash: hash };
+      return { enabled: enabled, hash: hash };
     } catch(e) {
-      this._passwordConfig = { enabled: false, hash: null };
+      return { enabled: false, hash: null };
     }
-    return this._passwordConfig;
   },
 
   _savePasswordConfig(cfg) {
-    this._passwordConfig = cfg;
+    // v153: 不再写内存缓存，只写 localStorage
     localStorage.setItem("finance_password_hash", cfg.hash || '');
     localStorage.setItem("finance_password_enabled", cfg.enabled ? 'true' : 'false');
     console.log('[App] 密码配置已保存, hash存在:', !!cfg.hash, 'enabled:', cfg.enabled);
