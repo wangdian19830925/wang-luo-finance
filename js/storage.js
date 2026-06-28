@@ -412,19 +412,32 @@ const Storage = {
     }
   },
 
+  // 检测密码hash是否被日志脱敏字符串污染（旧bug导致）
+  _isValidPasswordHash(hash) {
+    if (!hash || typeof hash !== 'string') return false;
+    // 旧版本bug可能把 "len=N,head=xxxx" 写入localStorage/云端，这类不是真实hash
+    if (/^len=\d+,head=/.test(hash)) return false;
+    return hash.length >= 4;
+  },
+
   // 从本地组装完整数据包（同步用，包含已删除记录）
   _getLocalDataPackage() {
     const data = {};
     Object.keys(this.keys).forEach(k => {
       data[k] = this.get(this.keys[k], true); // true = 包含已删除
     });
-    const pwdHash = localStorage.getItem('finance_password_hash') || null;
+    let pwdHash = localStorage.getItem('finance_password_hash') || null;
     const pwdEnabled = localStorage.getItem('finance_password_enabled') === 'true';
+    // 清理被污染的hash，避免把假值同步到云端
+    if (pwdHash && !this._isValidPasswordHash(pwdHash)) {
+      console.warn('[CloudBase] 检测到本地密码hash被污染（可能是旧版本日志字符串），已忽略该值:', pwdHash.slice(0, 20));
+      pwdHash = null;
+    }
     console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled);
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v150',
+      clientVersion: 'v151',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -443,15 +456,19 @@ const Storage = {
       const localHash = localStorage.getItem('finance_password_hash');
       const localEnabled = localStorage.getItem('finance_password_enabled') === 'true';
       const pwdFields = this._getPasswordFields(pkg);
-      if (pwdFields.passwordHash) {
+      const cloudHashValid = this._isValidPasswordHash(pwdFields.passwordHash);
+      if (cloudHashValid) {
         localStorage.setItem('finance_password_hash', pwdFields.passwordHash);
         console.log('[CloudBase] 已应用合并后密码hash（来源:', localHash === pwdFields.passwordHash ? '本地' : '云端', '）');
+      } else if (pwdFields.passwordHash) {
+        console.warn('[CloudBase] 云端密码hash无效/被污染，忽略:', String(pwdFields.passwordHash).slice(0, 20));
       } else if (localHash) {
         console.log('[CloudBase] 传入密码为空，保留本地已有密码hash');
       }
       if (pwdFields.passwordEnabled !== undefined) {
         // 云端关闭保护时，若本地无密码且云端也无密码hash，则忽略
-        if (!pwdFields.passwordEnabled && !localHash && !pwdFields.passwordHash) {
+        const effectiveLocalHash = localStorage.getItem('finance_password_hash');
+        if (!pwdFields.passwordEnabled && !effectiveLocalHash && !cloudHashValid) {
           console.log('[CloudBase] 云端关闭保护但无密码，忽略enabled更新');
         } else {
           localStorage.setItem('finance_password_enabled', pwdFields.passwordEnabled ? 'true' : 'false');
@@ -483,7 +500,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v150' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v151' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -679,17 +696,23 @@ const Storage = {
     }
   },
 
-  // 推送数据到云端（优先 update 已有文档，不存在则 create，避免频繁删除重建）
+  // 判断 SDK 返回是否为错误
+  _isCloudBaseError(res) {
+    return !!(res && (res.code || res.errCode || res.error || res.Error));
+  },
+
+  // 推送数据到云端（使用 set 覆盖写，避免 create 主键冲突；检查返回错误码；验证时比对 updatedAt）
   async pushToCloud(pkg) {
     if (!this.cloudSyncEnabled || !this.cloudDb) return false;
     if (!pkg) pkg = this._getLocalDataPackage();
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     const FIXED_DOC_ID = 'finance_data';
+    const pushTime = new Date().toISOString();
     try {
       const docData = {
         docId: FIXED_DOC_ID, // 用于 where 查询回退
         jsonData: JSON.stringify(pkg.data || {}),
-        updatedAt: pkg.updatedAt,
+        updatedAt: pushTime,
         clientVersion: pkg.clientVersion
       };
       if (pkg.passwordHash !== undefined) docData.passwordHash = pkg.passwordHash;
@@ -700,55 +723,17 @@ const Storage = {
       const pwdHashPreview = docData.passwordHash ? ('len=' + docData.passwordHash.length + ',head=' + docData.passwordHash.slice(0, 6)) : 'none';
       console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash:', pwdHashPreview, 'pwdEnabled:', docData.passwordEnabled);
 
-      // 1) 先探测固定 ID 文档是否存在
-      let existing = false;
-      try {
-        const probeRes = await docRef.get();
-        if (probeRes && probeRes.data && (probeRes.data.jsonData || probeRes.data.data || probeRes.data.passwordHash !== undefined)) {
-          existing = true;
-          console.log('[CloudBase] 固定 ID 文档已存在，尝试 update');
-        }
-      } catch (probeErr) {
-        console.log('[CloudBase] 探测固定 ID 文档失败（可能不存在）:', probeErr.message || probeErr);
+      // 使用 set 覆盖写：文档不存在则创建，存在则完全替换，避免 create 主键冲突
+      const setRes = await docRef.set(docData);
+      if (this._isCloudBaseError(setRes)) {
+        throw new Error('set 返回错误: ' + JSON.stringify(setRes));
       }
+      console.log('[CloudBase] set 成功, res:', setRes);
+      this.cloudDocId = FIXED_DOC_ID;
+      this.cloudLastSync = pushTime;
 
-      let usedRandomId = false;
-      if (existing) {
-        // 2A) 已存在则更新，避免删除重建导致竞态
-        try {
-          await docRef.update(docData);
-          console.log('[CloudBase] update 成功');
-          this.cloudDocId = FIXED_DOC_ID;
-        } catch (updateErr) {
-          console.warn('[CloudBase] update 失败，回退到删除重建:', updateErr.message || updateErr);
-          existing = false;
-        }
-      }
-
-      if (!existing) {
-        // 2B) 不存在或 update 失败，尝试 create
-        try {
-          const createRes = await docRef.create(docData);
-          console.log('[CloudBase] create 成功, res:', createRes);
-          this.cloudDocId = FIXED_DOC_ID;
-        } catch (createErr) {
-          console.warn('[CloudBase] create 失败，尝试删除重建:', createErr.message || createErr);
-          try {
-            await docRef.remove();
-          } catch (removeErr) {
-            console.warn('[CloudBase] 删除旧文档失败:', removeErr.message || removeErr);
-          }
-          // 再次 create
-          const recreateRes = await docRef.create(docData);
-          console.log('[CloudBase] 删除重建成功, res:', recreateRes);
-          this.cloudDocId = FIXED_DOC_ID;
-        }
-      }
-
-      this.cloudLastSync = new Date().toISOString();
-
-      // 3) 推送后验证：CloudBase 单文档 get 存在缓存/副本延迟，改用 where 查询作为可靠验证
-      await new Promise(r => setTimeout(r, 400)); // 等待 400ms，让写入在副本间同步
+      // 推送后验证：通过 where 查询拉取最新文档，并比对 updatedAt 确保不是旧数据
+      await new Promise(r => setTimeout(r, 400)); // 等待副本同步
       let verificationPassed = false;
       let verifyDoc = null;
       try {
@@ -760,10 +745,13 @@ const Storage = {
             return ta - tb;
           });
           const latest = sorted[0];
-          if (latest && (latest.jsonData || latest.data)) {
+          // 必须是我们这次写入之后的数据，才认为验证通过
+          if (latest && (latest.jsonData || latest.data) && new Date(latest.updatedAt).getTime() >= new Date(pushTime).getTime() - 2000) {
             verifyDoc = latest;
             verificationPassed = true;
-            console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length, 'latestId:', latest._id);
+            console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length, 'latestId:', latest._id, 'updatedAt:', latest.updatedAt);
+          } else if (latest) {
+            console.warn('[CloudBase] where 查询到的最新文档时间戳早于本次推送，可能是旧数据:', latest.updatedAt, 'pushTime:', pushTime);
           }
         }
         if (!verificationPassed) {
@@ -794,7 +782,12 @@ const Storage = {
         }
         const verifyPwdFields = this._getPasswordFields(verifyDoc);
         const verifyPwdPreview = verifyPwdFields.passwordHash ? ('len=' + verifyPwdFields.passwordHash.length + ',head=' + verifyPwdFields.passwordHash.slice(0, 6)) : 'none';
-        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash:', verifyPwdPreview, 'pwdEnabled:', verifyPwdFields.passwordEnabled);
+        const pwdMatch = verifyPwdFields.passwordHash === pkg.passwordHash;
+        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash:', verifyPwdPreview, 'pwdEnabled:', verifyPwdFields.passwordEnabled, 'pwdMatch:', pwdMatch);
+        if (!pwdMatch && pkg.passwordHash) {
+          console.error('[CloudBase] 警告：云端密码hash与本地不一致，可能写入失败或被覆盖');
+          verificationPassed = false;
+        }
       } else {
         console.error('[CloudBase] 警告：推送后验证未通过，云端可能仍未写入数据');
       }
@@ -820,8 +813,15 @@ const Storage = {
         console.warn('[CloudBase] 清理旧文档失败:', cleanupErr.message || cleanupErr);
       }
 
-      console.log('[CloudBase] 推送云端数据成功, docId:', this.cloudDocId || FIXED_DOC_ID);
-      return true;
+      if (verificationPassed) {
+        console.log('[CloudBase] 推送云端数据成功, docId:', this.cloudDocId || FIXED_DOC_ID);
+        return true;
+      } else {
+        console.error('[CloudBase] 推送云端数据验证未通过，视为失败, docId:', this.cloudDocId || FIXED_DOC_ID);
+        this.cloudLastSyncError = '推送后验证未通过';
+        this._emitSyncStatus();
+        return false;
+      }
     } catch (e) {
       console.error('[CloudBase] 推送失败:', e);
       this.cloudLastSyncError = '推送失败: ' + (e.message || String(e));
