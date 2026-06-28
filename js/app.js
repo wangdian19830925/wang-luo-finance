@@ -5925,8 +5925,7 @@ const App = {
       // 坐标轴框
       '<line x1="' + padLeft + '" y1="' + (height - padBottom) + '" x2="' + (width - padRight) + '" y2="' + (height - padBottom) + '" stroke="#334155" stroke-width="1"/>' +
       '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (height - padBottom) + '" stroke="#334155" stroke-width="1"/>' +
-      // 轴标题
-      '<text x="' + (width / 2).toFixed(1) + '" y="' + (height - 6).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569">年份 / 年龄</text>' +
+      // 轴标题（仅保留纵轴）
       '<text x="16" y="' + (height / 2).toFixed(1) + '" text-anchor="middle" font-size="10" fill="#475569" transform="rotate(-90 16 ' + (height / 2).toFixed(1) + ')">余额（万元）</text>' +
       '</svg>';
 
@@ -6011,36 +6010,24 @@ const App = {
       '</svg>';
 
     // 堆积图图例：收入、支出分两行
-    var cfLegend = '<div style="display:flex;flex-direction:column;gap:8px;align-items:center;font-size:11px;line-height:1.4;">';
-    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;">';
-    cfLegend += '<span style="color:#64748b;font-weight:500;">收入：</span>';
+    var cfLegend = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:11px;line-height:1.4;">';
+    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
+    cfLegend += '<span style="color:#475569;font-weight:500;">收入</span>';
     incomeLayers.forEach(function(l) {
-      cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
+      cfLegend += '<span style="display:inline-flex;align-items:center;gap:5px;color:#94a3b8;"><span style="width:10px;height:3px;border-radius:1px;background:' + l.color + ';opacity:0.75;"></span>' + l.label + '</span>';
     });
     cfLegend += '</div>';
-    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;">';
-    cfLegend += '<span style="color:#64748b;font-weight:500;">支出：</span>';
+    cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
+    cfLegend += '<span style="color:#475569;font-weight:500;">支出</span>';
     expenseLayers.forEach(function(l) {
-      cfLegend += '<span style="display:inline-flex;align-items:center;gap:4px;color:' + l.color + '"><span style="width:8px;height:8px;border-radius:2px;background:' + l.color + ';opacity:0.8;"></span>' + l.label + '</span>';
+      cfLegend += '<span style="display:inline-flex;align-items:center;gap:5px;color:#94a3b8;"><span style="width:10px;height:3px;border-radius:1px;background:' + l.color + ';opacity:0.75;"></span>' + l.label + '</span>';
     });
     cfLegend += '</div>';
     cfLegend += '</div>';
 
     wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + cfLegend + '</div>';
 
-    // 8) 图例说明 — 扁平黑暗风格（余额曲线）
-    if (note) {
-      var notes = [];
-      if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
-        notes.push('<span style="color:#f87171;font-weight:500">⚠ 资金将在 ' + result.runOutYear + ' 年耗尽</span>');
-      } else {
-        notes.push('<span style="color:#4ade80;font-weight:500">✓ 可支撑至 ' + lifeExp + ' 岁</span>');
-      }
-      notes.push('<span style="color:#64748b">● 绿色 = 资产 ≥ 0</span>');
-      notes.push('<span style="color:#64748b">● 红色 = 缺口</span>');
-      notes.push('<span style="color:#475569">╎ 虚线 = 关键事件</span>');
-      note.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:center;font-size:11px;line-height:1.8">' + notes.join('') + '</div>';
-    }
+    // 8) 图例说明已移除（收支堆积图自带分项图例）
   },
 
   // ── 通知管理（iOS 风格日历） ──

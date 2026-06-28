@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-28-v125 -->
+  <!-- version: 2026-06-28-v126 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=125">
+  <link rel="stylesheet" href="./css/style.css?v=126">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -608,7 +608,7 @@
           <div class="retirement-param-item retirement-param-mortgage-row">
             <div class="retirement-mortgage-left">
               <div class="retirement-param-label">
-                <span>🏠 房贷处理方式</span>
+                <span>房贷处理方式</span>
               </div>
               <div class="retirement-radio-group">
                 <label class="retirement-radio">
@@ -623,7 +623,7 @@
             </div>
             <div class="retirement-mortgage-right">
               <div class="retirement-param-label">
-                <span>📈 通货膨胀率</span>
+                <span>通货膨胀率</span>
                 <span class="retirement-param-value" id="retirementParamInflationValue">3 %</span>
               </div>
               <input type="range" class="retirement-param-range" id="retirementParamInflation" min="1" max="8" step="0.5" value="3">
@@ -631,42 +631,42 @@
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>🛒 每年家庭消费</span>
+              <span>每年家庭消费</span>
               <span class="retirement-param-value" id="retirementParamAnnualExpenseValue">20 万</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamAnnualExpense" min="5" max="80" step="1" value="20">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>🌱 投资年化收益</span>
+              <span>投资年化收益</span>
               <span class="retirement-param-value" id="retirementParamReturnValue">2 %</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamReturn" min="0" max="6" step="0.5" value="2">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>📚 每年子女教育</span>
+              <span>每年子女教育</span>
               <span class="retirement-param-value" id="retirementParamAnnualEducationValue">10 万</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamAnnualEducation" min="0" max="30" step="1" value="10">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>🎓 教育支出结束年份</span>
+              <span>教育结束年份</span>
               <span class="retirement-param-value" id="retirementParamEducationEndYearValue">2035 年</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamEducationEndYear" min="2024" max="2040" step="1" value="2035">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>💵 每年额外收入</span>
+              <span>每年额外收入</span>
               <span class="retirement-param-value" id="retirementParamAnnualExtraIncomeValue">0 万</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamAnnualExtraIncome" min="0" max="50" step="1" value="0">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>👽 预计寿命</span>
+              <span>预计寿命</span>
               <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
@@ -679,21 +679,21 @@
         <div class="retirement-param-list">
           <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
-              <span>🏦 王典的养老账户余额</span>
+              <span>王典 · 养老账户余额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember1BalanceValue">46.0 万</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember1Balance" min="200000" max="800000" step="5000" value="460126.76">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>💳 每月缴费金额</span>
+              <span>每月缴费金额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember1MonthlyValue">2984 元</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember1Monthly" min="1000" max="10000" step="100" value="2984.16">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>🎂 退休年龄</span>
+              <span>退休年龄</span>
               <span class="retirement-param-value" id="retirementParamPensionMember1RetireAgeValue">63 岁</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember1RetireAge" min="55" max="65" step="1" value="63">
@@ -706,21 +706,21 @@
         <div class="retirement-param-list">
           <div class="retirement-param-item retirement-param-fullwidth">
             <div class="retirement-param-label">
-              <span>🏦 Rowen的养老账户余额</span>
+              <span>Rowen · 养老账户余额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember2BalanceValue">46.0 万</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember2Balance" min="200000" max="800000" step="5000" value="460126.76">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>💳 每月缴费金额</span>
+              <span>每月缴费金额</span>
               <span class="retirement-param-value" id="retirementParamPensionMember2MonthlyValue">2984 元</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember2Monthly" min="1000" max="10000" step="100" value="2984.16">
           </div>
           <div class="retirement-param-item">
             <div class="retirement-param-label">
-              <span>🎂 退休年龄</span>
+              <span>退休年龄</span>
               <span class="retirement-param-value" id="retirementParamPensionMember2RetireAgeValue">58 岁</span>
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamPensionMember2RetireAge" min="50" max="60" step="1" value="58">
@@ -1116,7 +1116,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=125"></script>
+  <script src="./js/storage.js?v=126"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1126,6 +1126,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=125"></script>
+  <script src="./js/app.js?v=126"></script>
 </body>
 </html>
