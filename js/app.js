@@ -444,10 +444,31 @@ const App = {
     });
 
     if (clearBtn) clearBtn.addEventListener("click", function() { self.clearAllLocalData(); });
+
+    // 密码管理
+    var setPwdBtn = document.getElementById("setPasswordBtn");
+    var changePwdBtn = document.getElementById("changePasswordBtn");
+    var togglePwdBtn = document.getElementById("passwordToggleBtn");
+    var pwdVerifyConfirm = document.getElementById("passwordVerifyConfirmBtn");
+    var pwdVerifyCancel = document.getElementById("passwordVerifyCancelBtn");
+    var pwdVerifyInput = document.getElementById("passwordVerifyInput");
+
+    if (setPwdBtn) setPwdBtn.addEventListener("click", function() { self.setPassword(); });
+    if (changePwdBtn) changePwdBtn.addEventListener("click", function() { self.changePassword(); });
+    if (togglePwdBtn) togglePwdBtn.addEventListener("click", function() { self.togglePassword(); });
+    if (pwdVerifyConfirm) pwdVerifyConfirm.addEventListener("click", function() { self.confirmPasswordVerify(); });
+    if (pwdVerifyCancel) pwdVerifyCancel.addEventListener("click", function() { self.cancelPasswordVerify(); });
+    if (pwdVerifyInput) {
+      pwdVerifyInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") { e.preventDefault(); self.confirmPasswordVerify(); }
+        if (e.key === "Escape") { e.preventDefault(); self.cancelPasswordVerify(); }
+      });
+    }
   },
 
   openSettings() {
     this.navigateTo('settings');
+    this.renderPasswordSection();
   },
 
   closeSettings() {
@@ -1223,15 +1244,18 @@ const App = {
 
   // 手动修改 RSU 当前价
   editRsuPrice(id) {
-    var rsuList = Storage.get(Storage.keys.rsu);
-    var item = rsuList.find(function(r) { return r.id === id; });
-    if (!item) return;
-    var newPrice = prompt("修改 " + item.name + " 当前股价 (¥)", item.currentPrice);
-    if (newPrice !== null && !isNaN(parseFloat(newPrice)) && parseFloat(newPrice) >= 0) {
-      Storage.update(Storage.keys.rsu, id, { currentPrice: parseFloat(newPrice) });
-      this.loadRsuList();
-      this.showToast(item.name + " 股价已更新");
-    }
+    var self = this;
+    this.requirePassword(function() {
+      var rsuList = Storage.get(Storage.keys.rsu);
+      var item = rsuList.find(function(r) { return r.id === id; });
+      if (!item) return;
+      var newPrice = prompt("修改 " + item.name + " 当前股价 (¥)", item.currentPrice);
+      if (newPrice !== null && !isNaN(parseFloat(newPrice)) && parseFloat(newPrice) >= 0) {
+        Storage.update(Storage.keys.rsu, id, { currentPrice: parseFloat(newPrice) });
+        self.loadRsuList();
+        self.showToast(item.name + " 股价已更新");
+      }
+    });
   },
 
   // ===== RSU END =====
@@ -1348,27 +1372,29 @@ const App = {
   // 保存就地编辑结果
   saveInlineEdit(type, id, newVal, wrapEl, origHTML) {
     var self = this;
-    if (type === 'stock-shares') {
-      var stockList = Storage.get(Storage.keys.stocks);
-      var stock = stockList.find(function(s) { return s.id === id; });
-      if (!stock) return;
-      var oldShares = parseInt(stock.shares) || 0;
-      Storage.update(Storage.keys.stocks, id, { shares: newVal });
-      self.loadStockList();
-      self.loadDashboard();
-      self.showToast(stock.name + ' 持有股数: ' + oldShares + ' → ' + newVal + ' 股', 'success');
-    } else if (type === 'rsu-vested') {
-      var rsuList = Storage.get(Storage.keys.rsu);
-      var rsu = rsuList.find(function(r) { return r.id === id; });
-      if (!rsu) return;
-      var totalShares = parseInt(rsu.totalShares) || 0;
-      var oldVested = parseInt(rsu.vested) || 0;
-      var newLocked = Math.max(0, totalShares - newVal);
-      Storage.update(Storage.keys.rsu, id, { vested: newVal, locked: newLocked });
-      self.loadRsuList();
-      self.loadDashboard();
-      self.showToast(rsu.name + ' 已解禁: ' + oldVested + ' → ' + newVal + ' 股 (锁定 ' + newLocked + ')', 'success');
-    }
+    this.requirePassword(function() {
+      if (type === 'stock-shares') {
+        var stockList = Storage.get(Storage.keys.stocks);
+        var stock = stockList.find(function(s) { return s.id === id; });
+        if (!stock) return;
+        var oldShares = parseInt(stock.shares) || 0;
+        Storage.update(Storage.keys.stocks, id, { shares: newVal });
+        self.loadStockList();
+        self.loadDashboard();
+        self.showToast(stock.name + ' 持有股数: ' + oldShares + ' → ' + newVal + ' 股', 'success');
+      } else if (type === 'rsu-vested') {
+        var rsuList = Storage.get(Storage.keys.rsu);
+        var rsu = rsuList.find(function(r) { return r.id === id; });
+        if (!rsu) return;
+        var totalShares = parseInt(rsu.totalShares) || 0;
+        var oldVested = parseInt(rsu.vested) || 0;
+        var newLocked = Math.max(0, totalShares - newVal);
+        Storage.update(Storage.keys.rsu, id, { vested: newVal, locked: newLocked });
+        self.loadRsuList();
+        self.loadDashboard();
+        self.showToast(rsu.name + ' 已解禁: ' + oldVested + ' → ' + newVal + ' 股 (锁定 ' + newLocked + ')', 'success');
+      }
+    });
   },
 
   // ===== 就地编辑 END =====
@@ -1531,57 +1557,66 @@ const App = {
   },
 
   saveFund() {
-    var holdValue = parseFloat(document.getElementById("fundHoldValue").value) || 0;
-    var costValue = parseFloat(document.getElementById("fundCostValue").value) || 0;
-    var navInput = document.getElementById("fundNav").value;
-    var nav = navInput ? parseFloat(navInput) : 0;
-    var sharesInput = document.getElementById("fundShares").value;
-    var shares = sharesInput ? parseFloat(sharesInput) : 0;
-    // 自动计算：如果有净值和持仓金额，推算份额
-    if (nav > 0 && shares <= 0 && holdValue > 0) {
-      shares = holdValue / nav;
-    }
-    Storage.add(Storage.keys.funds, {
-      id: document.getElementById("fundCode").value,
-      code: document.getElementById("fundCode").value,
-      name: document.getElementById("fundName").value,
-      holdValue: holdValue,
-      costValue: costValue,
-      nav: nav,
-      shares: parseFloat(shares.toFixed(2)),
-      market: "CN",
-      currency: "CNY"
+    var self = this;
+    this.requirePassword(function() {
+      var holdValue = parseFloat(document.getElementById("fundHoldValue").value) || 0;
+      var costValue = parseFloat(document.getElementById("fundCostValue").value) || 0;
+      var navInput = document.getElementById("fundNav").value;
+      var nav = navInput ? parseFloat(navInput) : 0;
+      var sharesInput = document.getElementById("fundShares").value;
+      var shares = sharesInput ? parseFloat(sharesInput) : 0;
+      // 自动计算：如果有净值和持仓金额，推算份额
+      if (nav > 0 && shares <= 0 && holdValue > 0) {
+        shares = holdValue / nav;
+      }
+      Storage.add(Storage.keys.funds, {
+        id: document.getElementById("fundCode").value,
+        code: document.getElementById("fundCode").value,
+        name: document.getElementById("fundName").value,
+        holdValue: holdValue,
+        costValue: costValue,
+        nav: nav,
+        shares: parseFloat(shares.toFixed(2)),
+        market: "CN",
+        currency: "CNY"
+      });
+      document.getElementById("fundForm").reset();
+      document.getElementById("fundFormModal").classList.remove("show");
+      self.loadFundList(); self.showToast("基金已添加");
     });
-    document.getElementById("fundForm").reset();
-    document.getElementById("fundFormModal").classList.remove("show");
-    this.loadFundList(); this.showToast("基金已添加");
   },
 
   deleteFund(id) {
-    if (!confirm("确定删除此基金？")) return;
-    Storage.delete(Storage.keys.funds, id);
-    this.loadFundList();
-    this.loadDashboard();
-    this.showToast("基金已删除");
+    var self = this;
+    this.requirePassword(function() {
+      if (!confirm("确定删除此基金？")) return;
+      Storage.delete(Storage.keys.funds, id);
+      self.loadFundList();
+      self.loadDashboard();
+      self.showToast("基金已删除");
+    });
   },
 
   editFundPrice(id) {
-    var list = Storage.get(Storage.keys.funds);
-    var fund = list.find(function(f) { return f.id === id; });
-    if (!fund) return;
-    var newNav = prompt("修改 " + fund.name + " 基金净值 (¥)", fund.nav);
-    if (newNav !== null && !isNaN(parseFloat(newNav)) && parseFloat(newNav) > 0) {
-      var nav = parseFloat(newNav);
-      var shares = (parseFloat(fund.shares) > 0) ? parseFloat(fund.shares) : (parseFloat(fund.holdValue) / nav);
-      var holdValue = shares * nav;
-      Storage.update(Storage.keys.funds, id, {
-        nav: nav,
-        shares: parseFloat(shares.toFixed(2)),
-        holdValue: parseFloat(holdValue.toFixed(2))
-      });
-      this.loadFundList();
-      this.showToast(fund.name + " 净值已更新");
-    }
+    var self = this;
+    this.requirePassword(function() {
+      var list = Storage.get(Storage.keys.funds);
+      var fund = list.find(function(f) { return f.id === id; });
+      if (!fund) return;
+      var newNav = prompt("修改 " + fund.name + " 基金净值 (¥)", fund.nav);
+      if (newNav !== null && !isNaN(parseFloat(newNav)) && parseFloat(newNav) > 0) {
+        var nav = parseFloat(newNav);
+        var shares = (parseFloat(fund.shares) > 0) ? parseFloat(fund.shares) : (parseFloat(fund.holdValue) / nav);
+        var holdValue = shares * nav;
+        Storage.update(Storage.keys.funds, id, {
+          nav: nav,
+          shares: parseFloat(shares.toFixed(2)),
+          holdValue: parseFloat(holdValue.toFixed(2))
+        });
+        self.loadFundList();
+        self.showToast(fund.name + " 净值已更新");
+      }
+    });
   },
   // ===== 基金管理 END =====
 
@@ -3976,22 +4011,25 @@ const App = {
 
   // 确认编辑余额
   confirmEditBalance() {
-    var newBalance = parseFloat(document.getElementById("editBalanceInput").value);
-    if (isNaN(newBalance) || newBalance < 0) {
-      this.showToast("请输入有效的金额", "error");
-      return;
-    }
+    var self = this;
+    this.requirePassword(function() {
+      var newBalance = parseFloat(document.getElementById("editBalanceInput").value);
+      if (isNaN(newBalance) || newBalance < 0) {
+        self.showToast("请输入有效的金额", "error");
+        return;
+      }
 
-    var today = new Date().toISOString().split("T")[0];
-    Storage.update(Storage.keys.cashAccounts, this._editingAccountId, {
-      balance: newBalance,
-      updated: today
+      var today = new Date().toISOString().split("T")[0];
+      Storage.update(Storage.keys.cashAccounts, self._editingAccountId, {
+        balance: newBalance,
+        updated: today
+      });
+
+      self.closeEditBalance();
+      self.loadTransactions();
+      self.loadDashboard();
+      self.showToast("余额已更新");
     });
-
-    this.closeEditBalance();
-    this.loadTransactions();
-    this.loadDashboard();
-    this.showToast("余额已更新");
   },
 
   // ===== 添加现金账户 =====
@@ -4014,104 +4052,115 @@ const App = {
   },
 
   confirmAddCashAccount() {
-    var label = document.getElementById("addCashLabel").value.trim();
-    var balance = parseFloat(document.getElementById("addCashBalance").value);
-    var note = document.getElementById("addCashNote").value.trim();
+    var self = this;
+    this.requirePassword(function() {
+      var label = document.getElementById("addCashLabel").value.trim();
+      var balance = parseFloat(document.getElementById("addCashBalance").value);
+      var note = document.getElementById("addCashNote").value.trim();
 
-    if (!label) {
-      this.showToast("请输入资产归属", "error");
-      return;
-    }
-    if (isNaN(balance) || balance < 0) {
-      this.showToast("请输入有效的金额", "error");
-      return;
-    }
+      if (!label) {
+        self.showToast("请输入资产归属", "error");
+        return;
+      }
+      if (isNaN(balance) || balance < 0) {
+        self.showToast("请输入有效的金额", "error");
+        return;
+      }
 
-    var today = new Date().toISOString().split("T")[0];
-    var newAccount = {
-      name: label,
-      label: label,
-      icon: this._selectedCashIcon || "bank",
-      balance: balance,
-      updated: today,
-      note: note || "手动添加"
-    };
-    Storage.add(Storage.keys.cashAccounts, newAccount);
+      var today = new Date().toISOString().split("T")[0];
+      var newAccount = {
+        name: label,
+        label: label,
+        icon: self._selectedCashIcon || "bank",
+        balance: balance,
+        updated: today,
+        note: note || "手动添加"
+      };
+      Storage.add(Storage.keys.cashAccounts, newAccount);
 
-    this.closeAddCashAccount();
-    this.loadTransactions();
-    this.loadDashboard();
-    this.showToast("现金账户已添加");
+      self.closeAddCashAccount();
+      self.loadTransactions();
+      self.loadDashboard();
+      self.showToast("现金账户已添加");
+    });
   },
 
   // ===== 就地编辑现金账户名称 =====
   editCashLabel(id) {
-    var accounts = Storage.get(Storage.keys.cashAccounts);
-    var account = accounts.find(function(a) { return a.id === id; });
-    if (!account) return;
-
-    // 找到显示名称的 DOM 元素
-    var cards = document.querySelectorAll('#cashAccounts .cash-account-card');
-    var targetCard = null;
-    cards.forEach(function(card) {
-      var nameEl = card.querySelector('.cash-account-name');
-      if (nameEl && nameEl.getAttribute('onclick') && nameEl.getAttribute('onclick').indexOf(id) !== -1) {
-        targetCard = card;
-      }
-    });
-    if (!targetCard) return;
-
-    var nameEl = targetCard.querySelector('.cash-account-name');
-    var oldLabel = account.label || account.name || '';
-
-    // 创建 input 替换
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'cash-label-input';
-    input.value = oldLabel;
-    input.maxLength = 30;
-
-    nameEl.innerHTML = '';
-    nameEl.appendChild(input);
-    nameEl.removeAttribute('onclick');
-    input.focus();
-    input.select();
-
     var self = this;
-    var saveEdit = function() {
-      var newLabel = input.value.trim();
-      if (newLabel && newLabel !== oldLabel) {
-        Storage.update(Storage.keys.cashAccounts, id, { label: newLabel, name: newLabel, updated: new Date().toISOString().split('T')[0] });
-        self.showToast('名称已更新');
-        self.loadTransactions();
-        self.loadDashboard();
-      } else {
-        // 恢复显示
-        self.loadTransactions();
-      }
-    };
+    this.requirePassword(function() {
+      var accounts = Storage.get(Storage.keys.cashAccounts);
+      var account = accounts.find(function(a) { return a.id === id; });
+      if (!account) return;
 
-    input.addEventListener('blur', saveEdit);
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-      if (e.key === 'Escape') { self.loadTransactions(); }
+      // 找到显示名称的 DOM 元素
+      var cards = document.querySelectorAll('#cashAccounts .cash-account-card');
+      var targetCard = null;
+      cards.forEach(function(card) {
+        var nameEl = card.querySelector('.cash-account-name');
+        if (nameEl && nameEl.getAttribute('onclick') && nameEl.getAttribute('onclick').indexOf(id) !== -1) {
+          targetCard = card;
+        }
+      });
+      if (!targetCard) return;
+
+      var nameEl = targetCard.querySelector('.cash-account-name');
+      var oldLabel = account.label || account.name || '';
+
+      // 创建 input 替换
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'cash-label-input';
+      input.value = oldLabel;
+      input.maxLength = 30;
+
+      nameEl.innerHTML = '';
+      nameEl.appendChild(input);
+      nameEl.removeAttribute('onclick');
+      input.focus();
+      input.select();
+
+      var saveEdit = function() {
+        var newLabel = input.value.trim();
+        if (newLabel && newLabel !== oldLabel) {
+          Storage.update(Storage.keys.cashAccounts, id, { label: newLabel, name: newLabel, updated: new Date().toISOString().split('T')[0] });
+          self.showToast('名称已更新');
+          self.loadTransactions();
+          self.loadDashboard();
+        } else {
+          // 恢复显示
+          self.loadTransactions();
+        }
+      };
+
+      input.addEventListener('blur', saveEdit);
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { self.loadTransactions(); }
+      });
     });
   },
 
   deleteCashAccount(id) {
-    if (!confirm("确定删除此现金账户？")) return;
-    Storage.delete(Storage.keys.cashAccounts, id);
-    this.loadTransactions();
-    this.loadDashboard();
-    this.showToast("现金账户已删除");
+    var self = this;
+    this.requirePassword(function() {
+      if (!confirm("确定删除此现金账户？")) return;
+      Storage.delete(Storage.keys.cashAccounts, id);
+      self.loadTransactions();
+      self.loadDashboard();
+      self.showToast("现金账户已删除");
+    });
   },
 
   deleteTransaction(type, id) {
-    if (!confirm("确定删除此记录？")) return;
-    var key = type === "income" ? Storage.keys.income : Storage.keys.expense;
-    Storage.delete(key, id);
-    this.loadTransactions();
-    this.showToast("记录已删除");
+    var self = this;
+    this.requirePassword(function() {
+      if (!confirm("确定删除此记录？")) return;
+      var key = type === "income" ? Storage.keys.income : Storage.keys.expense;
+      Storage.delete(key, id);
+      self.loadTransactions();
+      self.showToast("记录已删除");
+    });
   },
 
   loadIncomeList() {
@@ -4123,17 +4172,23 @@ const App = {
   },
 
   saveIncome() {
-    Storage.add(Storage.keys.income, { type:document.getElementById("incomeType").value, amount:document.getElementById("incomeAmount").value, source:document.getElementById("incomeSource").value, date:document.getElementById("incomeDate").value });
-    document.getElementById("incomeForm").reset(); this.setTodayDates();
-    document.getElementById("incomeFormModal").classList.remove("show");
-    this.loadTransactions(); this.showToast("收入记录已保存");
+    var self = this;
+    this.requirePassword(function() {
+      Storage.add(Storage.keys.income, { type:document.getElementById("incomeType").value, amount:document.getElementById("incomeAmount").value, source:document.getElementById("incomeSource").value, date:document.getElementById("incomeDate").value });
+      document.getElementById("incomeForm").reset(); self.setTodayDates();
+      document.getElementById("incomeFormModal").classList.remove("show");
+      self.loadTransactions(); self.showToast("收入记录已保存");
+    });
   },
 
   saveExpense() {
-    Storage.add(Storage.keys.expense, { category:document.getElementById("expenseCategory").value, amount:document.getElementById("expenseAmount").value, method:document.getElementById("expenseMethod").value, note:document.getElementById("expenseNote").value, date:document.getElementById("expenseDate").value });
-    document.getElementById("expenseForm").reset(); this.setTodayDates();
-    document.getElementById("expenseFormModal").classList.remove("show");
-    this.loadTransactions(); this.showToast("支出记录已保存");
+    var self = this;
+    this.requirePassword(function() {
+      Storage.add(Storage.keys.expense, { category:document.getElementById("expenseCategory").value, amount:document.getElementById("expenseAmount").value, method:document.getElementById("expenseMethod").value, note:document.getElementById("expenseNote").value, date:document.getElementById("expenseDate").value });
+      document.getElementById("expenseForm").reset(); self.setTodayDates();
+      document.getElementById("expenseFormModal").classList.remove("show");
+      self.loadTransactions(); self.showToast("支出记录已保存");
+    });
   },
 
   getIncomeTypeLabel(type) {
@@ -4459,35 +4514,47 @@ const App = {
   },
 
   saveInsurance() {
-    var policy = { company:document.getElementById("insuranceCompany").value, product:document.getElementById("insuranceProduct").value, person:document.getElementById("insurancePerson").value, premium:document.getElementById("insurancePremium").value, freq:document.getElementById("insuranceFreq").value, nextPayDate:document.getElementById("insuranceNextPay").value, expireDate:document.getElementById("insuranceExpire").value };
-    // 自动调整日期
-    policy.nextPayDate = this.adjustNextPayDate(policy);
-    Storage.add(Storage.keys.insurance, policy);
-    document.getElementById("insuranceForm").reset(); this.setTodayDates();
-    document.getElementById("insuranceFormModal").classList.remove("show");
-    this.loadInsuranceList(); this.loadDashboard(); this.showToast("保单已保存");
+    var self = this;
+    this.requirePassword(function() {
+      var policy = { company:document.getElementById("insuranceCompany").value, product:document.getElementById("insuranceProduct").value, person:document.getElementById("insurancePerson").value, premium:document.getElementById("insurancePremium").value, freq:document.getElementById("insuranceFreq").value, nextPayDate:document.getElementById("insuranceNextPay").value, expireDate:document.getElementById("insuranceExpire").value };
+      // 自动调整日期
+      policy.nextPayDate = self.adjustNextPayDate(policy);
+      Storage.add(Storage.keys.insurance, policy);
+      document.getElementById("insuranceForm").reset(); self.setTodayDates();
+      document.getElementById("insuranceFormModal").classList.remove("show");
+      self.loadInsuranceList(); self.loadDashboard(); self.showToast("保单已保存");
+    });
   },
 
   editInsurance(id) {
-    const list = Storage.get(Storage.keys.insurance);
-    const item = list.find(i => i.id === id);
-    if (!item) return;
-    const newDate = prompt("修改「" + item.product + "」下次缴费日期:", item.nextPayDate || "");
-    if (newDate !== null) { Storage.update(Storage.keys.insurance, id, { nextPayDate:newDate }); this.loadInsuranceList(); this.showToast("缴费日期已更新"); }
+    var self = this;
+    this.requirePassword(function() {
+      const list = Storage.get(Storage.keys.insurance);
+      const item = list.find(i => i.id === id);
+      if (!item) return;
+      const newDate = prompt("修改「" + item.product + "」下次缴费日期:", item.nextPayDate || "");
+      if (newDate !== null) { Storage.update(Storage.keys.insurance, id, { nextPayDate:newDate }); self.loadInsuranceList(); self.showToast("缴费日期已更新"); }
+    });
   },
 
   editCollectNote(id) {
-    const list = Storage.get(Storage.keys.insurance);
-    const item = list.find(i => i.id === id);
-    if (!item) return;
-    const newNote = prompt("修改「" + item.product + "」的领取说明:", item.collectNote || "");
-    if (newNote !== null) { Storage.update(Storage.keys.insurance, id, { collectNote:newNote }); this.loadInsuranceList(); this.showToast("领取说明已更新"); }
+    var self = this;
+    this.requirePassword(function() {
+      const list = Storage.get(Storage.keys.insurance);
+      const item = list.find(i => i.id === id);
+      if (!item) return;
+      const newNote = prompt("修改「" + item.product + "」的领取说明:", item.collectNote || "");
+      if (newNote !== null) { Storage.update(Storage.keys.insurance, id, { collectNote:newNote }); self.loadInsuranceList(); self.showToast("领取说明已更新"); }
+    });
   },
 
   deleteInsurance(id) {
-    if (!confirm("确定删除此保单？")) return;
-    Storage.delete(Storage.keys.insurance, id);
-    this.loadInsuranceList(); this.loadDashboard(); this.showToast("保单已删除");
+    var self = this;
+    this.requirePassword(function() {
+      if (!confirm("确定删除此保单？")) return;
+      Storage.delete(Storage.keys.insurance, id);
+      self.loadInsuranceList(); self.loadDashboard(); self.showToast("保单已删除");
+    });
   },
 
   loadStockList() {
@@ -4585,44 +4652,52 @@ const App = {
   },
 
   saveStock() {
-    var market = document.getElementById("stockMarket").value || "CN";
-    var currencyMap = { CN: "CNY", HK: "HKD", US: "USD" };
-    var currency = currencyMap[market] || "CNY";
-    const currentPrice = document.getElementById("stockCurrentPrice").value || document.getElementById("stockCost").value;
-    Storage.add(Storage.keys.stocks, {
-      id: document.getElementById("stockCode").value,
-      code: document.getElementById("stockCode").value,
-      name: document.getElementById("stockName").value,
-      shares: document.getElementById("stockShares").value,
-      cost: document.getElementById("stockCost").value,
-      currentPrice: currentPrice,
-      currency: currency,
-      market: market,
-      broker: document.getElementById("stockBroker").value || "",
-      accountNo: ""
+    var self = this;
+    this.requirePassword(function() {
+      var market = document.getElementById("stockMarket").value || "CN";
+      var currencyMap = { CN: "CNY", HK: "HKD", US: "USD" };
+      var currency = currencyMap[market] || "CNY";
+      const currentPrice = document.getElementById("stockCurrentPrice").value || document.getElementById("stockCost").value;
+      Storage.add(Storage.keys.stocks, {
+        id: document.getElementById("stockCode").value,
+        code: document.getElementById("stockCode").value,
+        name: document.getElementById("stockName").value,
+        shares: document.getElementById("stockShares").value,
+        cost: document.getElementById("stockCost").value,
+        currentPrice: currentPrice,
+        currency: currency,
+        market: market,
+        broker: document.getElementById("stockBroker").value || "",
+        accountNo: ""
+      });
+      document.getElementById("stockForm").reset();
+      document.getElementById("stockFormModal").classList.remove("show");
+      self.loadStockList(); self.showToast("股票已添加");
     });
-    document.getElementById("stockForm").reset();
-    document.getElementById("stockFormModal").classList.remove("show");
-    this.loadStockList(); this.showToast("股票已添加");
   },
 
   deleteStock(id) {
-    if (!confirm("确定删除此股票？")) return;
-    Storage.delete(Storage.keys.stocks, id);
-    this.loadStockList();
-    this.loadDashboard();
-    // 直接渲染图表（使用内存缓存，已缓存的股票瞬间完成）
     var self = this;
-    setTimeout(function() { self.renderStockCharts(); }, 50);
-    this.showToast("股票已删除");
+    this.requirePassword(function() {
+      if (!confirm("确定删除此股票？")) return;
+      Storage.delete(Storage.keys.stocks, id);
+      self.loadStockList();
+      self.loadDashboard();
+      // 直接渲染图表（使用内存缓存，已缓存的股票瞬间完成）
+      setTimeout(function() { self.renderStockCharts(); }, 50);
+      self.showToast("股票已删除");
+    });
   },
 
   editStockPrice(id) {
-    const list = Storage.get(Storage.keys.stocks);
-    const stock = list.find(s => s.id === id);
-    if (!stock) return;
-    const newPrice = prompt("修改 " + stock.name + " 的当前价格:", stock.currentPrice || stock.cost);
-    if (newPrice && !isNaN(parseFloat(newPrice))) { Storage.update(Storage.keys.stocks, id, { currentPrice:parseFloat(newPrice) }); this.loadStockList(); this.showToast("价格已更新"); }
+    var self = this;
+    this.requirePassword(function() {
+      const list = Storage.get(Storage.keys.stocks);
+      const stock = list.find(s => s.id === id);
+      if (!stock) return;
+      const newPrice = prompt("修改 " + stock.name + " 的当前价格:", stock.currentPrice || stock.cost);
+      if (newPrice && !isNaN(parseFloat(newPrice))) { Storage.update(Storage.keys.stocks, id, { currentPrice:parseFloat(newPrice) }); self.loadStockList(); self.showToast("价格已更新"); }
+    });
   },
 
   // ===== 房贷导入 =====
@@ -7112,6 +7187,144 @@ const App = {
   mapCategoryToIncomeType(category) {
     var map = { food: "other", shopping: "other", housing: "rent", transport: "other", education: "other", medical: "other", entertainment: "other", other: "other" };
     return map[category] || "other";
+  },
+
+  // ===== 密码管理 =====
+  _passwordConfig: null,
+  _passwordCallback: null,
+
+  getPasswordConfig() {
+    if (this._passwordConfig) return this._passwordConfig;
+    try {
+      var raw = localStorage.getItem("family_finance_password");
+      this._passwordConfig = raw ? JSON.parse(raw) : { enabled: false, hash: null };
+    } catch(e) {
+      this._passwordConfig = { enabled: false, hash: null };
+    }
+    return this._passwordConfig;
+  },
+
+  _savePasswordConfig(cfg) {
+    this._passwordConfig = cfg;
+    localStorage.setItem("family_finance_password", JSON.stringify(cfg));
+  },
+
+  _hashPassword(pwd) {
+    var hash = 5381;
+    for (var i = 0; i < pwd.length; i++) {
+      hash = ((hash << 5) + hash) + pwd.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return "h" + Math.abs(hash).toString(36);
+  },
+
+  isPasswordEnabled() {
+    var cfg = this.getPasswordConfig();
+    return cfg.enabled && !!cfg.hash;
+  },
+
+  requirePassword(callback) {
+    if (!this.isPasswordEnabled()) {
+      callback();
+      return;
+    }
+    this._passwordCallback = callback;
+    var input = document.getElementById("passwordVerifyInput");
+    if (input) input.value = "";
+    var overlay = document.getElementById("passwordVerifyOverlay");
+    if (overlay) overlay.style.display = "flex";
+    if (input) input.focus();
+  },
+
+  confirmPasswordVerify() {
+    var input = document.getElementById("passwordVerifyInput");
+    var pwd = input ? input.value : "";
+    var cfg = this.getPasswordConfig();
+    if (this._hashPassword(pwd) === cfg.hash) {
+      document.getElementById("passwordVerifyOverlay").style.display = "none";
+      var cb = this._passwordCallback;
+      this._passwordCallback = null;
+      if (cb) cb();
+    } else {
+      this.showToast("密码错误", "error");
+      if (input) { input.value = ""; input.focus(); }
+      var card = document.querySelector(".password-verify-card");
+      if (card) {
+        card.classList.add("shake");
+        setTimeout(function() { card.classList.remove("shake"); }, 400);
+      }
+    }
+  },
+
+  cancelPasswordVerify() {
+    document.getElementById("passwordVerifyOverlay").style.display = "none";
+    this._passwordCallback = null;
+  },
+
+  setPassword() {
+    var pwd = document.getElementById("newPasswordInput").value;
+    var confirmPwd = document.getElementById("confirmPasswordInput").value;
+    if (!pwd || pwd.length < 4) { this.showToast("密码至少4位", "error"); return; }
+    if (pwd !== confirmPwd) { this.showToast("两次密码不一致", "error"); return; }
+    var cfg = this.getPasswordConfig();
+    cfg.hash = this._hashPassword(pwd);
+    cfg.enabled = true;
+    this._savePasswordConfig(cfg);
+    document.getElementById("newPasswordInput").value = "";
+    document.getElementById("confirmPasswordInput").value = "";
+    this.showToast("密码已设置并开启保护");
+    this.renderPasswordSection();
+  },
+
+  changePassword() {
+    var oldPwd = document.getElementById("oldPasswordInput").value;
+    var newPwd = document.getElementById("newPasswordChangeInput").value;
+    var confirmNew = document.getElementById("confirmNewPasswordInput").value;
+    var cfg = this.getPasswordConfig();
+    if (this._hashPassword(oldPwd) !== cfg.hash) { this.showToast("原密码错误", "error"); return; }
+    if (!newPwd || newPwd.length < 4) { this.showToast("新密码至少4位", "error"); return; }
+    if (newPwd !== confirmNew) { this.showToast("两次新密码不一致", "error"); return; }
+    cfg.hash = this._hashPassword(newPwd);
+    this._savePasswordConfig(cfg);
+    document.getElementById("oldPasswordInput").value = "";
+    document.getElementById("newPasswordChangeInput").value = "";
+    document.getElementById("confirmNewPasswordInput").value = "";
+    this.showToast("密码已修改");
+    this.renderPasswordSection();
+  },
+
+  togglePassword() {
+    var cfg = this.getPasswordConfig();
+    if (!cfg.hash) { this.showToast("请先设置密码", "error"); return; }
+    cfg.enabled = !cfg.enabled;
+    this._savePasswordConfig(cfg);
+    this.showToast(cfg.enabled ? "密码保护已开启" : "密码保护已关闭");
+    this.renderPasswordSection();
+  },
+
+  renderPasswordSection() {
+    var cfg = this.getPasswordConfig();
+    var hasPassword = !!cfg.hash;
+    var isEnabled = cfg.enabled && hasPassword;
+
+    var setSection = document.getElementById("passwordSetSection");
+    var changeSection = document.getElementById("passwordChangeSection");
+    var toggleSection = document.getElementById("passwordToggleSection");
+    var toggleBtn = document.getElementById("passwordToggleBtn");
+    var statusText = document.getElementById("passwordStatusText");
+
+    if (setSection) setSection.style.display = hasPassword ? "none" : "block";
+    if (changeSection) changeSection.style.display = hasPassword ? "block" : "none";
+    if (toggleSection) toggleSection.style.display = hasPassword ? "block" : "none";
+    if (toggleBtn) {
+      toggleBtn.textContent = isEnabled ? "关闭密码保护" : "开启密码保护";
+      toggleBtn.className = isEnabled ? "btn btn-outline" : "btn btn-primary";
+    }
+    if (statusText) {
+      if (!hasPassword) statusText.textContent = "未设置密码";
+      else if (isEnabled) statusText.textContent = "密码保护：已开启";
+      else statusText.textContent = "密码保护：已关闭";
+    }
   },
 
   showToast(message, type) {

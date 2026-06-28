@@ -4434,3 +4434,43 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .extra-record-delete:hover {
   color: #fca5a5;
 }
+
+/* ===== 密码管理 ===== */
+.password-verify-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+}
+
+.password-verify-card h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: #f1f5f9;
+}
+
+.password-verify-card .form-input {
+  margin-bottom: 4px;
+}
+
+.password-verify-card .settings-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+@keyframes pwdShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.password-verify-card.shake {
+  animation: pwdShake 0.4s ease;
+}

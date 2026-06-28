@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-28-v136 -->
+  <!-- version: 2026-06-28-v137 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=136">
+  <link rel="stylesheet" href="./css/style.css?v=137">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -893,6 +893,46 @@
           </div>
 
           <div class="settings-section">
+            <h4>密码管理</h4>
+            <p class="settings-tip" id="passwordStatusText">未设置密码</p>
+
+            <!-- 设置初始密码 -->
+            <div id="passwordSetSection">
+              <div class="form-group">
+                <label>设置密码</label>
+                <input type="password" id="newPasswordInput" class="form-input" placeholder="输入密码（至少4位）">
+              </div>
+              <div class="form-group">
+                <label>确认密码</label>
+                <input type="password" id="confirmPasswordInput" class="form-input" placeholder="再次输入密码">
+              </div>
+              <button class="btn btn-primary" id="setPasswordBtn">设置密码</button>
+            </div>
+
+            <!-- 修改密码 -->
+            <div id="passwordChangeSection" style="display:none;">
+              <div class="form-group">
+                <label>原密码</label>
+                <input type="password" id="oldPasswordInput" class="form-input" placeholder="输入原密码">
+              </div>
+              <div class="form-group">
+                <label>新密码</label>
+                <input type="password" id="newPasswordChangeInput" class="form-input" placeholder="输入新密码（至少4位）">
+              </div>
+              <div class="form-group">
+                <label>确认新密码</label>
+                <input type="password" id="confirmNewPasswordInput" class="form-input" placeholder="再次输入新密码">
+              </div>
+              <button class="btn btn-primary" id="changePasswordBtn">修改密码</button>
+            </div>
+
+            <!-- 启用/关闭 -->
+            <div id="passwordToggleSection" style="display:none;margin-top:12px;">
+              <button class="btn btn-primary" id="passwordToggleBtn">开启密码保护</button>
+            </div>
+          </div>
+
+          <div class="settings-section">
             <h4>本地数据</h4>
             <button class="btn btn-outline" id="clearLocalDataBtn" style="color:#ef4444;border-color:#ef4444;">
               <svg class="icon"><use href="#icon-delete"/></svg> 清空所有本地数据
@@ -901,6 +941,21 @@
         </div>
       </div>
     </section>
+
+    <!-- 密码验证弹窗 -->
+    <div class="modal-overlay" id="passwordVerifyOverlay" style="display:none;">
+      <div class="modal-card password-verify-card">
+        <h3>请输入密码</h3>
+        <p class="settings-tip" style="margin-bottom:12px;">此操作需要密码验证</p>
+        <div class="form-group">
+          <input type="password" id="passwordVerifyInput" class="form-input" placeholder="输入密码" style="text-align:center;font-size:18px;letter-spacing:4px;">
+        </div>
+        <div class="settings-actions">
+          <button class="btn btn-outline" id="passwordVerifyCancelBtn">取消</button>
+          <button class="btn btn-primary" id="passwordVerifyConfirmBtn">确认</button>
+        </div>
+      </div>
+    </div>
 
   </main>
 
@@ -1166,6 +1221,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=136"></script>
+  <script src="./js/app.js?v=137"></script>
 </body>
 </html>
