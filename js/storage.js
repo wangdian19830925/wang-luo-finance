@@ -412,10 +412,10 @@ const Storage = {
     const pwdHash = localStorage.getItem('finance_password_hash') || null;
     const pwdEnabled = localStorage.getItem('finance_password_enabled') === 'true';
     console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled);
-    return {
+      return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v144',
+      clientVersion: 'v145',
       _passwordHash: pwdHash,
       _passwordEnabled: pwdEnabled
     };
@@ -445,7 +445,7 @@ const Storage = {
           console.log('[CloudBase] 云端关闭保护但无密码，忽略enabled更新');
         } else {
           localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
-          console.log('[CloudBase] 已应用云端密码enabled:', pkg._passwordEnabled);
+          console.log('[CloudBase] 已应用合并后密码enabled:', pkg._passwordEnabled, '（来源:', localEnabled === pkg._passwordEnabled ? '本地' : '云端', '）');
         }
       }
       return true;
@@ -473,7 +473,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v144' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v145' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -637,13 +637,52 @@ const Storage = {
       };
       if (pkg._passwordHash !== undefined) docData._passwordHash = pkg._passwordHash;
       if (pkg._passwordEnabled !== undefined) docData._passwordEnabled = pkg._passwordEnabled;
-      // 使用固定文档ID，所有设备共享同一文档
-      // 使用 set() 覆盖写，确保云端文档与本地合并结果完全一致
-      // 注意：CloudBase v2 的 set 不支持 { merge: true } 或行为异常，因此统一使用覆盖写
-      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'data字段数:', Object.keys(docData.data || {}).length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
-      await collection.doc(FIXED_DOC_ID).set(docData);
+
+      const docRef = collection.doc(FIXED_DOC_ID);
+      const payloadSize = JSON.stringify(docData).length;
+      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'data字段数:', Object.keys(docData.data || {}).length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
+
+      // v2 SDK 在已有文档上 set() 多次出现行为异常（字段丢失/未覆盖），
+      // 因此优先使用 update()；文档不存在或 update 失败时再回退到 set()。
+      const docExists = this.cloudDocId === FIXED_DOC_ID;
+      let pushRes;
+      if (docExists) {
+        try {
+          pushRes = await docRef.update(docData);
+          console.log('[CloudBase] update 成功, res:', pushRes);
+        } catch (updateErr) {
+          console.warn('[CloudBase] update 失败，回退到 set:', updateErr.message || updateErr);
+          pushRes = await docRef.set(docData);
+          console.log('[CloudBase] set 成功, res:', pushRes);
+        }
+      } else {
+        pushRes = await docRef.set(docData);
+        console.log('[CloudBase] set 新建文档成功, res:', pushRes);
+      }
+
       this.cloudDocId = FIXED_DOC_ID;
       this.cloudLastSync = new Date().toISOString();
+
+      // 推送后立即验证，防止 SDK 返回成功但实际未写入
+      try {
+        const verifyRes = await docRef.get();
+        if (verifyRes && verifyRes.data) {
+          const v = verifyRes.data;
+          let vCount = 0;
+          if (v.data) {
+            Object.keys(v.data).forEach(k => {
+              if (Array.isArray(v.data[k])) vCount += v.data[k].length;
+            });
+          }
+          console.log('[CloudBase] 推送后验证, data字段存在:', !!v.data, '总记录数:', vCount, 'pwdHash存在:', !!v._passwordHash, 'pwdEnabled:', v._passwordEnabled);
+          if (vCount === 0 && docData.data && !this._isEmptyData(docData.data)) {
+            console.error('[CloudBase] 警告：推送后云端 data 为空，可能存在 SDK 写入异常');
+          }
+        }
+      } catch (verifyErr) {
+        console.warn('[CloudBase] 推送后验证失败:', verifyErr.message || verifyErr);
+      }
+
       console.log('[CloudBase] 推送云端数据成功, docId:', FIXED_DOC_ID);
       return true;
     } catch (e) {
