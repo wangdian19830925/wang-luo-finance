@@ -412,7 +412,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v141',
+      clientVersion: 'v142',
       _passwordHash: localStorage.getItem('finance_password_hash') || null,
       _passwordEnabled: localStorage.getItem('finance_password_enabled') === 'true'
     };
@@ -427,9 +427,9 @@ const Storage = {
         const incoming = Array.isArray(pkg.data[k]) ? pkg.data[k] : [];
         this.set(this.keys[k], incoming);
       });
-      // 应用密码设置
-      if (pkg._passwordHash !== undefined) {
-        localStorage.setItem('finance_password_hash', pkg._passwordHash || '');
+      // 应用密码设置（避免空值覆盖本地已有密码）
+      if (pkg._passwordHash) {
+        localStorage.setItem('finance_password_hash', pkg._passwordHash);
       }
       if (pkg._passwordEnabled !== undefined) {
         localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
@@ -459,7 +459,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v139' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v142' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];

@@ -61,6 +61,8 @@ const App = {
     console.log('[App] === init 开始 ===');
     console.log('[App] Storage 是否存在:', typeof Storage !== 'undefined');
     console.log('[App] INSURANCE_POLICIES 是否存在:', typeof INSURANCE_POLICIES !== 'undefined');
+    // 尽早迁移密码配置（在 CloudBase 同步前执行）
+    this._migratePasswordConfig();
     this.initVersionBadge();
     this.registerSW();
     this.requestNotificationPermission();
@@ -7197,11 +7199,30 @@ const App = {
   _passwordConfig: null,
   _passwordCallback: null,
 
+  // 密码配置迁移：旧版 family_finance_password -> 新版 finance_password_hash/enabled
+  _migratePasswordConfig() {
+    try {
+      var oldRaw = localStorage.getItem("family_finance_password");
+      if (!oldRaw) return;
+      var oldCfg = JSON.parse(oldRaw);
+      if (oldCfg && oldCfg.hash) {
+        localStorage.setItem("finance_password_hash", oldCfg.hash);
+        localStorage.setItem("finance_password_enabled", oldCfg.enabled ? 'true' : 'false');
+        console.log('[App] 已迁移旧版密码配置');
+      }
+      localStorage.removeItem("family_finance_password");
+    } catch(e) {
+      console.error('[App] 密码配置迁移失败:', e);
+    }
+  },
+
   getPasswordConfig() {
     if (this._passwordConfig) return this._passwordConfig;
     try {
-      var raw = localStorage.getItem("family_finance_password");
-      this._passwordConfig = raw ? JSON.parse(raw) : { enabled: false, hash: null };
+      this._migratePasswordConfig();
+      var hash = localStorage.getItem("finance_password_hash") || null;
+      var enabled = localStorage.getItem("finance_password_enabled") === 'true';
+      this._passwordConfig = { enabled: enabled, hash: hash };
     } catch(e) {
       this._passwordConfig = { enabled: false, hash: null };
     }
@@ -7210,7 +7231,8 @@ const App = {
 
   _savePasswordConfig(cfg) {
     this._passwordConfig = cfg;
-    localStorage.setItem("family_finance_password", JSON.stringify(cfg));
+    localStorage.setItem("finance_password_hash", cfg.hash || '');
+    localStorage.setItem("finance_password_enabled", cfg.enabled ? 'true' : 'false');
   },
 
   _hashPassword(pwd) {
