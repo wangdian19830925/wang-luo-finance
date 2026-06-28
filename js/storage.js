@@ -415,7 +415,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v143',
+      clientVersion: 'v144',
       _passwordHash: pwdHash,
       _passwordEnabled: pwdEnabled
     };
@@ -435,7 +435,7 @@ const Storage = {
       const localEnabled = localStorage.getItem('finance_password_enabled') === 'true';
       if (pkg._passwordHash) {
         localStorage.setItem('finance_password_hash', pkg._passwordHash);
-        console.log('[CloudBase] 已应用云端密码hash');
+        console.log('[CloudBase] 已应用合并后密码hash（来源:', localHash === pkg._passwordHash ? '本地' : '云端', '）');
       } else if (localHash) {
         console.log('[CloudBase] 传入密码为空，保留本地已有密码hash');
       }
@@ -473,7 +473,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v143' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v144' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -596,7 +596,16 @@ const Storage = {
             if (Array.isArray(doc.data[k])) count += doc.data[k].length;
           });
         }
-        console.log('[CloudBase] 拉取到云端数据，docId:', FIXED_DOC_ID, '总记录数:', count);
+        console.log('[CloudBase] 拉取到云端数据，docId:', FIXED_DOC_ID, '总记录数:', count, '字段:', Object.keys(doc).join(','));
+        console.log('[CloudBase] 云端文档详情:', JSON.stringify({
+          _id: doc._id,
+          updatedAt: doc.updatedAt,
+          clientVersion: doc.clientVersion,
+          _passwordHash: doc._passwordHash ? 'exists' : 'null',
+          _passwordEnabled: doc._passwordEnabled,
+          dataKeys: doc.data ? Object.keys(doc.data) : 'N/A',
+          dataCount: count
+        }));
         return { doc: doc, count: count, error: null };
       }
       console.log('[CloudBase] 云端无数据');
@@ -629,7 +638,10 @@ const Storage = {
       if (pkg._passwordHash !== undefined) docData._passwordHash = pkg._passwordHash;
       if (pkg._passwordEnabled !== undefined) docData._passwordEnabled = pkg._passwordEnabled;
       // 使用固定文档ID，所有设备共享同一文档
-      await collection.doc(FIXED_DOC_ID).set(docData, { merge: true });
+      // 使用 set() 覆盖写，确保云端文档与本地合并结果完全一致
+      // 注意：CloudBase v2 的 set 不支持 { merge: true } 或行为异常，因此统一使用覆盖写
+      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'data字段数:', Object.keys(docData.data || {}).length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
+      await collection.doc(FIXED_DOC_ID).set(docData);
       this.cloudDocId = FIXED_DOC_ID;
       this.cloudLastSync = new Date().toISOString();
       console.log('[CloudBase] 推送云端数据成功, docId:', FIXED_DOC_ID);
@@ -713,6 +725,8 @@ const Storage = {
       diag.addedCashCount = Math.max(0, mergedCashCount - localCashCount);
 
       // 推回云端（确保云端也是最新合并结果）
+      const mergedCount = Array.isArray(mergedPkg.data && mergedPkg.data.cashAccounts) ? mergedPkg.data.cashAccounts.length : 0;
+      console.log('[CloudBase] 准备推送合并数据，来源:', source, 'cashAccounts:', mergedCount, 'pwdHash:', !!mergedPkg._passwordHash, 'pwdEnabled:', mergedPkg._passwordEnabled);
       const pushSuccess = await this.pushToCloud(mergedPkg);
       if (!pushSuccess) {
         console.error('[CloudBase] 同步失败：推送云端数据失败');
