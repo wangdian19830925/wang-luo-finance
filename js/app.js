@@ -7368,9 +7368,22 @@ const App = {
   togglePassword() {
     var cfg = this.getPasswordConfig();
     if (!cfg.hash) { this.showToast("请先设置密码", "error"); return; }
-    cfg.enabled = !cfg.enabled;
+    var self = this;
+    // 关闭密码保护时需要验证密码，开启时不需要
+    if (cfg.enabled) {
+      this.requirePassword(function() {
+        self._performToggle(false);
+      });
+      return;
+    }
+    this._performToggle(true);
+  },
+
+  _performToggle(enabled) {
+    var cfg = this.getPasswordConfig();
+    cfg.enabled = enabled;
     this._savePasswordConfig(cfg);
-    this.showToast(cfg.enabled ? "密码保护已开启" : "密码保护已关闭");
+    this.showToast(enabled ? "密码保护已开启" : "密码保护已关闭");
     this.renderPasswordSection();
     // 同步密码到 CloudBase
     if (Storage.cloudSyncEnabled && Storage.cloudUser) {
