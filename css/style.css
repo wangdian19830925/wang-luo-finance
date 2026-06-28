@@ -4245,12 +4245,14 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   min-width: 80px;
 }
 
-/* 退休计算 - 参数网格（两列布局） */
+/* 退休计算 - 参数网格（两列布局，铺满整行） */
 .retirement-param-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px 16px;
   margin-bottom: 10px;
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .retirement-param-col {
