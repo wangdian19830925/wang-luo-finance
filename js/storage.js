@@ -473,7 +473,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v145' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v146' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
