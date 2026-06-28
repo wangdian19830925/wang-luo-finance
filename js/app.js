@@ -1,4 +1,19 @@
 // 主应用逻辑
+
+// 股票公司 Logo 映射 (SVG data URI, 28x28px 1:1)
+var STOCK_LOGOS = {
+  // 联想集团 — 品牌红 #E2231A
+  '00992': 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2228%22%20height%3D%2228%22%20viewBox%3D%220%200%2028%2028%22%3E%3Crect%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%226%22%20fill%3D%22%23E2231A%22%2F%3E%3Ctext%20x%3D%2214%22%20y%3D%2219%22%20text-anchor%3D%22middle%22%20font-size%3D%2211%22%20font-weight%3D%22700%22%20fill%3D%22%23fff%22%20font-family%3D%22Arial%2Csans-serif%22%20letter-spacing%3D%22-0.5%22%3ELenovo%3C%2Ftext%3E%3C%2Fsvg%3E',
+  // 蔚来 NIO — 品牌蓝 #004EA2，标志为路/天际线形状
+  'NIO': 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2228%22%20height%3D%2228%22%20viewBox%3D%220%200%2028%2028%22%3E%3Crect%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%226%22%20fill%3D%22%23004EA2%22%2F%3E%3Cpath%20d%3D%22M14%205%20L20%2018%20L17%2018%20L14%2012%20L11%2018%20L8%2018%20Z%22%20fill%3D%22%23fff%22%2F%3E%3Cpath%20d%3D%22M14%2013%20L18%2022%20L10%2022%20Z%22%20fill%3D%22%23fff%22%2F%3E%3C%2Fsvg%3E',
+  // 九号公司 Ninebot — 品牌色 #FF6600，标志为数字9
+  '689009': 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2228%22%20height%3D%2228%22%20viewBox%3D%220%200%2028%2028%22%3E%3Crect%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%226%22%20fill%3D%22%231a1a2e%22%2F%3E%3Ctext%20x%3D%2214%22%20y%3D%2221%22%20text-anchor%3D%22middle%22%20font-size%3D%2218%22%20font-weight%3D%22800%22%20fill%3D%22%23FF6600%22%20font-family%3D%22Arial%2Csans-serif%22%3E9%3C%2Ftext%3E%3C%2Fsvg%3E'
+};
+
+function getStockLogo(code) {
+  return STOCK_LOGOS[code] || '';
+}
+
 const App = {
   currentPage: "dashboard",
 
@@ -8,9 +23,9 @@ const App = {
     return '<svg class="icon ' + cls + '"><use href="#icon-' + name + '"/></svg>';
   },
 
-  // 公司Logo映射（已停用，返回空字符串）
+  // 公司Logo映射 — 委托给全局 STOCK_LOGOS
   getStockLogo(code) {
-    return '';
+    return STOCK_LOGOS[code] || '';
   },
 
   // 根据缴费频率，将已过期的下次缴费日期自动推进到未来
@@ -1159,7 +1174,7 @@ const App = {
 
         html += '<div class="record-item record-item-rsu">'
           + '<div class="record-info">'
-            + '<div class="record-title">' + r.name + '（' + r.code + '）'
+            + '<div class="record-title">' + (getStockLogo(r.code) ? '<img src="' + getStockLogo(r.code) + '" class="stock-logo" alt="logo"/>' : '') + r.name + '（' + r.code + '）'
               + ' <span style="font-size:11px;color:#22d3ee;font-weight:normal;">RSU</span></div>'
             + '<div class="record-detail">'
               + '授予总数: ' + totalShares + ' 股'
@@ -4171,8 +4186,8 @@ const App = {
             var daysColor = daysLeft < 0 ? "#ef4444" : (daysLeft <= 30 ? "#f59e0b" : "#22c55e");
             extra += "<div class=\"record-detail\">下次缴费: " + item.nextPayDate + " <span style=\"color:" + daysColor + ";font-weight:bold;\">（" + daysLabel + "）</span></div>";
           }
-          if (item.collectNote) extra += "<div class=\"collect-tag\">" + self.escapeHtml(item.collectNote) + "</div>";
-          html += "<div class=\"record-item\"><div class=\"record-info\"><div class=\"record-title\">" + self.escapeHtml(item.product) + "</div><div class=\"record-detail\">被保险人: " + self.escapeHtml(item.person) + " · " + self.escapeHtml(item.company) + "</div><div class=\"record-detail\">年缴: " + self.formatMoney(item.premium) + " · 区间: " + self.escapeHtml(item.payPeriod || "—") + "</div>" + extra + "</div><div class=\"record-actions\"><button onclick=\"App.editInsurance('" + item.id + "')\">" + self.icon('edit') + "</button><button onclick=\"App.deleteInsurance('" + item.id + "')\">" + self.icon('delete') + "</button></div></div>";
+          if (item.collectNote) extra += "<div class=\"collect-tag collect-tag-editable\" onclick=\"App.editCollectNote('" + item.id + "')\" title=\"点击编辑\">" + self.escapeHtml(item.collectNote) + "</div>";
+          html += "<div class=\"record-item\"><div class=\"record-info\"><div class=\"record-title\">" + self.escapeHtml(item.product) + "</div><div class=\"record-detail\">被保险人: " + self.escapeHtml(item.person) + " · " + self.escapeHtml(item.company) + (item.contractNo ? " · 合同号: " + self.escapeHtml(item.contractNo) : "") + "</div><div class=\"record-detail\">年缴: " + self.formatMoney(item.premium) + " · 区间: " + self.escapeHtml(item.payPeriod || "—") + "</div>" + extra + "</div><div class=\"record-actions\"><button onclick=\"App.editInsurance('" + item.id + "')\">" + self.icon('edit') + "</button><button onclick=\"App.deleteInsurance('" + item.id + "')\">" + self.icon('delete') + "</button></div></div>";
         });
         container.innerHTML = html;
       }
@@ -4461,6 +4476,14 @@ const App = {
     if (newDate !== null) { Storage.update(Storage.keys.insurance, id, { nextPayDate:newDate }); this.loadInsuranceList(); this.showToast("缴费日期已更新"); }
   },
 
+  editCollectNote(id) {
+    const list = Storage.get(Storage.keys.insurance);
+    const item = list.find(i => i.id === id);
+    if (!item) return;
+    const newNote = prompt("修改「" + item.product + "」的领取说明:", item.collectNote || "");
+    if (newNote !== null) { Storage.update(Storage.keys.insurance, id, { collectNote:newNote }); this.loadInsuranceList(); this.showToast("领取说明已更新"); }
+  },
+
   deleteInsurance(id) {
     if (!confirm("确定删除此保单？")) return;
     Storage.delete(Storage.keys.insurance, id);
@@ -4513,7 +4536,7 @@ const App = {
 
         html += "<div class=\"record-item\">" +
           "<div class=\"record-info\">" +
-            "<div class=\"record-title\">" + item.name + "（" + item.code + "）</div>" +
+            "<div class=\"record-title\">" + (getStockLogo(item.code) ? "<img src=\"" + getStockLogo(item.code) + "\" class=\"stock-logo\" alt=\"logo\"/>" : "") + item.name + "（" + item.code + "）</div>" +
             "<div class=\"record-detail\">" +
               "持有 " +
               "<span class=\"inline-editable\" data-type=\"stock-shares\" data-id=\"" + item.id + "\">" + shares + "</span>" +
@@ -6008,11 +6031,11 @@ const App = {
     var eduEntry = result.years.find(function(y) { return y.year === eduEndYear; });
     var eduEndAge = eduEntry ? eduEntry.age : 43 + (eduEndYear - 2026);
 
-    // 顶部：关键事件标注（扁平化小字，错开两行避免重叠）
-    addMilestone(m2Age, 'Rowen退休', '#22d3ee', true, 9);       // 第一行
-    addMilestone(m1Age, '王典退休', '#4ade80', true, 9);         // 第一行
-    addMilestone(60, '保险年金', '#f59e0b', true, 9, 12);       // 第二行
-    addMilestone(eduEndAge, '教育结束', '#a78bfa', true, 9, 12); // 第二行
+    // 顶部：关键事件标注（扁平化小字，错开两行避免重叠，统一白色）
+    addMilestone(m2Age, 'Rowen退休', '#ffffff', true, 9);       // 第一行
+    addMilestone(m1Age, '王典退休', '#ffffff', true, 9);         // 第一行
+    addMilestone(60, '保险年金', '#ffffff', true, 9, 12);       // 第二行
+    addMilestone(eduEndAge, '教育结束', '#ffffff', true, 9, 12); // 第二行
 
     if (result.runOutYear && result.runOutYear <= years[years.length - 1].year) {
       var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });
