@@ -6069,20 +6069,20 @@ const App = {
     var cfZeroY = cfPadTop + cfChartH / 2;
     function cfpy(v) { return cfZeroY - (v / cfMax) * (cfChartH / 2); }
 
-    // 收入分项（从下往上堆叠）
+    // 收入分项（从下往上堆叠）— 青蓝色系
     var incomeLayers = [
-      { key: 'extraIncome', label: '其他收入', color: '#94a3b8' },
-      { key: 'pension', label: '基本养老金', color: '#38bdf8' },
-      { key: 'insurance', label: '保险年金', color: '#a78bfa' },
-      { key: 'enterpriseAnnuity', label: '企业年金', color: '#34d399' },
-      { key: 'investmentGain', label: '投资收益', color: '#fbbf24' }
+      { key: 'extraIncome', label: '其他收入', color: '#1e3a5f' },
+      { key: 'pension', label: '基本养老金', color: '#1d4ed8' },
+      { key: 'insurance', label: '保险年金', color: '#3b82f6' },
+      { key: 'enterpriseAnnuity', label: '企业年金', color: '#60a5fa' },
+      { key: 'investmentGain', label: '投资收益', color: '#93c5fd' }
     ];
-    // 支出分项（从上往下堆叠，即向下）
+    // 支出分项（从上往下堆叠，即向下）— 玫瑰红色系
     var expenseLayers = [
-      { key: 'expense', label: '生活消费', color: '#f87171' },
-      { key: 'education', label: '教育消费', color: '#fb923c' },
-      { key: 'mortgage', label: '房贷', color: '#22d3ee' },
-      { key: 'premium', label: '购买保险', color: '#f472b6' }
+      { key: 'expense', label: '生活消费', color: '#881337' },
+      { key: 'education', label: '教育消费', color: '#be123c' },
+      { key: 'mortgage', label: '房贷', color: '#e11d48' },
+      { key: 'premium', label: '购买保险', color: '#f43f5e' }
     ];
 
     function buildStackedArea(layers, isExpense) {
@@ -6116,7 +6116,7 @@ const App = {
 
     var cfPathsHtml = '';
     incomeAreas.concat(expenseAreas).forEach(function(area) {
-      cfPathsHtml += '<path d="' + area.d + '" fill="' + area.color + '" fill-opacity="0.35" stroke="' + area.color + '" stroke-width="1" stroke-linejoin="round" stroke-opacity="0.7"/>';
+      cfPathsHtml += '<path d="' + area.d + '" fill="' + area.color + '" fill-opacity="0.55" stroke="' + area.color + '" stroke-width="1" stroke-linejoin="round" stroke-opacity="0.8"/>';
     });
 
     // 与上方走势图对齐的横轴刻度
@@ -6132,15 +6132,15 @@ const App = {
 
     var cfSvg = '<svg viewBox="0 0 ' + width + ' ' + cfHeight + '" class="retirement-chart-svg" style="height:' + cfHeight + 'px;min-width:680px">' +
       cfGrid +
-      '<line x1="' + padLeft + '" y1="' + cfpy(0).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(0).toFixed(1) + '" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>' +
+      '<line x1="' + padLeft + '" y1="' + cfpy(0).toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + cfpy(0).toFixed(1) + '" stroke="#94a3b8" stroke-width="1.5" stroke-opacity="0.6"/>' +
       '<line x1="' + padLeft + '" y1="' + (cfHeight - cfPadBottom) + '" x2="' + (width - padRight) + '" y2="' + (cfHeight - cfPadBottom) + '" stroke="#334155" stroke-width="1"/>' +
       cfPathsHtml +
       cfXAxis +
       '<text x="' + (padLeft + 4) + '" y="' + (cfPadTop - 4).toFixed(1) + '" text-anchor="start" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
       '</svg>';
 
-    // 堆积图图例：收入、支出分两行
-    var cfLegend = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:11px;line-height:1.4;">';
+    // 堆积图图例：收入、支出分两行，与上方图表左沿对齐
+    var cfLegend = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:11px;line-height:1.4;padding-left:' + padLeft + 'px;">';
     cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
     cfLegend += '<span style="color:#475569;font-weight:500;">收入</span>';
     incomeLayers.forEach(function(l) {
