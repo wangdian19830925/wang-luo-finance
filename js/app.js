@@ -550,18 +550,21 @@ const App = {
 
   clearAllLocalData() {
     if (!confirm("确定清空所有本地数据？\n此操作不可恢复，建议先导出备份。")) return;
-    Storage.clearAllData();
-    this.loadDashboard();
-    this.loadTransactions();
-    this.loadStockList();
-    this.renderStockCharts();
-    this.loadFundList();
-    this.loadInsuranceList();
-    this.loadLoanList();
-    this.loadAnnuityList();
-    this.checkNotifications();
-    this.closeSettings();
-    this.showToast("本地数据已清空");
+    var self = this;
+    this.requirePassword(function() {
+      Storage.clearAllData();
+      self.loadDashboard();
+      self.loadTransactions();
+      self.loadStockList();
+      self.renderStockCharts();
+      self.loadFundList();
+      self.loadInsuranceList();
+      self.loadLoanList();
+      self.loadAnnuityList();
+      self.checkNotifications();
+      self.closeSettings();
+      self.showToast("本地数据已清空");
+    });
   },
 
   // 刷新全部数据：股票 / 汇率 / 基金 / 房贷还款进度
