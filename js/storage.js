@@ -424,7 +424,7 @@ const Storage = {
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v148',
+      clientVersion: 'v149',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -483,7 +483,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v148' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v149' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -724,34 +724,45 @@ const Storage = {
 
       this.cloudLastSync = new Date().toISOString();
 
-      // 推送后验证
+      // 推送后验证：CloudBase 文档读取存在缓存/副本延迟，get() 可能返回旧数据，故以 where 查询作为可靠回退
+      await new Promise(r => setTimeout(r, 300)); // 等待 300ms，让写入在副本间同步
       let verificationPassed = false;
       let verifyDoc = null;
       try {
-        const verifyRes = await docRef.get();
-        if (verifyRes && verifyRes.data) {
-          const v = verifyRes.data;
-          if (v.jsonData || v.data) {
-            verifyDoc = v;
-            verificationPassed = true;
-            console.log('[CloudBase] 固定 ID 读取验证通过');
-          }
-        }
-        // 固定 ID 读取失败且使用了随机 ID 时，尝试 where 查询
-        if (!verificationPassed && usedRandomId) {
-          const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
-          if (queryRes && queryRes.data && queryRes.data.length > 0) {
-            const sorted = queryRes.data.slice().sort((a, b) => {
-              const ta = new Date(b.updatedAt || 0).getTime();
-              const tb = new Date(a.updatedAt || 0).getTime();
-              return ta - tb;
-            });
-            const latest = sorted[0];
-            if (latest && (latest.jsonData || latest.data)) {
-              verifyDoc = latest;
+        // 方案1：直接读取固定 ID 文档（通常最快）
+        try {
+          const verifyRes = await docRef.get();
+          if (verifyRes && verifyRes.data) {
+            const v = verifyRes.data;
+            if (v.jsonData || v.data) {
+              verifyDoc = v;
               verificationPassed = true;
-              console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length);
+              console.log('[CloudBase] 固定 ID 读取验证通过');
             }
+          }
+        } catch (directVerifyErr) {
+          console.warn('[CloudBase] 固定 ID 读取验证失败:', directVerifyErr.message || directVerifyErr);
+        }
+
+        // 方案2：直接读取未通过或为空时，使用 where 查询回退（绕开单文档缓存）
+        if (!verificationPassed) {
+          try {
+            const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
+            if (queryRes && queryRes.data && queryRes.data.length > 0) {
+              const sorted = queryRes.data.slice().sort((a, b) => {
+                const ta = new Date(b.updatedAt || 0).getTime();
+                const tb = new Date(a.updatedAt || 0).getTime();
+                return ta - tb;
+              });
+              const latest = sorted[0];
+              if (latest && (latest.jsonData || latest.data)) {
+                verifyDoc = latest;
+                verificationPassed = true;
+                console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length);
+              }
+            }
+          } catch (whereVerifyErr) {
+            console.warn('[CloudBase] where 查询验证失败:', whereVerifyErr.message || whereVerifyErr);
           }
         }
       } catch (verifyErr) {
