@@ -412,7 +412,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v139',
+      clientVersion: 'v140',
       _passwordHash: localStorage.getItem('finance_password_hash') || null,
       _passwordEnabled: localStorage.getItem('finance_password_enabled') === 'true'
     };
@@ -534,11 +534,15 @@ const Storage = {
       }
     });
     // 合并密码设置（以 updatedAt 较新者为准，云端优先）
-    if (cloudPkg && cloudPkg._passwordHash !== undefined) {
-      if (!localPkg || localPkg._passwordHash === undefined) {
+    // 修复：用 truthy 判断替代 === undefined，因为本地无密码时值为 null 而非 undefined
+    if (cloudPkg && cloudPkg._passwordHash) {
+      // 云端有密码设置
+      if (!localPkg || !localPkg._passwordHash) {
+        // 本地没有密码设置，使用云端的
         merged._passwordHash = cloudPkg._passwordHash;
         merged._passwordEnabled = cloudPkg._passwordEnabled;
       } else {
+        // 两端都有密码设置，使用更新的
         const localTime = new Date(localPkg.updatedAt || 0).getTime();
         const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
         if (cloudTime >= localTime) {
@@ -549,7 +553,8 @@ const Storage = {
           merged._passwordEnabled = localPkg._passwordEnabled;
         }
       }
-    } else if (localPkg && localPkg._passwordHash !== undefined) {
+    } else if (localPkg && localPkg._passwordHash) {
+      // 只有本地有密码设置
       merged._passwordHash = localPkg._passwordHash;
       merged._passwordEnabled = localPkg._passwordEnabled;
     }
