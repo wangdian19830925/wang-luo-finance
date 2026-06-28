@@ -1611,16 +1611,16 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .annuity-chart-wrap {
   display: flex;
   align-items: center;
-  gap: 60px;
+  gap: 32px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 16px 24px;
+  padding: 10px 18px;
   flex-wrap: wrap;
   justify-content: center;
 }
 .annuity-donut {
-  width: 340px; height: 340px;
+  width: 320px; height: 320px;
   flex-shrink: 0;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
 }
