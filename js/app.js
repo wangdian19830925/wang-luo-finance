@@ -2373,29 +2373,45 @@ const App = {
         if (klines.length >= 5) {
           if (callback) callback(klines);
         } else {
-          // 腾讯数据不足 → 优先使用内联历史数据(js/history-data.js)
-          var inlineData = self._getInlineHistory(code);
-          if (inlineData && inlineData.length >= 5) {
-            console.log('[走势图] ' + code + ' 使用内联历史数据: ' + inlineData.length + '条');
-            if (callback) callback(inlineData);
-          } else {
-            console.warn('[走势图] ' + code + ' 无任何历史数据可用');
-            if (callback) callback(null);
-          }
+          // 腾讯数据不足（常见于美股）→ 尝试东方财富API
+          self._fetchEastMoneyHistory(code, market, function(emData) {
+            if (emData && emData.length >= 5) {
+              console.log('[走势图] ' + code + ' 东方财富回退: ' + emData.length + '条');
+              if (callback) callback(emData);
+            } else {
+              // 东方财富也失败 → 使用内联历史数据(js/history-data.js)
+              var inlineData = self._getInlineHistory(code);
+              if (inlineData && inlineData.length >= 5) {
+                console.log('[走势图] ' + code + ' 使用内联历史数据: ' + inlineData.length + '条');
+                if (callback) callback(inlineData);
+              } else {
+                console.warn('[走势图] ' + code + ' 无任何历史数据可用');
+                if (callback) callback(null);
+              }
+            }
+          });
         }
       })
       .catch(function(err) {
         clearTimeout(fetchTimeoutId);
         console.warn('[走势图] 腾讯API请求失败(' + code + '):', err.message);
-        // 网络错误 → 使用内联历史数据
-        var inlineData = self._getInlineHistory(code);
-        if (inlineData && inlineData.length >= 5) {
-          console.log('[走势图] API失败, 使用 ' + code + ' 内联历史数据: ' + inlineData.length + '条');
-          if (callback) callback(inlineData);
-        } else {
-          console.warn('[走势图] ' + code + ' 无任何历史数据可用');
-          if (callback) callback(null);
-        }
+        // 网络错误 → 尝试东方财富API
+        self._fetchEastMoneyHistory(code, market, function(emData) {
+          if (emData && emData.length >= 5) {
+            console.log('[走势图] 腾讯失败, 东方财富 ' + code + ': ' + emData.length + '条');
+            if (callback) callback(emData);
+          } else {
+            // 东方财富也失败 → 使用内联历史数据
+            var inlineData = self._getInlineHistory(code);
+            if (inlineData && inlineData.length >= 5) {
+              console.log('[走势图] API失败, 使用 ' + code + ' 内联历史数据: ' + inlineData.length + '条');
+              if (callback) callback(inlineData);
+            } else {
+              console.warn('[走势图] ' + code + ' 无任何历史数据可用');
+              if (callback) callback(null);
+            }
+          }
+        });
       });
   },
 
@@ -2410,6 +2426,61 @@ const App = {
       console.warn('[走势图] _getInlineHistory 异常:', e.message);
     }
     return null;
+  },
+
+  // 从东方财富API获取美股历史K线（腾讯API对美股支持不足时的回退）
+  // 东方财富支持CORS，secid=106适用于美股（NASDAQ/NYSE均可）
+  _fetchEastMoneyHistory(code, market, callback) {
+    // 仅对美股使用东方财富
+    if (market !== 'US') { if (callback) callback(null); return; }
+
+    var secid = '106.' + code.toUpperCase();
+    var url = 'https://push2his.eastmoney.com/api/qt/stock/kline/get' +
+      '?secid=' + secid +
+      '&fields1=f1,f2,f3,f4,f5,f6' +
+      '&fields2=f51,f52,f53,f54,f55,f56,f57,f58' +
+      '&klt=101&fqt=1&beg=0&end=20500101&lmt=120';
+
+    console.log('[走势图] 请求东方财富API: ' + code + ' (secid=' + secid + ')');
+
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
+
+    fetch(url, { signal: controller.signal })
+      .then(function(res) {
+        clearTimeout(timeoutId);
+        return res.json();
+      })
+      .then(function(data) {
+        var klines = [];
+        try {
+          var klineStrs = data && data.data && data.data.klines;
+          if (klineStrs && klineStrs.length > 0) {
+            klines = klineStrs.map(function(line) {
+              var parts = line.split(',');
+              return {
+                date: parts[0],
+                open: parseFloat(parts[1]),
+                close: parseFloat(parts[2]),
+                high: parseFloat(parts[3]),
+                low: parseFloat(parts[4]),
+                volume: parseFloat(parts[5])
+              };
+            }).filter(function(k) { return !isNaN(k.close); });
+          }
+        } catch(e) { console.error('[走势图] 东方财富解析失败:', e.message); }
+
+        if (klines.length > 0) {
+          try { localStorage.setItem('fm_stock_hist_' + code, JSON.stringify({ t: Date.now(), d: klines })); } catch(e) {}
+        }
+        console.log('[走势图] 东方财富 ' + code + ': ' + klines.length + ' 条');
+        if (callback) callback(klines);
+      })
+      .catch(function(err) {
+        clearTimeout(timeoutId);
+        console.warn('[走势图] 东方财富API失败(' + code + '):', err.message);
+        if (callback) callback(null);
+      });
   },
 
   // 渲染所有股票的走势图（在每个股票卡片内）
