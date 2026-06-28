@@ -4244,3 +4244,160 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   flex: 1;
   min-width: 80px;
 }
+
+/* ===== 退休计算 - 额外收支记录 ===== */
+.retirement-add-extra-btn {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retirement-add-extra-btn:hover {
+  background: rgba(74, 222, 128, 0.2);
+}
+
+.retirement-extra-list {
+  margin-top: 8px;
+}
+
+.retirement-extra-empty {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
+}
+
+.retirement-extra-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.retirement-extra-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.retirement-extra-income {
+  border-left: 3px solid #4ade80;
+}
+
+.retirement-extra-expense {
+  border-left: 3px solid #f87171;
+}
+
+.retirement-extra-year {
+  color: #94a3b8;
+  min-width: 60px;
+}
+
+.retirement-extra-type {
+  font-weight: 500;
+  min-width: 30px;
+}
+
+.retirement-extra-income .retirement-extra-type {
+  color: #4ade80;
+}
+
+.retirement-extra-expense .retirement-extra-type {
+  color: #f87171;
+}
+
+.retirement-extra-amount {
+  color: #f1f5f9;
+  font-weight: 500;
+  flex: 1;
+}
+
+.retirement-extra-note {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.retirement-extra-delete {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+
+.retirement-extra-delete:hover {
+  color: #f87171;
+}
+
+/* 额外收支弹窗 */
+.retirement-extra-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.retirement-extra-panel {
+  background: #13132a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.retirement-extra-panel h3 {
+  color: #f1f5f9;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.retirement-extra-panel .form-group {
+  margin-bottom: 12px;
+}
+
+.retirement-extra-panel .form-group label {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.retirement-extra-panel .form-group input,
+.retirement-extra-panel .form-group select {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-size: 13px;
+}
+
+.retirement-extra-panel .form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.retirement-extra-panel .form-actions .btn {
+  flex: 1;
+}
