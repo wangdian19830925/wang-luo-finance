@@ -1601,7 +1601,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   .stock-summary { grid-template-columns: 1fr; }
   .header-title { text-align: center; }
   .annuity-chart-wrap { flex-direction: column; align-items: center; padding: 20px 16px; }
-  .annuity-donut { width: 240px; height: 240px; }
+  .annuity-donut { width: 260px; height: 260px; }
   .annuity-legend { width: 100%; max-width: 100%; min-width: 0; }
   .annuity-detail-right { flex-direction: column; align-items: flex-end; }
 }
@@ -1611,7 +1611,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .annuity-chart-wrap {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 48px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1620,7 +1620,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   justify-content: center;
 }
 .annuity-donut {
-  width: 280px; height: 280px;
+  width: 320px; height: 320px;
   flex-shrink: 0;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
 }
