@@ -412,7 +412,9 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v138'
+      clientVersion: 'v139',
+      _passwordHash: localStorage.getItem('finance_password_hash') || null,
+      _passwordEnabled: localStorage.getItem('finance_password_enabled') === 'true'
     };
   },
 
@@ -425,6 +427,13 @@ const Storage = {
         const incoming = Array.isArray(pkg.data[k]) ? pkg.data[k] : [];
         this.set(this.keys[k], incoming);
       });
+      // 应用密码设置
+      if (pkg._passwordHash !== undefined) {
+        localStorage.setItem('finance_password_hash', pkg._passwordHash || '');
+      }
+      if (pkg._passwordEnabled !== undefined) {
+        localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
+      }
       return true;
     } finally {
       this._applyingCloudData = false;
@@ -450,7 +459,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v84' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v139' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -524,6 +533,27 @@ const Storage = {
         console.log(`[CloudBase] 合并 ${k}: 云端新增 ${addedFromCloud}, 云端覆盖 ${conflictWinCloud}, 本地保留 ${conflictWinLocal}`);
       }
     });
+    // 合并密码设置（以 updatedAt 较新者为准，云端优先）
+    if (cloudPkg && cloudPkg._passwordHash !== undefined) {
+      if (!localPkg || localPkg._passwordHash === undefined) {
+        merged._passwordHash = cloudPkg._passwordHash;
+        merged._passwordEnabled = cloudPkg._passwordEnabled;
+      } else {
+        const localTime = new Date(localPkg.updatedAt || 0).getTime();
+        const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
+        if (cloudTime >= localTime) {
+          merged._passwordHash = cloudPkg._passwordHash;
+          merged._passwordEnabled = cloudPkg._passwordEnabled;
+        } else {
+          merged._passwordHash = localPkg._passwordHash;
+          merged._passwordEnabled = localPkg._passwordEnabled;
+        }
+      }
+    } else if (localPkg && localPkg._passwordHash !== undefined) {
+      merged._passwordHash = localPkg._passwordHash;
+      merged._passwordEnabled = localPkg._passwordEnabled;
+    }
+
     return merged;
   },
 
@@ -566,6 +596,8 @@ const Storage = {
         updatedAt: pkg.updatedAt,
         clientVersion: pkg.clientVersion
       };
+      if (pkg._passwordHash !== undefined) docData._passwordHash = pkg._passwordHash;
+      if (pkg._passwordEnabled !== undefined) docData._passwordEnabled = pkg._passwordEnabled;
       if (this.cloudDocId) {
         // v2: update 直接传入字段
         const res = await collection.doc(this.cloudDocId).update(docData);
@@ -623,7 +655,9 @@ const Storage = {
       const cloudPkg = cloudDoc ? {
         data: cloudDoc.data,
         updatedAt: cloudDoc.updatedAt,
-        clientVersion: cloudDoc.clientVersion
+        clientVersion: cloudDoc.clientVersion,
+        _passwordHash: cloudDoc._passwordHash || null,
+        _passwordEnabled: cloudDoc._passwordEnabled || false
       } : null;
 
       console.log('[CloudBase] 云端数据包:', cloudPkg ? JSON.stringify(cloudPkg).substring(0, 300) + '...' : 'null');

@@ -1379,31 +1379,10 @@ const App = {
         if (!stock) return;
         var oldShares = parseInt(stock.shares) || 0;
         Storage.update(Storage.keys.stocks, id, { shares: newVal });
-
-        // 保存现有图表 DOM，避免 loadStockList() 重建后图表丢失
-        var chartSnapshots = {};
-        stockList.forEach(function(s) {
-          var chartEl = document.getElementById('stockChartInner_' + s.code);
-          if (chartEl) chartSnapshots[s.code] = chartEl.innerHTML;
-        });
-        // RSU 共享同一 code 的图表也需保存
-        var rsuList0 = Storage.get(Storage.keys.rsu) || [];
-        rsuList0.forEach(function(r) {
-          if (!chartSnapshots[r.code]) {
-            var rEl = document.getElementById('stockChartInner_' + r.code);
-            if (rEl) chartSnapshots[r.code] = rEl.innerHTML;
-          }
-        });
-
         self.loadStockList();
         self.loadDashboard();
-
-        // 恢复图表 DOM（走势图和涨跌幅标签原样保留，不重新加载）
-        Object.keys(chartSnapshots).forEach(function(code) {
-          var el = document.getElementById('stockChartInner_' + code);
-          if (el) el.innerHTML = chartSnapshots[code];
-        });
-
+        // 从缓存重绘走势图（不重新请求 API）
+        self.renderStockCharts();
         self.showToast(stock.name + ' 持有股数: ' + oldShares + ' → ' + newVal + ' 股', 'success');
       } else if (type === 'rsu-vested') {
         var rsuList = Storage.get(Storage.keys.rsu);
@@ -7299,6 +7278,10 @@ const App = {
     document.getElementById("confirmPasswordInput").value = "";
     this.showToast("密码已设置并开启保护");
     this.renderPasswordSection();
+    // 同步密码到 CloudBase
+    if (Storage.cloudSyncEnabled && Storage.cloudUser) {
+      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+    }
   },
 
   changePassword() {
@@ -7316,6 +7299,10 @@ const App = {
     document.getElementById("confirmNewPasswordInput").value = "";
     this.showToast("密码已修改");
     this.renderPasswordSection();
+    // 同步密码到 CloudBase
+    if (Storage.cloudSyncEnabled && Storage.cloudUser) {
+      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+    }
   },
 
   togglePassword() {
@@ -7325,6 +7312,10 @@ const App = {
     this._savePasswordConfig(cfg);
     this.showToast(cfg.enabled ? "密码保护已开启" : "密码保护已关闭");
     this.renderPasswordSection();
+    // 同步密码到 CloudBase
+    if (Storage.cloudSyncEnabled && Storage.cloudUser) {
+      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+    }
   },
 
   renderPasswordSection() {
