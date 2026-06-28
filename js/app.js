@@ -5685,7 +5685,7 @@ const App = {
       }
       grid.innerHTML = items.map(function(it) {
         return '<div class="retirement-summary-item ' + it.cls + '"><div class="retirement-summary-label">' + self.escapeHtml(it.label) + '</div><div class="retirement-summary-value">' + it.value + '</div></div>';
-      }).join('') + '<button id="btnRetireDetail" class="action-btn" style="margin-top:12px;width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;">查看计算详情</button>';
+      }).join('') + '<button id="btnRetireDetail" type="button">查看计算详情</button>';
     }
 
     // 3. 计算详情面板（初始隐藏）
@@ -5888,7 +5888,15 @@ const App = {
       var runIdx = years.findIndex(function(y) { return y.year === result.runOutYear; });
       if (runIdx >= 0) {
         var runX = px(runIdx);
-        var runY = py(years[runIdx].endBalance);
+        // 插值：找到曲线穿过零线的精确 x 位置
+        if (runIdx > 0 && years[runIdx - 1].endBalance >= 0 && years[runIdx].endBalance < 0) {
+          var prevBal = years[runIdx - 1].endBalance;
+          var curBal = years[runIdx].endBalance;
+          var ratio = prevBal / (prevBal - curBal); // 线性插值
+          runX = px(runIdx - 1 + ratio);
+        }
+        // 标记点放在零线上（与红绿分解线对齐）
+        var runY = py(0);
         milestones += '<circle cx="' + runX.toFixed(1) + '" cy="' + runY.toFixed(1) + '" r="4" fill="#ef4444" stroke="#0f172a" stroke-width="1.5"/>';
         milestones += '<text x="' + runX.toFixed(1) + '" y="' + (runY - 10).toFixed(1) + '" text-anchor="middle" font-size="9" fill="#f87171" font-weight="500">' + result.runOutYear + '年耗尽</text>';
       }

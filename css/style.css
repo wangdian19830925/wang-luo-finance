@@ -3101,6 +3101,26 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   color: #ef4444;
 }
 
+/* 退休页"查看计算详情"按钮 */
+#btnRetireDetail {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 0;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+#btnRetireDetail:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(74, 222, 128, 0.05);
+}
+
 .retirement-chart-section {
   margin-top: 20px;
   padding-top: 20px;
