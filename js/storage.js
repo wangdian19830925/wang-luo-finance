@@ -412,7 +412,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v140',
+      clientVersion: 'v141',
       _passwordHash: localStorage.getItem('finance_password_hash') || null,
       _passwordEnabled: localStorage.getItem('finance_password_enabled') === 'true'
     };
@@ -562,27 +562,33 @@ const Storage = {
     return merged;
   },
 
-  // 从云端拉取数据
+  // 从云端拉取数据（使用固定文档ID）
   async pullFromCloud() {
     if (!this.cloudSyncEnabled || !this.cloudDb) return { doc: null, count: 0, error: 'CloudBase 未初始化' };
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
+    const FIXED_DOC_ID = 'finance_data';
     try {
-      const res = await collection.limit(1).get();
-      if (res.data && res.data.length > 0) {
-        const doc = res.data[0];
-        this.cloudDocId = doc._id;
+      const res = await collection.doc(FIXED_DOC_ID).get();
+      if (res.data) {
+        const doc = res.data;
+        this.cloudDocId = FIXED_DOC_ID;
         let count = 0;
         if (doc.data) {
           Object.keys(doc.data).forEach(k => {
             if (Array.isArray(doc.data[k])) count += doc.data[k].length;
           });
         }
-        console.log('[CloudBase] 拉取到云端数据，docId:', doc._id, '总记录数:', count);
+        console.log('[CloudBase] 拉取到云端数据，docId:', FIXED_DOC_ID, '总记录数:', count);
         return { doc: doc, count: count, error: null };
       }
       console.log('[CloudBase] 云端无数据');
       return { doc: null, count: 0, error: null };
     } catch (e) {
+      // 文档可能不存在（首次使用）
+      if (e.message && (e.message.includes('document not found') || e.message.includes('not exist'))) {
+        console.log('[CloudBase] 云端无数据（文档不存在）');
+        return { doc: null, count: 0, error: null };
+      }
       console.error('[CloudBase] 拉取失败:', e);
       this.cloudLastSyncError = '拉取失败: ' + (e.message || String(e));
       this._emitSyncStatus();
@@ -590,11 +596,12 @@ const Storage = {
     }
   },
 
-  // 推送数据到云端
+  // 推送数据到云端（使用固定文档ID，确保所有设备同步到同一文档）
   async pushToCloud(pkg) {
     if (!this.cloudSyncEnabled || !this.cloudDb) return false;
     if (!pkg) pkg = this._getLocalDataPackage();
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
+    const FIXED_DOC_ID = 'finance_data';
     try {
       const docData = {
         data: pkg.data,
@@ -603,23 +610,11 @@ const Storage = {
       };
       if (pkg._passwordHash !== undefined) docData._passwordHash = pkg._passwordHash;
       if (pkg._passwordEnabled !== undefined) docData._passwordEnabled = pkg._passwordEnabled;
-      if (this.cloudDocId) {
-        // v2: update 直接传入字段
-        const res = await collection.doc(this.cloudDocId).update(docData);
-        console.log('[CloudBase] 更新云端数据成功, res:', res);
-      } else {
-        // v2: add 直接传入字段
-        const res = await collection.add(docData);
-        console.log('[CloudBase] 新增云端数据, res:', res);
-        // v2 返回格式: { data: { _id: '...' }, error: null }
-        if (res && res.data && res.data._id) {
-          this.cloudDocId = res.data._id;
-        } else if (res && res._id) {
-          this.cloudDocId = res._id;
-        }
-        console.log('[CloudBase] docId:', this.cloudDocId);
-      }
+      // 使用固定文档ID，所有设备共享同一文档
+      await collection.doc(FIXED_DOC_ID).set(docData, { merge: true });
+      this.cloudDocId = FIXED_DOC_ID;
       this.cloudLastSync = new Date().toISOString();
+      console.log('[CloudBase] 推送云端数据成功, docId:', FIXED_DOC_ID);
       return true;
     } catch (e) {
       console.error('[CloudBase] 推送失败:', e);
