@@ -5045,7 +5045,7 @@ const App = {
 
     // ==== 环形图 ====
     var colors = ["#4ade80", "#38bdf8", "#a78bfa", "#fbbf24", "#fb923c", "#f87171"];
-    var cx = 140, cy = 140, rOuter = 100, rInner = 62;
+    var cx = 190, cy = 190, rOuter = 130, rInner = 78;
     var cumulative = 0;
     var slicesSvg = "";
     var legendHtml = "";
@@ -5073,7 +5073,7 @@ const App = {
         '</div>';
     });
 
-    var svgHtml = '<svg viewBox="0 0 320 320" class="annuity-donut">' +
+    var svgHtml = '<svg viewBox="0 0 380 380" class="annuity-donut">' +
       slicesSvg +
       '<circle cx="' + cx + '" cy="' + cy + '" r="' + rInner + '" fill="var(--card-bg)"/>' +
       '<text x="' + cx + '" y="' + (cy - 20) + '" text-anchor="middle" class="annuity-donut-label">年金总额</text>' +

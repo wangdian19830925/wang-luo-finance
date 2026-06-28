@@ -1611,7 +1611,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .annuity-chart-wrap {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 60px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1620,7 +1620,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   justify-content: center;
 }
 .annuity-donut {
-  width: 280px; height: 280px;
+  width: 340px; height: 340px;
   flex-shrink: 0;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
 }
