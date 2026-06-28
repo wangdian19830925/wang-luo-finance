@@ -5163,8 +5163,7 @@ const App = {
     // 恢复参数控件
     this._retirementParams = this._loadRetirementParams();
     this._bindRetirementInputs();
-    this._bindExtraTransactions();
-    this._renderExtraTransactions();
+    this._bindExtraTransactionButtons();
 
     // 如果还没有缓存，立即计算一次（用户首次进入）
     if (!this._retirementCache) {
@@ -5178,8 +5177,7 @@ const App = {
 
   _loadRetirementParams() {
     var defaults = {
-      annualExpense: 20, annualEducation: 10, educationEndYear: 2035,
-      extraTransactions: [], // 额外收支记录列表：{ year, amount, type, note }
+      annualExpense: 20, annualEducation: 10, educationEndYear: 2035, extraTransactions: [],
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
       pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
@@ -5188,15 +5186,17 @@ const App = {
       var saved = localStorage.getItem('fm_retirement_params');
       if (saved) {
         var parsed = JSON.parse(saved);
-        // 兼容旧版本：如果存在 annualExtraIncome，转换为 extraTransactions
+        // 兼容旧版本：如果有 annualExtraIncome，转换为 extraTransactions
         if (parsed.annualExtraIncome && parsed.annualExtraIncome > 0) {
-          // 不再自动转换，直接忽略旧数据
+          parsed.extraTransactions = [{
+            type: 'income',
+            year: new Date().getFullYear(),
+            amount: parsed.annualExtraIncome,
+            note: '迁移自旧版本'
+          }];
+          delete parsed.annualExtraIncome;
         }
         defaults = Object.assign(defaults, parsed);
-        // 确保 extraTransactions 是数组
-        if (!Array.isArray(defaults.extraTransactions)) {
-          defaults.extraTransactions = [];
-        }
       }
     } catch(e) {}
     return defaults;
@@ -5208,131 +5208,110 @@ const App = {
     } catch(e) {}
   },
 
-  // 渲染额外收支记录列表
-  _renderExtraTransactions() {
-    var list = document.getElementById('retirementExtraList');
-    if (!list) return;
-    var transactions = this._retirementParams.extraTransactions || [];
-    if (transactions.length === 0) {
-      list.innerHTML = '<div class="retirement-extra-empty">暂无额外收支记录</div>';
-      return;
-    }
-    var html = '<div class="retirement-extra-items">';
-    transactions.forEach(function(t, idx) {
-      var typeClass = t.type === 'income' ? 'retirement-extra-income' : 'retirement-extra-expense';
-      var typeText = t.type === 'income' ? '收入' : '支出';
-      var amountText = (t.amount / 10000).toFixed(1) + '万';
-      var noteText = t.note ? '（' + t.note + '）' : '';
-      html += '<div class="retirement-extra-item ' + typeClass + '">' +
-        '<span class="retirement-extra-year">' + t.year + '年</span>' +
-        '<span class="retirement-extra-type">' + typeText + '</span>' +
-        '<span class="retirement-extra-amount">' + amountText + '</span>' +
-        '<span class="retirement-extra-note">' + noteText + '</span>' +
-        '<button class="retirement-extra-delete" data-idx="' + idx + '">×</button>' +
-        '</div>';
-    });
-    html += '</div>';
-    list.innerHTML = html;
-
-    // 绑定删除按钮
-    var deleteBtns = list.querySelectorAll('.retirement-extra-delete');
+  _bindExtraTransactionButtons() {
     var self = this;
-    deleteBtns.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var idx = parseInt(this.getAttribute('data-idx'));
-        self._retirementParams.extraTransactions.splice(idx, 1);
-        self._saveRetirementParams(self._retirementParams);
-        self._renderExtraTransactions();
-        self._retirementCache = self.calculateRetirement(self._retirementParams);
-        self.renderRetirementPage();
+    var modal = document.getElementById('extraTransactionModal');
+    var btnOpen = document.getElementById('btnAddExtraTransaction');
+    var btnClose = document.getElementById('closeExtraTransactionModal');
+    var btnConfirm = document.getElementById('confirmExtraTransaction');
+    var listEl = document.getElementById('extraTransactionList');
+    var countEl = document.getElementById('extraTransactionCount');
+
+    function renderList() {
+      var txns = self._retirementParams.extraTransactions || [];
+      if (countEl) {
+        countEl.textContent = txns.length > 0 ? '(' + txns.length + '条)' : '';
+      }
+      if (!listEl) return;
+      if (txns.length === 0) {
+        listEl.innerHTML = '<div style="font-size:12px;color:#64748b;text-align:center;padding:12px 0;">暂无记录</div>';
+        return;
+      }
+      var html = '';
+      txns.forEach(function(t, idx) {
+        var cls = t.type === 'income' ? 'income' : 'expense';
+        var typeLabel = t.type === 'income' ? '收入' : '支出';
+        var amountColor = t.type === 'income' ? '#22c55e' : '#ef4444';
+        var sign = t.type === 'income' ? '+' : '-';
+        html += '<div class="extra-record-item ' + cls + '">' +
+                  '<div class="extra-record-info">' +
+                    '<span class="extra-record-year">' + t.year + '年</span>' +
+                    '<span class="extra-record-amount" style="color:' + amountColor + '">' + sign + t.amount + '万</span>' +
+                    (t.note ? '<span class="extra-record-note">' + t.note + '</span>' : '') +
+                    '<span style="font-size:11px;color:#64748b;margin-left:4px;">' + typeLabel + '</span>' +
+                  '</div>' +
+                  '<button class="extra-record-delete" data-idx="' + idx + '">&times;</button>' +
+                '</div>';
       });
-    });
-  },
+      listEl.innerHTML = html;
 
-  // 绑定额外收支记录的相关事件
-  _bindExtraTransactions() {
-    var self = this;
-    var addBtn = document.getElementById('retirementAddExtraBtn');
-    var overlay = document.getElementById('retirementExtraOverlay');
-    var cancelBtn = document.getElementById('retirementExtraCancelBtn');
-    var confirmBtn = document.getElementById('retirementExtraConfirmBtn');
-
-    if (addBtn) {
-      addBtn.addEventListener('click', function() {
-        if (overlay) overlay.style.display = 'flex';
-        // 设置默认年份为当前年份
-        var yearInput = document.getElementById('retirementExtraYear');
-        if (yearInput) yearInput.value = new Date().getFullYear();
+      // 绑定删除按钮
+      listEl.querySelectorAll('.extra-record-delete').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var idx = parseInt(btn.getAttribute('data-idx'));
+          self._retirementParams.extraTransactions.splice(idx, 1);
+          self._saveRetirementParams(self._retirementParams);
+          renderList();
+          self._retirementCache = self.calculateRetirement(self._retirementParams);
+          self.renderRetirementPage();
+        });
       });
     }
 
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', function() {
-        if (overlay) overlay.style.display = 'none';
-        self._clearExtraForm();
+    // 打开弹窗
+    if (btnOpen) {
+      btnOpen.addEventListener('click', function() {
+        if (modal) modal.style.display = 'flex';
+        renderList();
       });
     }
 
-    if (overlay) {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          overlay.style.display = 'none';
-          self._clearExtraForm();
-        }
+    // 关闭弹窗
+    if (btnClose) {
+      btnClose.addEventListener('click', function() {
+        if (modal) modal.style.display = 'none';
       });
     }
 
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', function() {
-        var type = document.getElementById('retirementExtraType');
-        var year = document.getElementById('retirementExtraYear');
-        var amount = document.getElementById('retirementExtraAmount');
-        var note = document.getElementById('retirementExtraNote');
+    // 点击遮罩关闭
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.style.display = 'none';
+      });
+    }
 
-        if (!year.value || !amount.value) {
-          alert('请填写年份和金额');
+    // 确认添加
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', function() {
+        var type = document.querySelector('input[name="extraType"]:checked').value;
+        var year = parseInt(document.getElementById('extraYear').value);
+        var amount = parseFloat(document.getElementById('extraAmount').value);
+        var note = document.getElementById('extraNote').value.trim();
+        if (isNaN(year) || isNaN(amount) || amount <= 0) {
+          alert('请填写正确的年份和金额');
           return;
         }
-
-        var yearVal = parseInt(year.value);
-        var amountVal = parseFloat(amount.value);
-
-        if (isNaN(yearVal) || isNaN(amountVal) || amountVal <= 0) {
-          alert('请输入有效的年份和金额');
-          return;
-        }
-
-        var transaction = {
-          year: yearVal,
-          amount: amountVal,
-          type: type.value,
-          note: note.value || ''
-        };
-
-        if (!self._retirementParams.extraTransactions) {
-          self._retirementParams.extraTransactions = [];
-        }
-        self._retirementParams.extraTransactions.push(transaction);
+        if (!self._retirementParams.extraTransactions) self._retirementParams.extraTransactions = [];
+        self._retirementParams.extraTransactions.push({
+          type: type,
+          year: year,
+          amount: amount,
+          note: note
+        });
         self._retirementParams.extraTransactions.sort(function(a, b) { return a.year - b.year; });
         self._saveRetirementParams(self._retirementParams);
-        self._renderExtraTransactions();
+        renderList();
+        // 重新计算
         self._retirementCache = self.calculateRetirement(self._retirementParams);
         self.renderRetirementPage();
-
-        if (overlay) overlay.style.display = 'none';
-        self._clearExtraForm();
+        // 清空表单
+        document.getElementById('extraYear').value = new Date().getFullYear();
+        document.getElementById('extraAmount').value = 0;
+        document.getElementById('extraNote').value = '';
       });
     }
-  },
 
-  // 清空额外收支表单
-  _clearExtraForm() {
-    var year = document.getElementById('retirementExtraYear');
-    var amount = document.getElementById('retirementExtraAmount');
-    var note = document.getElementById('retirementExtraNote');
-    if (year) year.value = '';
-    if (amount) amount.value = '';
-    if (note) note.value = '';
+    renderList();
   },
 
   _bindRetirementInputs() {
@@ -5422,23 +5401,18 @@ const App = {
       var mortgage = schedules.mortgagePaymentSchedule[year] || 0;
       var education = (year <= currentYear + Math.max(0, params.educationEndYear - currentYear) - 1) ? (params.annualEducation * 10000) : 0;
       var expense = (params.annualExpense * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
-
-      // 计算额外收支（根据 extraTransactions 列表）
+      // 根据 extraTransactions 计算额外收支
       var extraIncome = 0;
       var extraExpense = 0;
-      if (params.extraTransactions) {
-        for (var ti = 0; ti < params.extraTransactions.length; ti++) {
-          var t = params.extraTransactions[ti];
+      if (params.extraTransactions && params.extraTransactions.length) {
+        params.extraTransactions.forEach(function(t) {
           if (t.year === year) {
-            if (t.type === 'income') {
-              extraIncome += t.amount;
-            } else {
-              extraExpense += t.amount;
-            }
+            var amt = (t.amount || 0) * 10000;
+            if (t.type === 'income') extraIncome += amt;
+            else extraExpense += amt;
           }
-        }
+        });
       }
-
       var pension = schedules.pensionSchedule[year] || 0;
       var insurance = schedules.insuranceSchedule[year] || 0;
       var enterpriseAnnuity = schedules.enterpriseAnnuitySchedule[year] || 0;
@@ -6165,8 +6139,8 @@ const App = {
       '<text x="' + (padLeft + 4) + '" y="' + (cfPadTop - 4).toFixed(1) + '" text-anchor="start" font-size="10" fill="#475569">年度收支明细（收益↑ / 消费↓）</text>' +
       '</svg>';
 
-    // 堆积图图例：收入、支出分两行（与上方图表左沿对齐，padLeft=78px）
-    var cfLegend = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:11px;line-height:1.4;padding-left:78px;">';
+    // 堆积图图例：收入、支出分两行
+    var cfLegend = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:11px;line-height:1.4;">';
     cfLegend += '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;">';
     cfLegend += '<span style="color:#475569;font-weight:500;">收入</span>';
     incomeLayers.forEach(function(l) {

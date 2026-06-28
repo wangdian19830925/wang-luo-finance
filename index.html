@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-28-v127 -->
+  <!-- version: 2026-06-28-v128 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=127">
+  <link rel="stylesheet" href="./css/style.css?v=128">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -657,21 +657,18 @@
             </div>
             <input type="range" class="retirement-param-range" id="retirementParamEducationEndYear" min="2024" max="2040" step="1" value="2035">
           </div>
-          <div class="retirement-param-item retirement-param-fullwidth">
-            <div class="retirement-param-label">
-              <span>额外收入/支出</span>
-              <button class="retirement-add-extra-btn" id="retirementAddExtraBtn">+ 添加</button>
+          <div class="retirement-param-row">
+            <div class="retirement-param-item" style="flex:1; min-width:0;">
+              <button class="retirement-extra-btn" id="btnAddExtraTransaction">额外收入/支出</button>
+              <span class="retirement-extra-count" id="extraTransactionCount"></span>
             </div>
-            <div class="retirement-extra-list" id="retirementExtraList">
-              <div class="retirement-extra-empty">暂无额外收支记录</div>
+            <div class="retirement-param-item" style="flex:1; min-width:0;">
+              <div class="retirement-param-label">
+                <span>预计寿命</span>
+                <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
+              </div>
+              <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
             </div>
-          </div>
-          <div class="retirement-param-item">
-            <div class="retirement-param-label">
-              <span>预计寿命</span>
-              <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
-            </div>
-            <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
           </div>
         </div>
       </div>
@@ -731,32 +728,39 @@
       </div>
     </section>
 
-    <!-- 额外收支记录弹窗 -->
-    <div class="retirement-extra-overlay" id="retirementExtraOverlay" style="display:none;">
-      <div class="retirement-extra-panel">
-        <h3>添加额外收支</h3>
-        <div class="form-group">
-          <label>类型</label>
-          <select id="retirementExtraType">
-            <option value="income">收入</option>
-            <option value="expense">支出</option>
-          </select>
+    <!-- 额外收支弹窗 -->
+    <div class="modal-overlay" id="extraTransactionModal" style="display:none;">
+      <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+          <h3>额外收入/支出</h3>
+          <button class="modal-close" id="closeExtraTransactionModal">&times;</button>
         </div>
-        <div class="form-group">
-          <label>年份</label>
-          <input type="number" id="retirementExtraYear" placeholder="如：2030" min="2024" max="2100">
+        <div class="modal-body">
+          <div style="display:flex;gap:16px;margin-bottom:12px;">
+            <label style="font-size:12px;color:#94a3b8;">
+              <input type="radio" name="extraType" value="income" checked> 收入
+            </label>
+            <label style="font-size:12px;color:#94a3b8;">
+              <input type="radio" name="extraType" value="expense"> 支出
+            </label>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">年份</label>
+            <input type="number" id="extraYear" min="2024" max="2100" value="2026" style="width:100%;padding:6px 8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:13px;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">金额（万）</label>
+            <input type="number" id="extraAmount" min="0" step="0.1" value="0" style="width:100%;padding:6px 8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:13px;">
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:4px;">备注（选填）</label>
+            <input type="text" id="extraNote" placeholder="如：年终奖、医疗费" style="width:100%;padding:6px 8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;font-size:13px;">
+          </div>
+          <button class="retirement-detail-btn" id="confirmExtraTransaction" style="width:100%;">确认</button>
         </div>
-        <div class="form-group">
-          <label>金额 (¥)</label>
-          <input type="number" id="retirementExtraAmount" step="0.01" placeholder="0.00">
-        </div>
-        <div class="form-group">
-          <label>备注（选填）</label>
-          <input type="text" id="retirementExtraNote" placeholder="如：年终奖、大病支出" maxlength="50">
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-cancel" id="retirementExtraCancelBtn">取消</button>
-          <button class="btn btn-primary" id="retirementExtraConfirmBtn">确认</button>
+        <div style="margin-top:16px;">
+          <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">已添加的记录：</div>
+          <div id="extraTransactionList" style="max-height:200px;overflow-y:auto;"></div>
         </div>
       </div>
     </div>
@@ -1148,7 +1152,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=127"></script>
+  <script src="./js/storage.js?v=126"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1158,6 +1162,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=127"></script>
+  <script src="./js/app.js?v=128"></script>
 </body>
 </html>
