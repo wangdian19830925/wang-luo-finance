@@ -415,7 +415,7 @@ const Storage = {
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v145',
+      clientVersion: 'v146',
       _passwordHash: pwdHash,
       _passwordEnabled: pwdEnabled
     };
@@ -589,6 +589,15 @@ const Storage = {
       const res = await collection.doc(FIXED_DOC_ID).get();
       if (res.data) {
         const doc = res.data;
+        // 兼容新格式：jsonData 是打包后的 JSON 字符串；旧格式直接是 data 字段
+        if (doc.jsonData && typeof doc.jsonData === 'string') {
+          try {
+            doc.data = JSON.parse(doc.jsonData);
+          } catch (parseErr) {
+            console.warn('[CloudBase] jsonData 解析失败:', parseErr.message || parseErr);
+            doc.data = null;
+          }
+        }
         this.cloudDocId = FIXED_DOC_ID;
         let count = 0;
         if (doc.data) {
@@ -603,6 +612,7 @@ const Storage = {
           clientVersion: doc.clientVersion,
           _passwordHash: doc._passwordHash ? 'exists' : 'null',
           _passwordEnabled: doc._passwordEnabled,
+          jsonData: doc.jsonData ? ('length:' + doc.jsonData.length) : 'N/A',
           dataKeys: doc.data ? Object.keys(doc.data) : 'N/A',
           dataCount: count
         }));
@@ -630,8 +640,9 @@ const Storage = {
     const collection = this.cloudDb.collection(this.cloudConfig.collection);
     const FIXED_DOC_ID = 'finance_data';
     try {
+      // 把复杂嵌套数据序列化为 JSON 字符串，避免 CloudBase v2 SDK 对嵌套对象/数组的写入异常
       const docData = {
-        data: pkg.data,
+        jsonData: JSON.stringify(pkg.data || {}),
         updatedAt: pkg.updatedAt,
         clientVersion: pkg.clientVersion
       };
@@ -640,47 +651,63 @@ const Storage = {
 
       const docRef = collection.doc(FIXED_DOC_ID);
       const payloadSize = JSON.stringify(docData).length;
-      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'data字段数:', Object.keys(docData.data || {}).length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
+      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
 
-      // v2 SDK 在已有文档上 set() 多次出现行为异常（字段丢失/未覆盖），
-      // 因此优先使用 update()；文档不存在或 update 失败时再回退到 set()。
-      const docExists = this.cloudDocId === FIXED_DOC_ID;
-      let pushRes;
-      if (docExists) {
-        try {
-          pushRes = await docRef.update(docData);
-          console.log('[CloudBase] update 成功, res:', pushRes);
-        } catch (updateErr) {
-          console.warn('[CloudBase] update 失败，回退到 set:', updateErr.message || updateErr);
-          pushRes = await docRef.set(docData);
-          console.log('[CloudBase] set 成功, res:', pushRes);
-        }
-      } else {
-        pushRes = await docRef.set(docData);
-        console.log('[CloudBase] set 新建文档成功, res:', pushRes);
-      }
+      // 始终使用 set() 覆盖写，确保云端文档与本地数据完全一致。
+      // v2 SDK 的 update() 在已有损坏文档上多次出现字段丢失，set() 更可靠。
+      let pushRes = await docRef.set(docData);
+      console.log('[CloudBase] set 成功, res:', pushRes);
 
       this.cloudDocId = FIXED_DOC_ID;
       this.cloudLastSync = new Date().toISOString();
 
       // 推送后立即验证，防止 SDK 返回成功但实际未写入
+      let verificationPassed = false;
       try {
         const verifyRes = await docRef.get();
         if (verifyRes && verifyRes.data) {
           const v = verifyRes.data;
           let vCount = 0;
-          if (v.data) {
+          let dataSource = 'none';
+          if (v.jsonData && typeof v.jsonData === 'string') {
+            dataSource = 'jsonData';
+            try {
+              const parsed = JSON.parse(v.jsonData);
+              Object.keys(parsed).forEach(k => {
+                if (Array.isArray(parsed[k])) vCount += parsed[k].length;
+              });
+            } catch (parseErr) {
+              console.warn('[CloudBase] 验证时 jsonData 解析失败:', parseErr.message || parseErr);
+            }
+          } else if (v.data) {
+            dataSource = 'data';
             Object.keys(v.data).forEach(k => {
               if (Array.isArray(v.data[k])) vCount += v.data[k].length;
             });
           }
-          console.log('[CloudBase] 推送后验证, data字段存在:', !!v.data, '总记录数:', vCount, 'pwdHash存在:', !!v._passwordHash, 'pwdEnabled:', v._passwordEnabled);
-          if (vCount === 0 && docData.data && !this._isEmptyData(docData.data)) {
-            console.error('[CloudBase] 警告：推送后云端 data 为空，可能存在 SDK 写入异常');
+          console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!v.jsonData, 'data字段存在:', !!v.data, '总记录数:', vCount, 'pwdHash存在:', v._passwordHash !== undefined, 'pwdEnabled:', v._passwordEnabled);
+          const localCount = pkg.data ? Object.keys(pkg.data).reduce((sum, k) => sum + (Array.isArray(pkg.data[k]) ? pkg.data[k].length : 0), 0) : 0;
+          if (vCount > 0 || localCount === 0) {
+            verificationPassed = true;
+          } else if (vCount === 0 && localCount > 0) {
+            console.error('[CloudBase] 警告：推送后云端数据为空，可能存在 SDK 写入异常');
           }
         }
       } catch (verifyErr) {
         console.warn('[CloudBase] 推送后验证失败:', verifyErr.message || verifyErr);
+      }
+
+      // 验证失败：云端文档可能已损坏，删除后重建
+      if (!verificationPassed) {
+        console.warn('[CloudBase] 验证未通过，尝试删除并重建云端文档');
+        try {
+          await docRef.remove();
+          console.log('[CloudBase] 已删除损坏文档');
+        } catch (removeErr) {
+          console.warn('[CloudBase] 删除文档失败（可能已不存在）:', removeErr.message || removeErr);
+        }
+        pushRes = await docRef.set(docData);
+        console.log('[CloudBase] 重建文档 set 成功, res:', pushRes);
       }
 
       console.log('[CloudBase] 推送云端数据成功, docId:', FIXED_DOC_ID);
