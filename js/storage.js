@@ -424,7 +424,7 @@ const Storage = {
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v149',
+      clientVersion: 'v150',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -483,7 +483,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v149' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v150' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -655,11 +655,12 @@ const Storage = {
       if (doc) {
         this.cloudDocId = doc._id || FIXED_DOC_ID;
         const diagPwdFields = this._getPasswordFields(doc);
+        const diagPwdPreview = diagPwdFields.passwordHash ? ('len=' + diagPwdFields.passwordHash.length + ',head=' + diagPwdFields.passwordHash.slice(0, 6)) : 'null';
         console.log('[CloudBase] 云端文档详情:', JSON.stringify({
           _id: doc._id,
           updatedAt: doc.updatedAt,
           clientVersion: doc.clientVersion,
-          passwordHash: diagPwdFields.passwordHash ? 'exists' : 'null',
+          passwordHash: diagPwdPreview,
           passwordEnabled: diagPwdFields.passwordEnabled,
           jsonData: doc.jsonData ? ('length:' + doc.jsonData.length) : 'N/A',
           dataKeys: doc.data ? Object.keys(doc.data) : 'N/A',
@@ -678,7 +679,7 @@ const Storage = {
     }
   },
 
-  // 推送数据到云端（create 为主，add 随机 ID 回退，避免 set/update 的异常）
+  // 推送数据到云端（优先 update 已有文档，不存在则 create，避免频繁删除重建）
   async pushToCloud(pkg) {
     if (!this.cloudSyncEnabled || !this.cloudDb) return false;
     if (!pkg) pkg = this._getLocalDataPackage();
@@ -696,74 +697,77 @@ const Storage = {
 
       const docRef = collection.doc(FIXED_DOC_ID);
       const payloadSize = JSON.stringify(docData).length;
-      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash存在:', !!docData.passwordHash, 'pwdEnabled:', docData.passwordEnabled);
+      const pwdHashPreview = docData.passwordHash ? ('len=' + docData.passwordHash.length + ',head=' + docData.passwordHash.slice(0, 6)) : 'none';
+      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash:', pwdHashPreview, 'pwdEnabled:', docData.passwordEnabled);
 
-      // 删除旧固定 ID 文档，避免损坏文档影响写入
+      // 1) 先探测固定 ID 文档是否存在
+      let existing = false;
       try {
-        await docRef.remove();
-        console.log('[CloudBase] 已删除旧固定 ID 文档');
-      } catch (removeErr) {
-        console.warn('[CloudBase] 删除旧固定 ID 文档失败（可能不存在）:', removeErr.message || removeErr);
+        const probeRes = await docRef.get();
+        if (probeRes && probeRes.data && (probeRes.data.jsonData || probeRes.data.data || probeRes.data.passwordHash !== undefined)) {
+          existing = true;
+          console.log('[CloudBase] 固定 ID 文档已存在，尝试 update');
+        }
+      } catch (probeErr) {
+        console.log('[CloudBase] 探测固定 ID 文档失败（可能不存在）:', probeErr.message || probeErr);
       }
 
-      // 方案1：create（调用 database.addDocument）创建固定 ID 文档
-      let pushRes;
       let usedRandomId = false;
-      try {
-        pushRes = await docRef.create(docData);
-        console.log('[CloudBase] create 成功, res:', pushRes);
-        this.cloudDocId = FIXED_DOC_ID;
-      } catch (createErr) {
-        console.warn('[CloudBase] create 失败，回退到 collection.add:', createErr.message || createErr);
-        // 方案2：随机 ID 创建，通过 docId 字段供查询
-        const addRes = await collection.add(docData);
-        console.log('[CloudBase] add 成功, res:', addRes);
-        this.cloudDocId = (addRes && (addRes.id || addRes._id)) || null;
-        usedRandomId = true;
+      if (existing) {
+        // 2A) 已存在则更新，避免删除重建导致竞态
+        try {
+          await docRef.update(docData);
+          console.log('[CloudBase] update 成功');
+          this.cloudDocId = FIXED_DOC_ID;
+        } catch (updateErr) {
+          console.warn('[CloudBase] update 失败，回退到删除重建:', updateErr.message || updateErr);
+          existing = false;
+        }
+      }
+
+      if (!existing) {
+        // 2B) 不存在或 update 失败，尝试 create
+        try {
+          const createRes = await docRef.create(docData);
+          console.log('[CloudBase] create 成功, res:', createRes);
+          this.cloudDocId = FIXED_DOC_ID;
+        } catch (createErr) {
+          console.warn('[CloudBase] create 失败，尝试删除重建:', createErr.message || createErr);
+          try {
+            await docRef.remove();
+          } catch (removeErr) {
+            console.warn('[CloudBase] 删除旧文档失败:', removeErr.message || removeErr);
+          }
+          // 再次 create
+          const recreateRes = await docRef.create(docData);
+          console.log('[CloudBase] 删除重建成功, res:', recreateRes);
+          this.cloudDocId = FIXED_DOC_ID;
+        }
       }
 
       this.cloudLastSync = new Date().toISOString();
 
-      // 推送后验证：CloudBase 文档读取存在缓存/副本延迟，get() 可能返回旧数据，故以 where 查询作为可靠回退
-      await new Promise(r => setTimeout(r, 300)); // 等待 300ms，让写入在副本间同步
+      // 3) 推送后验证：CloudBase 单文档 get 存在缓存/副本延迟，改用 where 查询作为可靠验证
+      await new Promise(r => setTimeout(r, 400)); // 等待 400ms，让写入在副本间同步
       let verificationPassed = false;
       let verifyDoc = null;
       try {
-        // 方案1：直接读取固定 ID 文档（通常最快）
-        try {
-          const verifyRes = await docRef.get();
-          if (verifyRes && verifyRes.data) {
-            const v = verifyRes.data;
-            if (v.jsonData || v.data) {
-              verifyDoc = v;
-              verificationPassed = true;
-              console.log('[CloudBase] 固定 ID 读取验证通过');
-            }
+        const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
+        if (queryRes && queryRes.data && queryRes.data.length > 0) {
+          const sorted = queryRes.data.slice().sort((a, b) => {
+            const ta = new Date(b.updatedAt || 0).getTime();
+            const tb = new Date(a.updatedAt || 0).getTime();
+            return ta - tb;
+          });
+          const latest = sorted[0];
+          if (latest && (latest.jsonData || latest.data)) {
+            verifyDoc = latest;
+            verificationPassed = true;
+            console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length, 'latestId:', latest._id);
           }
-        } catch (directVerifyErr) {
-          console.warn('[CloudBase] 固定 ID 读取验证失败:', directVerifyErr.message || directVerifyErr);
         }
-
-        // 方案2：直接读取未通过或为空时，使用 where 查询回退（绕开单文档缓存）
         if (!verificationPassed) {
-          try {
-            const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
-            if (queryRes && queryRes.data && queryRes.data.length > 0) {
-              const sorted = queryRes.data.slice().sort((a, b) => {
-                const ta = new Date(b.updatedAt || 0).getTime();
-                const tb = new Date(a.updatedAt || 0).getTime();
-                return ta - tb;
-              });
-              const latest = sorted[0];
-              if (latest && (latest.jsonData || latest.data)) {
-                verifyDoc = latest;
-                verificationPassed = true;
-                console.log('[CloudBase] where 查询验证通过, docs:', queryRes.data.length);
-              }
-            }
-          } catch (whereVerifyErr) {
-            console.warn('[CloudBase] where 查询验证失败:', whereVerifyErr.message || whereVerifyErr);
-          }
+          console.warn('[CloudBase] where 查询验证未找到有效文档');
         }
       } catch (verifyErr) {
         console.warn('[CloudBase] 推送后验证失败:', verifyErr.message || verifyErr);
@@ -789,32 +793,31 @@ const Storage = {
           });
         }
         const verifyPwdFields = this._getPasswordFields(verifyDoc);
-        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash存在:', verifyPwdFields.passwordHash !== undefined, 'pwdEnabled:', verifyPwdFields.passwordEnabled);
+        const verifyPwdPreview = verifyPwdFields.passwordHash ? ('len=' + verifyPwdFields.passwordHash.length + ',head=' + verifyPwdFields.passwordHash.slice(0, 6)) : 'none';
+        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash:', verifyPwdPreview, 'pwdEnabled:', verifyPwdFields.passwordEnabled);
       } else {
         console.error('[CloudBase] 警告：推送后验证未通过，云端可能仍未写入数据');
       }
 
       // 清理历史随机 ID 文档（只保留最近2个）
-      if (usedRandomId) {
-        try {
-          const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
-          if (queryRes && queryRes.data && queryRes.data.length > 2) {
-            const sorted = queryRes.data.slice().sort((a, b) => {
-              const ta = new Date(b.updatedAt || 0).getTime();
-              const tb = new Date(a.updatedAt || 0).getTime();
-              return ta - tb;
-            });
-            const toDelete = sorted.slice(2);
-            for (const oldDoc of toDelete) {
-              if (oldDoc && oldDoc._id) {
-                await collection.doc(oldDoc._id).remove();
-              }
+      try {
+        const queryRes = await collection.where({ docId: FIXED_DOC_ID }).get();
+        if (queryRes && queryRes.data && queryRes.data.length > 2) {
+          const sorted = queryRes.data.slice().sort((a, b) => {
+            const ta = new Date(b.updatedAt || 0).getTime();
+            const tb = new Date(a.updatedAt || 0).getTime();
+            return ta - tb;
+          });
+          const toDelete = sorted.slice(2);
+          for (const oldDoc of toDelete) {
+            if (oldDoc && oldDoc._id && oldDoc._id !== FIXED_DOC_ID) {
+              await collection.doc(oldDoc._id).remove();
             }
-            console.log('[CloudBase] 已清理旧文档:', toDelete.length);
           }
-        } catch (cleanupErr) {
-          console.warn('[CloudBase] 清理旧文档失败:', cleanupErr.message || cleanupErr);
+          console.log('[CloudBase] 已清理旧文档:', toDelete.length);
         }
+      } catch (cleanupErr) {
+        console.warn('[CloudBase] 清理旧文档失败:', cleanupErr.message || cleanupErr);
       }
 
       console.log('[CloudBase] 推送云端数据成功, docId:', this.cloudDocId || FIXED_DOC_ID);
