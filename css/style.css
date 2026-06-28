@@ -4245,6 +4245,20 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   min-width: 80px;
 }
 
+/* 退休计算 - 参数网格（两列布局） */
+.retirement-param-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.retirement-param-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* 退休计算 - 参数行（同一行多个参数） */
 .retirement-param-row {
   display: flex;

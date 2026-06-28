@@ -6,7 +6,7 @@
   <title>家庭资产管理</title>
   <!-- version: 2026-06-28-v128 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=128">
+  <link rel="stylesheet" href="./css/style.css?v=129">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -629,45 +629,49 @@
               <input type="range" class="retirement-param-range" id="retirementParamInflation" min="1" max="8" step="0.5" value="3">
             </div>
           </div>
-          <div class="retirement-param-item">
-            <div class="retirement-param-label">
-              <span>每年家庭消费</span>
-              <span class="retirement-param-value" id="retirementParamAnnualExpenseValue">20 万</span>
-            </div>
-            <input type="range" class="retirement-param-range" id="retirementParamAnnualExpense" min="5" max="80" step="1" value="20">
-          </div>
-          <div class="retirement-param-item">
-            <div class="retirement-param-label">
-              <span>投资年化收益</span>
-              <span class="retirement-param-value" id="retirementParamReturnValue">2 %</span>
-            </div>
-            <input type="range" class="retirement-param-range" id="retirementParamReturn" min="0" max="6" step="0.5" value="2">
-          </div>
-          <div class="retirement-param-item">
-            <div class="retirement-param-label">
-              <span>每年子女教育</span>
-              <span class="retirement-param-value" id="retirementParamAnnualEducationValue">10 万</span>
-            </div>
-            <input type="range" class="retirement-param-range" id="retirementParamAnnualEducation" min="0" max="30" step="1" value="10">
-          </div>
-          <div class="retirement-param-item">
-            <div class="retirement-param-label">
-              <span>教育结束年份</span>
-              <span class="retirement-param-value" id="retirementParamEducationEndYearValue">2035 年</span>
-            </div>
-            <input type="range" class="retirement-param-range" id="retirementParamEducationEndYear" min="2024" max="2040" step="1" value="2035">
-          </div>
-          <div class="retirement-param-row">
-            <div class="retirement-param-item" style="flex:1; min-width:0;">
-              <button class="retirement-extra-btn" id="btnAddExtraTransaction">额外收入/支出</button>
-              <span class="retirement-extra-count" id="extraTransactionCount"></span>
-            </div>
-            <div class="retirement-param-item" style="flex:1; min-width:0;">
-              <div class="retirement-param-label">
-                <span>预计寿命</span>
-                <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
+          <div class="retirement-param-grid">
+            <div class="retirement-param-col">
+              <div class="retirement-param-item">
+                <div class="retirement-param-label">
+                  <span>每年家庭消费</span>
+                  <span class="retirement-param-value" id="retirementParamAnnualExpenseValue">20 万</span>
+                </div>
+                <input type="range" class="retirement-param-range" id="retirementParamAnnualExpense" min="5" max="80" step="1" value="20">
               </div>
-              <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
+              <div class="retirement-param-item">
+                <div class="retirement-param-label">
+                  <span>每年子女教育</span>
+                  <span class="retirement-param-value" id="retirementParamAnnualEducationValue">10 万</span>
+                </div>
+                <input type="range" class="retirement-param-range" id="retirementParamAnnualEducation" min="0" max="30" step="1" value="10">
+              </div>
+              <div class="retirement-param-item">
+                <button class="retirement-extra-btn" id="btnAddExtraTransaction">额外收入/支出</button>
+                <span class="retirement-extra-count" id="extraTransactionCount"></span>
+              </div>
+            </div>
+            <div class="retirement-param-col">
+              <div class="retirement-param-item">
+                <div class="retirement-param-label">
+                  <span>投资年化收益</span>
+                  <span class="retirement-param-value" id="retirementParamReturnValue">2 %</span>
+                </div>
+                <input type="range" class="retirement-param-range" id="retirementParamReturn" min="0" max="6" step="0.5" value="2">
+              </div>
+              <div class="retirement-param-item">
+                <div class="retirement-param-label">
+                  <span>教育结束年份</span>
+                  <span class="retirement-param-value" id="retirementParamEducationEndYearValue">2035 年</span>
+                </div>
+                <input type="range" class="retirement-param-range" id="retirementParamEducationEndYear" min="2024" max="2040" step="1" value="2035">
+              </div>
+              <div class="retirement-param-item">
+                <div class="retirement-param-label">
+                  <span>预计寿命</span>
+                  <span class="retirement-param-value" id="retirementParamLifeExpectancyValue">90 岁</span>
+                </div>
+                <input type="range" class="retirement-param-range" id="retirementParamLifeExpectancy" min="70" max="100" step="1" value="90">
+              </div>
             </div>
           </div>
         </div>
@@ -1152,7 +1156,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=126"></script>
+  <script src="./js/storage.js?v=129"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1162,6 +1166,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=128"></script>
+  <script src="./js/app.js?v=129"></script>
 </body>
 </html>
