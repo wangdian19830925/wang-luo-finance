@@ -59,6 +59,15 @@ const Storage = {
     try { localStorage.setItem(this._LOGIN_MODE_KEY, mode || ''); } catch (e) {}
   },
 
+  // 兼容 v147 及之前的旧字段名 _passwordHash / _passwordEnabled
+  _getPasswordFields(doc) {
+    if (!doc || typeof doc !== 'object') return { passwordHash: undefined, passwordEnabled: undefined };
+    return {
+      passwordHash: doc.passwordHash !== undefined ? doc.passwordHash : doc._passwordHash,
+      passwordEnabled: doc.passwordEnabled !== undefined ? doc.passwordEnabled : doc._passwordEnabled
+    };
+  },
+
   // 恢复已有会话（页面刷新后）
   async restoreSession() {
     if (!this.cloudSyncEnabled || !this.cloudApp) return { success: false, reason: 'not-ready' };
@@ -415,9 +424,9 @@ const Storage = {
       return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v147',
-      _passwordHash: pwdHash,
-      _passwordEnabled: pwdEnabled
+      clientVersion: 'v148',
+      passwordHash: pwdHash,
+      passwordEnabled: pwdEnabled
     };
   },
 
@@ -433,19 +442,20 @@ const Storage = {
       // 应用密码设置：只有传入有效密码时才覆盖本地；否则保留本地已有密码
       const localHash = localStorage.getItem('finance_password_hash');
       const localEnabled = localStorage.getItem('finance_password_enabled') === 'true';
-      if (pkg._passwordHash) {
-        localStorage.setItem('finance_password_hash', pkg._passwordHash);
-        console.log('[CloudBase] 已应用合并后密码hash（来源:', localHash === pkg._passwordHash ? '本地' : '云端', '）');
+      const pwdFields = this._getPasswordFields(pkg);
+      if (pwdFields.passwordHash) {
+        localStorage.setItem('finance_password_hash', pwdFields.passwordHash);
+        console.log('[CloudBase] 已应用合并后密码hash（来源:', localHash === pwdFields.passwordHash ? '本地' : '云端', '）');
       } else if (localHash) {
         console.log('[CloudBase] 传入密码为空，保留本地已有密码hash');
       }
-      if (pkg._passwordEnabled !== undefined) {
+      if (pwdFields.passwordEnabled !== undefined) {
         // 云端关闭保护时，若本地无密码且云端也无密码hash，则忽略
-        if (!pkg._passwordEnabled && !localHash && !pkg._passwordHash) {
+        if (!pwdFields.passwordEnabled && !localHash && !pwdFields.passwordHash) {
           console.log('[CloudBase] 云端关闭保护但无密码，忽略enabled更新');
         } else {
-          localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
-          console.log('[CloudBase] 已应用合并后密码enabled:', pkg._passwordEnabled, '（来源:', localEnabled === pkg._passwordEnabled ? '本地' : '云端', '）');
+          localStorage.setItem('finance_password_enabled', pwdFields.passwordEnabled ? 'true' : 'false');
+          console.log('[CloudBase] 已应用合并后密码enabled:', pwdFields.passwordEnabled, '（来源:', localEnabled === pwdFields.passwordEnabled ? '本地' : '云端', '）');
         }
       }
       return true;
@@ -473,7 +483,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v147' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v148' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -548,29 +558,29 @@ const Storage = {
       }
     });
     // 合并密码设置：本地有有效密码时优先保留本地，防止云端空密码覆盖
-    const localHasPwd = localPkg && localPkg._passwordHash;
-    const cloudHasPwd = cloudPkg && cloudPkg._passwordHash;
+    const localHasPwd = localPkg && localPkg.passwordHash;
+    const cloudHasPwd = cloudPkg && cloudPkg.passwordHash;
     if (localHasPwd && !cloudHasPwd) {
       // 本地有密码，云端没有 -> 保留本地
-      merged._passwordHash = localPkg._passwordHash;
-      merged._passwordEnabled = localPkg._passwordEnabled;
+      merged.passwordHash = localPkg.passwordHash;
+      merged.passwordEnabled = localPkg.passwordEnabled;
       console.log('[CloudBase] 密码合并: 保留本地（云端无密码）');
     } else if (!localHasPwd && cloudHasPwd) {
       // 本地没有，云端有 -> 使用云端
-      merged._passwordHash = cloudPkg._passwordHash;
-      merged._passwordEnabled = cloudPkg._passwordEnabled;
+      merged.passwordHash = cloudPkg.passwordHash;
+      merged.passwordEnabled = cloudPkg.passwordEnabled;
       console.log('[CloudBase] 密码合并: 使用云端（本地无密码）');
     } else if (localHasPwd && cloudHasPwd) {
       // 两端都有，按 updatedAt 比较
       const localTime = new Date(localPkg.updatedAt || 0).getTime();
       const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
       if (cloudTime >= localTime) {
-        merged._passwordHash = cloudPkg._passwordHash;
-        merged._passwordEnabled = cloudPkg._passwordEnabled;
+        merged.passwordHash = cloudPkg.passwordHash;
+        merged.passwordEnabled = cloudPkg.passwordEnabled;
         console.log('[CloudBase] 密码合并: 云端较新，使用云端');
       } else {
-        merged._passwordHash = localPkg._passwordHash;
-        merged._passwordEnabled = localPkg._passwordEnabled;
+        merged.passwordHash = localPkg.passwordHash;
+        merged.passwordEnabled = localPkg.passwordEnabled;
         console.log('[CloudBase] 密码合并: 本地较新，保留本地');
       }
     } else {
@@ -644,12 +654,13 @@ const Storage = {
 
       if (doc) {
         this.cloudDocId = doc._id || FIXED_DOC_ID;
+        const diagPwdFields = this._getPasswordFields(doc);
         console.log('[CloudBase] 云端文档详情:', JSON.stringify({
           _id: doc._id,
           updatedAt: doc.updatedAt,
           clientVersion: doc.clientVersion,
-          _passwordHash: doc._passwordHash ? 'exists' : 'null',
-          _passwordEnabled: doc._passwordEnabled,
+          passwordHash: diagPwdFields.passwordHash ? 'exists' : 'null',
+          passwordEnabled: diagPwdFields.passwordEnabled,
           jsonData: doc.jsonData ? ('length:' + doc.jsonData.length) : 'N/A',
           dataKeys: doc.data ? Object.keys(doc.data) : 'N/A',
           dataCount: count
@@ -680,12 +691,12 @@ const Storage = {
         updatedAt: pkg.updatedAt,
         clientVersion: pkg.clientVersion
       };
-      if (pkg._passwordHash !== undefined) docData._passwordHash = pkg._passwordHash;
-      if (pkg._passwordEnabled !== undefined) docData._passwordEnabled = pkg._passwordEnabled;
+      if (pkg.passwordHash !== undefined) docData.passwordHash = pkg.passwordHash;
+      if (pkg.passwordEnabled !== undefined) docData.passwordEnabled = pkg.passwordEnabled;
 
       const docRef = collection.doc(FIXED_DOC_ID);
       const payloadSize = JSON.stringify(docData).length;
-      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash存在:', !!docData._passwordHash, 'pwdEnabled:', docData._passwordEnabled);
+      console.log('[CloudBase] 准备推送, docId:', FIXED_DOC_ID, 'size:', payloadSize, 'jsonData长度:', docData.jsonData.length, 'pwdHash存在:', !!docData.passwordHash, 'pwdEnabled:', docData.passwordEnabled);
 
       // 删除旧固定 ID 文档，避免损坏文档影响写入
       try {
@@ -766,7 +777,8 @@ const Storage = {
             if (Array.isArray(verifyDoc.data[k])) vCount += verifyDoc.data[k].length;
           });
         }
-        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash存在:', verifyDoc._passwordHash !== undefined, 'pwdEnabled:', verifyDoc._passwordEnabled);
+        const verifyPwdFields = this._getPasswordFields(verifyDoc);
+        console.log('[CloudBase] 推送后验证, 数据源:', dataSource, 'jsonData存在:', !!verifyDoc.jsonData, 'data字段存在:', !!verifyDoc.data, '总记录数:', vCount, 'pwdHash存在:', verifyPwdFields.passwordHash !== undefined, 'pwdEnabled:', verifyPwdFields.passwordEnabled);
       } else {
         console.error('[CloudBase] 警告：推送后验证未通过，云端可能仍未写入数据');
       }
@@ -832,12 +844,13 @@ const Storage = {
         return { success: false, error: '拉取云端数据失败: ' + pullError, diag: diag };
       }
 
+      const cloudPwdFields = cloudDoc ? this._getPasswordFields(cloudDoc) : { passwordHash: null, passwordEnabled: false };
       const cloudPkg = cloudDoc ? {
         data: cloudDoc.data,
         updatedAt: cloudDoc.updatedAt,
         clientVersion: cloudDoc.clientVersion,
-        _passwordHash: cloudDoc._passwordHash || null,
-        _passwordEnabled: cloudDoc._passwordEnabled || false
+        passwordHash: cloudPwdFields.passwordHash || null,
+        passwordEnabled: cloudPwdFields.passwordEnabled || false
       } : null;
 
       console.log('[CloudBase] 云端数据包:', cloudPkg ? JSON.stringify(cloudPkg).substring(0, 300) + '...' : 'null');
@@ -876,7 +889,7 @@ const Storage = {
 
       // 推回云端（确保云端也是最新合并结果）
       const mergedCount = Array.isArray(mergedPkg.data && mergedPkg.data.cashAccounts) ? mergedPkg.data.cashAccounts.length : 0;
-      console.log('[CloudBase] 准备推送合并数据，来源:', source, 'cashAccounts:', mergedCount, 'pwdHash:', !!mergedPkg._passwordHash, 'pwdEnabled:', mergedPkg._passwordEnabled);
+      console.log('[CloudBase] 准备推送合并数据，来源:', source, 'cashAccounts:', mergedCount, 'pwdHash:', !!mergedPkg.passwordHash, 'pwdEnabled:', mergedPkg.passwordEnabled);
       const pushSuccess = await this.pushToCloud(mergedPkg);
       if (!pushSuccess) {
         console.error('[CloudBase] 同步失败：推送云端数据失败');
