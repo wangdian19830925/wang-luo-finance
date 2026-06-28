@@ -409,12 +409,15 @@ const Storage = {
     Object.keys(this.keys).forEach(k => {
       data[k] = this.get(this.keys[k], true); // true = 包含已删除
     });
+    const pwdHash = localStorage.getItem('finance_password_hash') || null;
+    const pwdEnabled = localStorage.getItem('finance_password_enabled') === 'true';
+    console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled);
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v142',
-      _passwordHash: localStorage.getItem('finance_password_hash') || null,
-      _passwordEnabled: localStorage.getItem('finance_password_enabled') === 'true'
+      clientVersion: 'v143',
+      _passwordHash: pwdHash,
+      _passwordEnabled: pwdEnabled
     };
   },
 
@@ -427,12 +430,23 @@ const Storage = {
         const incoming = Array.isArray(pkg.data[k]) ? pkg.data[k] : [];
         this.set(this.keys[k], incoming);
       });
-      // 应用密码设置（避免空值覆盖本地已有密码）
+      // 应用密码设置：只有传入有效密码时才覆盖本地；否则保留本地已有密码
+      const localHash = localStorage.getItem('finance_password_hash');
+      const localEnabled = localStorage.getItem('finance_password_enabled') === 'true';
       if (pkg._passwordHash) {
         localStorage.setItem('finance_password_hash', pkg._passwordHash);
+        console.log('[CloudBase] 已应用云端密码hash');
+      } else if (localHash) {
+        console.log('[CloudBase] 传入密码为空，保留本地已有密码hash');
       }
       if (pkg._passwordEnabled !== undefined) {
-        localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
+        // 云端关闭保护时，若本地无密码且云端也无密码hash，则忽略
+        if (!pkg._passwordEnabled && !localHash && !pkg._passwordHash) {
+          console.log('[CloudBase] 云端关闭保护但无密码，忽略enabled更新');
+        } else {
+          localStorage.setItem('finance_password_enabled', pkg._passwordEnabled ? 'true' : 'false');
+          console.log('[CloudBase] 已应用云端密码enabled:', pkg._passwordEnabled);
+        }
       }
       return true;
     } finally {
@@ -459,7 +473,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v142' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v143' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -533,30 +547,34 @@ const Storage = {
         console.log(`[CloudBase] 合并 ${k}: 云端新增 ${addedFromCloud}, 云端覆盖 ${conflictWinCloud}, 本地保留 ${conflictWinLocal}`);
       }
     });
-    // 合并密码设置（以 updatedAt 较新者为准，云端优先）
-    // 修复：用 truthy 判断替代 === undefined，因为本地无密码时值为 null 而非 undefined
-    if (cloudPkg && cloudPkg._passwordHash) {
-      // 云端有密码设置
-      if (!localPkg || !localPkg._passwordHash) {
-        // 本地没有密码设置，使用云端的
-        merged._passwordHash = cloudPkg._passwordHash;
-        merged._passwordEnabled = cloudPkg._passwordEnabled;
-      } else {
-        // 两端都有密码设置，使用更新的
-        const localTime = new Date(localPkg.updatedAt || 0).getTime();
-        const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
-        if (cloudTime >= localTime) {
-          merged._passwordHash = cloudPkg._passwordHash;
-          merged._passwordEnabled = cloudPkg._passwordEnabled;
-        } else {
-          merged._passwordHash = localPkg._passwordHash;
-          merged._passwordEnabled = localPkg._passwordEnabled;
-        }
-      }
-    } else if (localPkg && localPkg._passwordHash) {
-      // 只有本地有密码设置
+    // 合并密码设置：本地有有效密码时优先保留本地，防止云端空密码覆盖
+    const localHasPwd = localPkg && localPkg._passwordHash;
+    const cloudHasPwd = cloudPkg && cloudPkg._passwordHash;
+    if (localHasPwd && !cloudHasPwd) {
+      // 本地有密码，云端没有 -> 保留本地
       merged._passwordHash = localPkg._passwordHash;
       merged._passwordEnabled = localPkg._passwordEnabled;
+      console.log('[CloudBase] 密码合并: 保留本地（云端无密码）');
+    } else if (!localHasPwd && cloudHasPwd) {
+      // 本地没有，云端有 -> 使用云端
+      merged._passwordHash = cloudPkg._passwordHash;
+      merged._passwordEnabled = cloudPkg._passwordEnabled;
+      console.log('[CloudBase] 密码合并: 使用云端（本地无密码）');
+    } else if (localHasPwd && cloudHasPwd) {
+      // 两端都有，按 updatedAt 比较
+      const localTime = new Date(localPkg.updatedAt || 0).getTime();
+      const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
+      if (cloudTime >= localTime) {
+        merged._passwordHash = cloudPkg._passwordHash;
+        merged._passwordEnabled = cloudPkg._passwordEnabled;
+        console.log('[CloudBase] 密码合并: 云端较新，使用云端');
+      } else {
+        merged._passwordHash = localPkg._passwordHash;
+        merged._passwordEnabled = localPkg._passwordEnabled;
+        console.log('[CloudBase] 密码合并: 本地较新，保留本地');
+      }
+    } else {
+      console.log('[CloudBase] 密码合并: 两端均无密码');
     }
 
     return merged;

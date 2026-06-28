@@ -645,7 +645,23 @@ const App = {
     // file:// 协议下, Service Worker 不能工作
     if (location.protocol === "file:") return;
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+      navigator.serviceWorker.register("./service-worker.js").then(function(reg) {
+        console.log('[App] Service Worker 已注册');
+        // 监听新版本 SW 安装完成
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[App] 检测到新版本，提示用户刷新');
+              if (confirm('检测到新版本已就绪，是否立即刷新以获取最新功能？')) {
+                newWorker.postMessage('SKIP_WAITING');
+                window.location.reload();
+              }
+            }
+          });
+        });
+      }).catch(function(e) { console.warn('[App] SW 注册失败:', e); });
     }
   },
 
@@ -7208,7 +7224,9 @@ const App = {
       if (oldCfg && oldCfg.hash) {
         localStorage.setItem("finance_password_hash", oldCfg.hash);
         localStorage.setItem("finance_password_enabled", oldCfg.enabled ? 'true' : 'false');
-        console.log('[App] 已迁移旧版密码配置');
+        console.log('[App] 已迁移旧版密码配置, hash存在:', true, 'enabled:', oldCfg.enabled);
+      } else {
+        console.log('[App] 旧版密码配置无有效hash，跳过迁移');
       }
       localStorage.removeItem("family_finance_password");
     } catch(e) {
@@ -7233,6 +7251,7 @@ const App = {
     this._passwordConfig = cfg;
     localStorage.setItem("finance_password_hash", cfg.hash || '');
     localStorage.setItem("finance_password_enabled", cfg.enabled ? 'true' : 'false');
+    console.log('[App] 密码配置已保存, hash存在:', !!cfg.hash, 'enabled:', cfg.enabled);
   },
 
   _hashPassword(pwd) {
@@ -7301,8 +7320,14 @@ const App = {
     this.showToast("密码已设置并开启保护");
     this.renderPasswordSection();
     // 同步密码到 CloudBase
+    var self = this;
     if (Storage.cloudSyncEnabled && Storage.cloudUser) {
-      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      setTimeout(function() {
+        console.log('[App] 设置密码后触发CloudBase同步');
+        Storage.syncWithCloud().then(function(r) {
+          console.log('[App] 设置密码同步结果:', r.success, r.source || r.reason || '');
+        }).catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      }, 100);
     }
   },
 
@@ -7323,7 +7348,13 @@ const App = {
     this.renderPasswordSection();
     // 同步密码到 CloudBase
     if (Storage.cloudSyncEnabled && Storage.cloudUser) {
-      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      var self = this;
+      setTimeout(function() {
+        console.log('[App] 修改密码后触发CloudBase同步');
+        Storage.syncWithCloud().then(function(r) {
+          console.log('[App] 修改密码同步结果:', r.success, r.source || r.reason || '');
+        }).catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      }, 100);
     }
   },
 
@@ -7336,7 +7367,13 @@ const App = {
     this.renderPasswordSection();
     // 同步密码到 CloudBase
     if (Storage.cloudSyncEnabled && Storage.cloudUser) {
-      Storage.syncWithCloud().catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      var self = this;
+      setTimeout(function() {
+        console.log('[App] 切换密码保护后触发CloudBase同步');
+        Storage.syncWithCloud().then(function(r) {
+          console.log('[App] 切换密码同步结果:', r.success, r.source || r.reason || '');
+        }).catch(function(e) { console.error('[App] 密码同步失败:', e); });
+      }, 100);
     }
   },
 
