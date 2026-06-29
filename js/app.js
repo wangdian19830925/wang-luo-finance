@@ -4988,7 +4988,302 @@ const App = {
       pHtml += '</div>'; // .loan-card
     });
     pc.innerHTML = pHtml;
+
+    // 渲染组合贷款累计还款趋势面积图
+    this._renderLoanRepaymentChart(loans);
   },
+
+  // ===================== 房贷累计还款趋势面积图 =====================
+  // 按贷款类型（公积金/商业贷款）分别累计本金和利息，以堆叠面积图展示
+  // 从最早放款日到最晚结清日，X 轴为月份，Y 轴为累计金额
+  _calcLoanMonthlySeries(loan) {
+    var total = parseFloat(loan.total) || 0;
+    var rate = parseFloat(loan.rate) || 0;
+    var term = parseInt(loan.term) || 0;
+    var months = term * 12;
+    var mode = loan.mode || 'equal-payment';
+    if (!total || !rate || months <= 0) return [];
+
+    var mr = rate / 100 / 12;
+    var series = [];
+    var cumPrincipal = 0, cumInterest = 0;
+
+    if (mode === 'equal-principal') {
+      var principalPerMonth = total / months;
+      for (var i = 0; i < months; i++) {
+        var remaining = total - i * principalPerMonth;
+        var interest = remaining * mr;
+        cumPrincipal += principalPerMonth;
+        cumInterest += interest;
+        series.push({ monthIndex: i, cumPrincipal: cumPrincipal, cumInterest: cumInterest });
+      }
+    } else {
+      var monthly = this.calcMonthlyPayment(total, rate, months);
+      var balance = total;
+      for (var j = 0; j < months; j++) {
+        var interest = balance * mr;
+        var principal = monthly - interest;
+        if (principal < 0) principal = 0;
+        balance -= principal;
+        if (balance < 0) {
+          principal += balance; // balance is negative here
+          balance = 0;
+        }
+        cumPrincipal += principal;
+        cumInterest += interest;
+        series.push({ monthIndex: j, cumPrincipal: cumPrincipal, cumInterest: cumInterest });
+      }
+    }
+    return series;
+  },
+
+  _renderLoanRepaymentChart(loans) {
+    var container = document.getElementById('loanRepaymentChart');
+    if (!container) return;
+
+    var self = this;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+
+    // 解析日期
+    function parseDate(d) {
+      if (!d) return null;
+      var p = d.split('-');
+      return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+    }
+    function monthDiff(d1, d2) {
+      return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    }
+    function addMonths(d, m) {
+      return new Date(d.getFullYear(), d.getMonth() + m, d.getDate());
+    }
+
+    // 只保留有效贷款
+    var validLoans = loans.filter(function(l) {
+      return l.total && l.rate && l.term && l.startDate && (l.loanType === '公积金' || l.loanType === '商业贷款');
+    });
+    if (validLoans.length === 0) {
+      container.innerHTML = '<div class="empty-tip">暂无有效房贷数据，无法生成趋势图</div>';
+      return;
+    }
+
+    // 计算全局时间范围
+    var startDates = validLoans.map(function(l) { return parseDate(l.startDate); }).filter(Boolean);
+    if (startDates.length === 0) {
+      container.innerHTML = '<div class="empty-tip">缺少开始日期，无法生成趋势图</div>';
+      return;
+    }
+    var globalStart = new Date(Math.min.apply(null, startDates));
+    var maxMonths = 0;
+    validLoans.forEach(function(l) {
+      var m = (parseInt(l.term) || 0) * 12;
+      if (m > maxMonths) maxMonths = m;
+    });
+    if (maxMonths <= 0) {
+      container.innerHTML = '<div class="empty-tip">贷款期限无效</div>';
+      return;
+    }
+    var totalMonths = maxMonths;
+
+    // 按贷款类型聚合每月累计值
+    var monthlyData = [];
+    for (var i = 0; i <= totalMonths; i++) {
+      monthlyData.push({
+        monthIndex: i,
+        date: addMonths(globalStart, i),
+        fundPrincipal: 0, fundInterest: 0,
+        commercialPrincipal: 0, commercialInterest: 0
+      });
+    }
+
+    validLoans.forEach(function(l) {
+      var series = self._calcLoanMonthlySeries(l);
+      var loanStart = parseDate(l.startDate);
+      var offset = monthDiff(globalStart, loanStart);
+      var isFund = l.loanType === '公积金';
+      series.forEach(function(p) {
+        var idx = offset + p.monthIndex;
+        if (idx < 0 || idx > totalMonths) return;
+        if (isFund) {
+          monthlyData[idx].fundPrincipal += p.cumPrincipal;
+          monthlyData[idx].fundInterest += p.cumInterest;
+        } else {
+          monthlyData[idx].commercialPrincipal += p.cumPrincipal;
+          monthlyData[idx].commercialInterest += p.cumInterest;
+        }
+      });
+      // 结清后保持累计值不变（复制到后续月份）
+      var lastIdx = offset + series.length - 1;
+      if (lastIdx >= 0 && lastIdx < totalMonths) {
+        var last = monthlyData[lastIdx];
+        for (var k = lastIdx + 1; k <= totalMonths; k++) {
+          if (isFund) {
+            monthlyData[k].fundPrincipal = last.fundPrincipal;
+            monthlyData[k].fundInterest = last.fundInterest;
+          } else {
+            monthlyData[k].commercialPrincipal = last.commercialPrincipal;
+            monthlyData[k].commercialInterest = last.commercialInterest;
+          }
+        }
+      }
+    });
+
+    // 计算堆叠边界
+    monthlyData.forEach(function(d) {
+      d.stack0 = 0;
+      d.stack1 = d.fundPrincipal;
+      d.stack2 = d.stack1 + d.fundInterest;
+      d.stack3 = d.stack2 + d.commercialPrincipal;
+      d.stack4 = d.stack3 + d.commercialInterest;
+    });
+
+    var yMax = monthlyData[totalMonths].stack4;
+    if (yMax <= 0) {
+      container.innerHTML = '<div class="empty-tip">累计还款金额为零</div>';
+      return;
+    }
+
+    // SVG 尺寸
+    var W = 680, H = 420;
+    var ml = 70, mr = 20, mt = 15, mb = 60;
+    var cw = W - ml - mr, ch = H - mt - mb;
+
+    function xPos(i) { return ml + (i / totalMonths) * cw; }
+    function yPos(v) { return mt + ch - (v / yMax) * ch; }
+
+    // 今天位置
+    var todayIdx = monthDiff(globalStart, today) + (today.getDate() - globalStart.getDate()) / 30;
+    if (todayIdx < 0) todayIdx = 0;
+    if (todayIdx > totalMonths) todayIdx = totalMonths;
+    var todayX = xPos(todayIdx);
+
+    var colors = {
+      fundPrincipal: '#16a34a',
+      fundInterest: '#86efac',
+      commercialPrincipal: '#2563eb',
+      commercialInterest: '#93c5fd'
+    };
+    var labels = {
+      fundPrincipal: '公积金-累计本金',
+      fundInterest: '公积金-累计利息',
+      commercialPrincipal: '商业-累计本金',
+      commercialInterest: '商业-累计利息'
+    };
+
+    function fmtW(v) { return '¥' + (v / 10000).toFixed(1) + '万'; }
+    function fmtFull(v) { return self.formatMoney(v); }
+
+    function buildAreaPath(stackLower, stackUpper) {
+      var path = '';
+      for (var i = 0; i <= totalMonths; i++) {
+        var x = xPos(i), y = yPos(monthlyData[i][stackUpper]);
+        path += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
+      }
+      for (var j = totalMonths; j >= 0; j--) {
+        path += 'L' + xPos(j) + ',' + yPos(monthlyData[j][stackLower]) + ' ';
+      }
+      path += 'Z';
+      return path;
+    }
+
+    function buildLinePath(stackKey) {
+      var path = '';
+      for (var i = 0; i <= totalMonths; i++) {
+        var x = xPos(i), y = yPos(monthlyData[i][stackKey]);
+        path += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
+      }
+      return path;
+    }
+
+    var svg = [];
+    svg.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:-apple-system,PingFang SC,sans-serif;font-size:12px;">');
+
+    // 背景
+    svg.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#13132a" rx="8"/>');
+
+    // 标题
+    svg.push('<text x="' + (W / 2) + '" y="' + (mt + 18) + '" text-anchor="middle" font-size="16" font-weight="700" fill="#f1f5f9">累计还款趋势</text>');
+
+    // Y 轴刻度与网格
+    var yTicks = [];
+    var yStep = Math.ceil(yMax / 5 / 10000) * 10000;
+    if (yStep === 0) yStep = 10000;
+    for (var t = 0; t <= yMax; t += yStep) yTicks.push(t);
+    yTicks.forEach(function(t) {
+      var y = yPos(t);
+      svg.push('<line x1="' + ml + '" y1="' + y + '" x2="' + (W - mr) + '" y2="' + y + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>');
+      svg.push('<text x="' + (ml - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="#94a3b8">' + fmtW(t) + '</text>');
+    });
+
+    // 堆叠面积
+    svg.push('<path d="' + buildAreaPath('stack0', 'stack1') + '" fill="' + colors.fundPrincipal + '" opacity="0.85"/>');
+    svg.push('<path d="' + buildAreaPath('stack1', 'stack2') + '" fill="' + colors.fundInterest + '" opacity="0.85"/>');
+    svg.push('<path d="' + buildAreaPath('stack2', 'stack3') + '" fill="' + colors.commercialPrincipal + '" opacity="0.85"/>');
+    svg.push('<path d="' + buildAreaPath('stack3', 'stack4') + '" fill="' + colors.commercialInterest + '" opacity="0.85"/>');
+
+    // 分界线（描边，便于看清各层）
+    svg.push('<path d="' + buildLinePath('stack1') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack2') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack3') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack4') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
+
+    // 今日标记线（虚线）
+    if (todayX >= ml && todayX <= W - mr) {
+      svg.push('<line x1="' + todayX + '" y1="' + mt + '" x2="' + todayX + '" y2="' + (mt + ch) + '" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" opacity="0.85"/>');
+      svg.push('<rect x="' + (todayX - 28) + '" y="' + (mt + 2) + '" width="56" height="18" rx="9" fill="#ef4444"/>');
+      svg.push('<text x="' + todayX + '" y="' + (mt + 14) + '" text-anchor="middle" font-size="11" font-weight="700" fill="#0a0a14">今日</text>');
+    }
+
+    // X 轴标签：起止年份 + 每 2 年 + 今日所在年
+    var startYear = globalStart.getFullYear();
+    var endYear = addMonths(globalStart, totalMonths).getFullYear();
+    var todayYear = today.getFullYear();
+    var tickYears = [];
+    for (var y = startYear; y <= endYear; y += 2) tickYears.push(y);
+    if (tickYears.indexOf(endYear) === -1) tickYears.push(endYear);
+    if (tickYears.indexOf(todayYear) === -1) tickYears.push(todayYear);
+    tickYears.sort(function(a, b) { return a - b; });
+    tickYears.forEach(function(y) {
+      var i = (y - startYear) * 12;
+      if (i < 0) i = 0;
+      if (i > totalMonths) i = totalMonths;
+      var x = xPos(i);
+      var isToday = (y === todayYear);
+      svg.push('<text x="' + x + '" y="' + (mt + ch + 16) + '" text-anchor="middle" font-size="11"' + (isToday ? ' font-weight="700" fill="#ef4444"' : ' fill="#94a3b8"') + '>' + y + '</text>');
+      svg.push('<line x1="' + x + '" y1="' + (mt + ch) + '" x2="' + x + '" y2="' + (mt + ch + 4) + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>');
+    });
+
+    // X 轴今日标记
+    if (todayX >= ml && todayX <= W - mr) {
+      svg.push('<text x="' + todayX + '" y="' + (mt + ch + 33) + '" text-anchor="middle" font-size="11" font-weight="700" fill="#ef4444">' + todayYear + '.' + String(today.getMonth() + 1).padStart(2, '0') + '</text>');
+    }
+
+    svg.push('</svg>');
+
+    // 汇总与图例
+    var totalPaid = monthlyData[Math.floor(todayIdx)].stack4;
+    var totalAll = monthlyData[totalMonths].stack4;
+    var pct = totalAll > 0 ? (totalPaid / totalAll * 100) : 0;
+
+    var legendHtml = '<div class="loan-chart-legend">' +
+      '<div class="loan-chart-legend-item"><span class="loan-chart-legend-dot" style="background:' + colors.fundPrincipal + '"></span>' + labels.fundPrincipal + '</div>' +
+      '<div class="loan-chart-legend-item"><span class="loan-chart-legend-dot" style="background:' + colors.fundInterest + '"></span>' + labels.fundInterest + '</div>' +
+      '<div class="loan-chart-legend-item"><span class="loan-chart-legend-dot" style="background:' + colors.commercialPrincipal + '"></span>' + labels.commercialPrincipal + '</div>' +
+      '<div class="loan-chart-legend-item"><span class="loan-chart-legend-dot" style="background:' + colors.commercialInterest + '"></span>' + labels.commercialInterest + '</div>' +
+      '</div>';
+
+    var summaryHtml = '<div style="margin-bottom:12px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">' +
+      '<span style="font-size:14px;font-weight:600;color:#f1f5f9;">截至今日累计还款 ' + fmtFull(totalPaid) + ' / 预计总还款 ' + fmtFull(totalAll) + '</span>' +
+      '<span style="font-size:24px;font-weight:800;color:#4ade80;">' + pct.toFixed(1) + '%</span>' +
+      '</div>' +
+      '<div style="height:12px;background:#1e1e38;border-radius:6px;overflow:hidden;">' +
+      '<div style="height:100%;width:' + Math.min(pct, 100) + '%;background:linear-gradient(90deg,#4ade80,#16a34a);border-radius:6px;transition:width 0.5s ease;"></div>' +
+      '</div>' +
+      '</div>';
+
+    container.innerHTML = summaryHtml + svg.join('') + legendHtml;
+  },
+  // ===================== 房贷累计还款趋势面积图 结束 =====================
 
   // 从事件源 input 取值保存（onclick 写在 HTML 里取不到 this.value，所以用辅助方法）
   _saveLoanManualPaid(btn) {
@@ -5006,6 +5301,7 @@ const App = {
       total: document.getElementById("loanTotal").value,
       paid: document.getElementById("loanPaid").value || 0,
       rate: document.getElementById("loanRate").value,
+      loanType: document.getElementById("loanType").value,
       term: document.getElementById("loanTerm").value,
       startDate: document.getElementById("loanStartDate").value,
       mode: document.getElementById("loanMode").value,
@@ -5014,6 +5310,7 @@ const App = {
     });
     document.getElementById("loanForm").reset();
     document.getElementById("loanPayDay").value = 17;
+    document.getElementById("loanType").value = '商业贷款';
     document.getElementById("loanAutoProgress").checked = true;
     this.setTodayDates();
     document.getElementById("loanFormModal").classList.remove("show");
