@@ -7171,11 +7171,8 @@ const App = {
     var cfg = this.CURVE_CONFIG[type];
     var range = this._getCurveYearRange();
     var curveKey = type + 'Curve';
+    // 曲线对象只保存用户显式修改的控制点；未修改年份使用默认参数渲染和模拟
     var curve = this._retirementParams[curveKey] || {};
-    // 如果曲线为空，用全局默认值填充
-    if (Object.keys(curve).length === 0) {
-      for (var y = range.start; y <= range.end; y++) curve[y] = this._retirementParams[type];
-    }
     var vr = this._getCurveEditorRange(type, curve);
     var width = container.clientWidth || 600;
     var height = 140, pad = { top: 18, right: 16, bottom: 32, left: 40 };

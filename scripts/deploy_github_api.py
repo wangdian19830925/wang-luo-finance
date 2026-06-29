@@ -139,6 +139,7 @@ def main():
         ("docs/测试报告-v160.md", "docs/测试报告-v160.md", False),
         ("docs/macro-trends-design.md", "docs/macro-trends-design.md", False),
         ("tests/loan_calc_tests.js", "tests/loan_calc_tests.js", False),
+        ("tests/retirement_curve_tests.js", "tests/retirement_curve_tests.js", False),
         ("tests/run_tests.js", "tests/run_tests.js", False),
         ("tests/integration_tests.js", "tests/integration_tests.js", False),
         ("tests/smoke_test.js", "tests/smoke_test.js", False),

@@ -459,7 +459,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v170',
+      clientVersion: 'v171',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
