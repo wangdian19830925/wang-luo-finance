@@ -734,6 +734,7 @@ body {
   vertical-align: middle;
   margin-right: 6px;
   object-fit: contain;
+  background-color: #1a1a2e;
 }
 
 .record-detail {
