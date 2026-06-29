@@ -6491,11 +6491,14 @@ const App = {
         '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">数据更新</div><div class="macro-trends-card-mini-value">' + (data.updatedAt ? data.updatedAt.slice(0,10) : '-') + '</div></div>';
     }
 
-    // CPI 图表
+    // CPI 图表：乐观/中性/保守 三曲线同屏
     if (cpiChart) {
-      var cpiHistory = (data.cpi && data.cpi.history) ? data.cpi.history : [];
-      var cpiForecast = (data.cpi && data.cpi.forecast) ? data.cpi.forecast : [];
-      this._renderMacroLineChart(cpiChart, cpiHistory, cpiForecast, { valueKey: 'value', color: '#f59e0b', defaultMin: -2, defaultMax: 5, label: 'CPI', unit: '%' });
+      var cpiSeries = [
+        { data: (data.cpiOptimistic && data.cpiOptimistic.history) || [], forecast: (data.cpiOptimistic && data.cpiOptimistic.forecast) || [], color: '#22c55e', label: '乐观', valueKey: 'value' },
+        { data: (data.cpiNeutral && data.cpiNeutral.history) || [], forecast: (data.cpiNeutral && data.cpiNeutral.forecast) || [], color: '#f59e0b', label: '中性', valueKey: 'value' },
+        { data: (data.cpiConservative && data.cpiConservative.history) || [], forecast: (data.cpiConservative && data.cpiConservative.forecast) || [], color: '#ef4444', label: '保守', valueKey: 'value' }
+      ];
+      this._renderMultiLineChart(cpiChart, cpiSeries, { defaultMin: -2, defaultMax: 5, label: 'CPI', unit: '%' });
     }
 
     // 利率图表：10Y国债 / 长期定存 / 宽基指数 三图同屏
@@ -6708,11 +6711,25 @@ const App = {
         }
       }
     }
+    // CPI 乐观/中性/保守 曲线
+    if (type === 'cpiOptimistic' || type === 'cpiNeutral' || type === 'cpiConservative') {
+      var cpiKey = type;
+      if (curve[cpiKey]) {
+        params.inflationCurve = {};
+        curve[cpiKey].forEach(function(p) { params.inflationCurve[p.year] = p.value; });
+        if (curve[cpiKey].length > 0) {
+          params.inflation = curve[cpiKey][0].value;
+        }
+      }
+    }
     this._saveRetirementParams(params);
     this._retirementParams = params;
     this._retirementCache = this.calculateRetirement(params);
     var labelMap = {
       'inflation': 'CPI',
+      'cpiOptimistic': 'CPI乐观',
+      'cpiNeutral': 'CPI中性',
+      'cpiConservative': 'CPI保守',
       'investmentReturnBond10Y': '10Y国债',
       'investmentReturnDeposit': '长期定存',
       'investmentReturnBroadIndex': '宽基指数',
@@ -6720,8 +6737,7 @@ const App = {
       'investmentReturn': '年化收益'
     };
     var label = labelMap[type] || '预测参数';
-    this.showToast('已将宏观' + label + '应用到退休计算');
-    this.navigateTo('retirement');
+    this.showToast('已将宏观' + label + '应用到退休计算（已在后台更新）');
   },
 
   _getCurveValueForYear(curve, year, defaultValue) {
@@ -6873,6 +6889,130 @@ const App = {
     container.innerHTML = svg;
   },
 
+  // 多曲线同屏渲染（一个 SVG 上画多条曲线）
+  _renderMultiLineChart(container, seriesArray, options) {
+    options = options || {};
+    var width = 600, height = 180, pad = {top: 20, right: 20, bottom: 30, left: 50};
+    var chartW = width - pad.left - pad.right;
+    var chartH = height - pad.top - pad.bottom;
+
+    // 收集所有年份和数值
+    var allYears = [], allValues = [];
+    seriesArray.forEach(function(s) {
+      (s.data || []).forEach(function(d) {
+        allYears.push(parseInt(d.x || d.year));
+        allValues.push(d[s.valueKey || 'value']);
+      });
+      (s.forecast || []).forEach(function(d) {
+        allYears.push(parseInt(d.x || d.year));
+        allValues.push(d[s.valueKey || 'value']);
+      });
+    });
+    allYears = allYears.filter(function(y, i) { return allYears.indexOf(y) === i; }).sort();
+    if (allYears.length === 0) { container.innerHTML = '<span style="font-size:12px;color:#64748b;">暂无数据</span>'; return; }
+
+    var defaultMin = options.defaultMin !== undefined ? options.defaultMin : Math.min(0, Math.floor(Math.min.apply(null, allValues) * 10) / 10 - 0.5);
+    var defaultMax = options.defaultMax !== undefined ? options.defaultMax : Math.ceil(Math.max.apply(null, allValues) * 10) / 10 + 0.5;
+
+    var xScale = function(yr) {
+      var idx = allYears.indexOf(parseInt(yr));
+      if (idx < 0) idx = 0;
+      return pad.left + (chartW - 2) * (idx / Math.max(1, allYears.length - 1));
+    };
+    var yScale = function(v) {
+      return pad.top + 1 + (chartH - 2) * (1 - (v - defaultMin) / (defaultMax - defaultMin));
+    };
+
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="macro-trends-svg">';
+
+    // 网格线 + Y轴刻度
+    var yTicks = 5;
+    for (var t = 0; t <= yTicks; t++) {
+      var tv = defaultMin + (defaultMax - defaultMin) * t / yTicks;
+      var ty = yScale(tv);
+      svg += '<line class="axis-tick" x1="' + pad.left + '" y1="' + ty + '" x2="' + (pad.left + chartW) + '" y2="' + ty + '"/>';
+      svg += '<text class="axis-text" x="' + (pad.left - 6) + '" y="' + (ty + 4) + '" text-anchor="end">' + tv.toFixed(1) + '</text>';
+    }
+
+    // X轴刻度
+    var xStep = Math.max(1, Math.floor(allYears.length / 8));
+    allYears.forEach(function(y, i) {
+      if (i % xStep !== 0 && i !== allYears.length - 1) return;
+      svg += '<text class="axis-text" x="' + (xScale(y) - 8) + '" y="' + (height - pad.bottom + 16) + '" text-anchor="middle">' + y + '</text>';
+    });
+
+    // 预测分隔线（当前年份）
+    var curYear = new Date().getFullYear();
+    if (allYears.indexOf(curYear) >= 0) {
+      var sepX = xScale(curYear);
+      svg += '<line class="forecast-separator" x1="' + sepX + '" y1="' + pad.top + '" x2="' + sepX + '" y2="' + (pad.top + chartH) + '"/>';
+    }
+
+    // 绘制每条曲线
+    seriesArray.forEach(function(s) {
+      var color = s.color || '#22d3ee';
+      var valueKey = s.valueKey || 'value';
+      var data = s.data || [];
+      var forecast = s.forecast || [];
+
+      // 历史线（实线）
+      if (data.length > 1) {
+        var histPath = '';
+        data.forEach(function(d, i) {
+          var yr = d.x || d.year;
+          var v = d[valueKey];
+          histPath += (i === 0 ? 'M' : 'L') + xScale(yr) + ' ' + yScale(v);
+        });
+        svg += '<path d="' + histPath + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round"/>';
+      }
+      // 预测线（虚线）
+      if (forecast.length > 1) {
+        var fcPath = '';
+        // 连接历史最后一个点
+        if (data.length > 0) {
+          var lastD = data[data.length - 1];
+          var lastYr = lastD.x || lastD.year;
+          var lastV = lastD[valueKey];
+          fcPath += 'M' + xScale(lastYr) + ' ' + yScale(lastV);
+        }
+        forecast.forEach(function(d, i) {
+          var yr = d.x || d.year;
+          var v = d[valueKey];
+          fcPath += 'L' + xScale(yr) + ' ' + yScale(v);
+        });
+        svg += '<path d="' + fcPath + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-dasharray="6 3" stroke-linecap="round"/>';
+      }
+      // 数据点圆点
+      data.forEach(function(d) {
+        var yr = d.x || d.year;
+        var v = d[valueKey];
+        svg += '<circle cx="' + xScale(yr) + '" cy="' + yScale(v) + '" r="2.5" fill="' + color + '"/>';
+      });
+      forecast.forEach(function(d) {
+        var yr = d.x || d.year;
+        var v = d[valueKey];
+        svg += '<circle cx="' + xScale(yr) + '" cy="' + yScale(v) + '" r="2.5" fill="' + color + '" opacity="0.7"/>';
+      });
+    });
+
+    // 图例
+    var legendY = 8;
+    seriesArray.forEach(function(s, i) {
+      var color = s.color || '#22d3ee';
+      var label = s.label || ('序列' + (i + 1));
+      var lx = pad.left + i * 100;
+      svg += '<line x1="' + lx + '" y1="' + legendY + '" x2="' + (lx + 14) + '" y2="' + legendY + '" stroke="' + color + '" stroke-width="2"/>';
+      svg += '<text x="' + (lx + 18) + '" y="' + (legendY + 4) + '" fill="#cbd5e1" font-size="10">' + label + '</text>';
+    });
+
+    // 坐标轴标签
+    svg += '<text class="axis-label" x="' + (pad.left + chartW / 2) + '" y="' + (height - 4) + '" text-anchor="middle">年份</text>';
+    svg += '<text class="axis-label" x="8" y="' + (height / 2) + '" text-anchor="middle" transform="rotate(-90, 8, ' + (height / 2) + ')">' + (options.label || '') + (options.unit ? ' (' + options.unit + ')' : '') + '</text>';
+
+    svg += '</svg>';
+    container.innerHTML = svg;
+  },
+
   _renderReadOnlyCurve(curveArr, options) {
     options = options || {};
     var color = options.color || '#4ade80';
@@ -6903,9 +7043,13 @@ const App = {
       self._updateRetirementCurveTable(type);
     });
 
-    // 恢复宏观推荐
+    // 恢复宏观推荐（CPI 卡片）
     document.querySelectorAll('.retirement-curve-reset').forEach(function(btn) {
       btn.onclick = function() { self._resetCurveToMacro(btn.dataset.type); };
+    });
+    // 年化收益卡片：应用宏观曲线（4个按钮）
+    document.querySelectorAll('.retirement-curve-apply-btn').forEach(function(btn) {
+      btn.onclick = function() { self.applyMacroCurveToRetirement(btn.dataset.type); };
     });
     // 整体 +/-
     document.querySelectorAll('.retirement-curve-btn').forEach(function(btn) {

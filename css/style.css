@@ -4752,6 +4752,26 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   background: var(--accent-glow);
 }
 
+/* 退休曲线应用按钮组（年化收益卡片右侧） */
+.retirement-curve-apply-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.retirement-curve-apply-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.retirement-curve-apply-composite {
+  background: var(--cyan);
+  color: #0f172a;
+  border-color: var(--cyan);
+}
+
 .retirement-curve-editor {
   width: 100%;
   margin-bottom: 8px;

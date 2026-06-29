@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-finance-v166';
+const CACHE_NAME = 'family-finance-v167';
 const DATA_CACHE = 'family-finance-data-v1';
 const STATIC_ASSETS = [
   '.', '/index.html', '/css/style.css', '/js/app.js', '/js/storage.js',

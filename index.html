@@ -6,7 +6,7 @@
   <title>家庭资产管理</title>
   <!-- version: 2026-06-29-v166 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=166">
+  <link rel="stylesheet" href="./css/style.css?v=167">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -652,7 +652,12 @@
           <div class="retirement-curve-row">
             <div class="retirement-curve-header">
               <span class="retirement-curve-title">年化收益</span>
-              <button class="retirement-curve-reset" data-type="investmentReturn">使用机构预测</button>
+              <div class="retirement-curve-apply-btns">
+                <button class="btn btn-primary retirement-curve-apply-btn" data-type="investmentReturnBond10Y">10Y国债</button>
+                <button class="btn btn-primary retirement-curve-apply-btn" data-type="investmentReturnDeposit">长期定存</button>
+                <button class="btn btn-primary retirement-curve-apply-btn" data-type="investmentReturnBroadIndex">宽基指数</button>
+                <button class="btn btn-primary retirement-curve-apply-btn retirement-curve-apply-composite">综合</button>
+              </div>
             </div>
             <div class="retirement-curve-editor" id="retirementCurveInvestmentReturn"></div>
             <div class="retirement-curve-tools">
@@ -819,9 +824,13 @@
         <div class="macro-trends-card-header">
           <div class="macro-trends-card-header-left">
             <span class="macro-trends-card-title">CPI 走势</span>
-            <span class="macro-trends-card-sub">历史 + 预测</span>
+            <span class="macro-trends-card-sub">乐观 · 中性 · 保守（三条曲线同屏）</span>
           </div>
-          <button class="btn btn-primary macro-trends-apply-btn" data-type="inflation" id="applyMacroCpiBtn">应用</button>
+          <div class="macro-trends-apply-row" id="macroCpiApplyRow">
+            <button class="btn btn-primary macro-trends-apply-btn" data-type="cpiOptimistic">乐观</button>
+            <button class="btn btn-primary macro-trends-apply-btn" data-type="cpiNeutral">中性</button>
+            <button class="btn btn-primary macro-trends-apply-btn" data-type="cpiConservative">保守</button>
+          </div>
         </div>
         <div class="macro-trends-chart" id="macroCpiChart"></div>
       </div>
@@ -1316,7 +1325,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=166"></script>
+  <script src="./js/storage.js?v=167"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1326,6 +1335,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=166"></script>
+  <script src="./js/app.js?v=167"></script>
 </body>
 </html>
