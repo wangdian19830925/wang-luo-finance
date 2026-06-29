@@ -5598,6 +5598,24 @@ const App = {
     var universalBalanceAt60 = schedules.universalBalanceAt60;
     var universalInsuranceBalance = 0;
     var years = [];
+    // 累计消费基数：每年乘以 (1+通胀率) 逐步累积
+    var cumulativeExpenseBase = params.annualExpense * 10000;
+
+    // 构建通胀率/收益率的完整年度序列（曲线有值用曲线，否则用固定值；曲线值影响后续年）
+    var inflationSeries = {};
+    var returnSeries = {};
+    var prevInflation = params.inflation;
+    var prevReturn = params.investmentReturn;
+    for (var y = currentYear; y <= endYear; y++) {
+      if (params.inflationCurve && params.inflationCurve[y] !== undefined) {
+        prevInflation = params.inflationCurve[y];
+      }
+      inflationSeries[y] = prevInflation;
+      if (params.investmentReturnCurve && params.investmentReturnCurve[y] !== undefined) {
+        prevReturn = params.investmentReturnCurve[y];
+      }
+      returnSeries[y] = prevReturn;
+    }
 
     for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
@@ -5611,13 +5629,15 @@ const App = {
       var premium = schedules.premiumSchedule[year] || 0;
       var mortgage = schedules.mortgagePaymentSchedule[year] || 0;
       var education = (year <= currentYear + Math.max(0, params.educationEndYear - currentYear) - 1) ? (params.annualEducation * 10000) : 0;
-      var inflationRate = (params.inflationCurve && params.inflationCurve[year] !== undefined)
-        ? params.inflationCurve[year]
-        : params.inflation;
-      var investmentReturnRate = (params.investmentReturnCurve && params.investmentReturnCurve[year] !== undefined)
-        ? params.investmentReturnCurve[year]
-        : params.investmentReturn;
-      var expense = (params.annualExpense * 10000) * Math.pow(1 + inflationRate / 100, year - currentYear);
+      var inflationRate = inflationSeries[year];
+      var investmentReturnRate = returnSeries[year];
+      // 逐年累积通胀
+      if (year === currentYear) {
+        cumulativeExpenseBase = params.annualExpense * 10000;
+      } else {
+        cumulativeExpenseBase *= (1 + inflationRate / 100);
+      }
+      var expense = cumulativeExpenseBase;
       // 根据 extraTransactions 计算额外收支
       var extraIncome = 0;
       var extraExpense = 0;
