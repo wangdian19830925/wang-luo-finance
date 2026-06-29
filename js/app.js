@@ -5157,10 +5157,10 @@ const App = {
     var todayX = xPos(todayIdx);
 
     var colors = {
-      fundPrincipal: '#16a34a',
-      fundInterest: '#86efac',
-      commercialPrincipal: '#2563eb',
-      commercialInterest: '#93c5fd'
+      fundPrincipal: '#14532d',
+      fundInterest: '#166534',
+      commercialPrincipal: '#1e3a8a',
+      commercialInterest: '#1e40af'
     };
     var labels = {
       fundPrincipal: '公积金-累计本金',
@@ -5200,8 +5200,7 @@ const App = {
     // 背景
     svg.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#13132a" rx="8"/>');
 
-    // 标题
-    svg.push('<text x="' + (W / 2) + '" y="' + (mt + 18) + '" text-anchor="middle" font-size="16" font-weight="700" fill="#f1f5f9">累计还款趋势</text>');
+    // 标题（已移除，避免与今日标记重叠）
 
     // Y 轴刻度与网格
     var yTicks = [];
@@ -5274,10 +5273,10 @@ const App = {
     var summaryHtml = '<div style="margin-bottom:12px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">' +
       '<span style="font-size:14px;font-weight:600;color:#f1f5f9;">截至今日累计还款 ' + fmtFull(totalPaid) + ' / 预计总还款 ' + fmtFull(totalAll) + '</span>' +
-      '<span style="font-size:24px;font-weight:800;color:#4ade80;">' + pct.toFixed(1) + '%</span>' +
+      '<span style="font-size:24px;font-weight:800;color:#22c55e;">' + pct.toFixed(1) + '%</span>' +
       '</div>' +
       '<div style="height:12px;background:#1e1e38;border-radius:6px;overflow:hidden;">' +
-      '<div style="height:100%;width:' + Math.min(pct, 100) + '%;background:linear-gradient(90deg,#4ade80,#16a34a);border-radius:6px;transition:width 0.5s ease;"></div>' +
+      '<div style="height:100%;width:' + Math.min(pct, 100) + '%;background:linear-gradient(90deg,#22c55e,#15803d);border-radius:6px;transition:width 0.5s ease;"></div>' +
       '</div>' +
       '</div>';
 
