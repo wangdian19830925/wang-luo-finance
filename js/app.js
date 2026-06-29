@@ -6492,6 +6492,14 @@ const App = {
       return;
     }
 
+    // 根据当前退休计算应用的 CPI 曲线同步高亮宏观趋势页的 CPI 曲线
+    var activeMacro = this._getActiveMacroCurveTypes();
+    if (activeMacro.cpi && activeMacro.cpi.indexOf('cpi') === 0) {
+      this._macroCpiHighlight = activeMacro.cpi.replace('cpi', '').toLowerCase();
+    } else {
+      this._macroCpiHighlight = null;
+    }
+
     // CPI 图表：三条情景曲线同屏
     if (cpiChart) {
       var opt = data.cpiOptimistic || {};
@@ -6710,9 +6718,19 @@ const App = {
   },
 
   applyMacroCurveToRetirement(type) {
+    var self = this;
     var data = this._macroTrendsCache;
     if (!data || !data.retirementSuggestions || !data.retirementSuggestions.curve) {
-      this.showToast('暂无推荐曲线', 'error');
+      // 未访问过宏观趋势页时缓存为空，先加载数据再应用
+      this.fetchMacroTrendsData(function(fetched) {
+        if (!fetched || !fetched.retirementSuggestions || !fetched.retirementSuggestions.curve) {
+          self.showToast('暂无推荐曲线', 'error');
+          return;
+        }
+        self._macroTrendsCache = fetched;
+        self._macroTrendsCurve = fetched.retirementSuggestions.curve;
+        self.applyMacroCurveToRetirement(type);
+      });
       return;
     }
     type = type || 'all';
