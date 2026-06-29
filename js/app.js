@@ -4989,13 +4989,17 @@ const App = {
     });
     pc.innerHTML = pHtml;
 
-    // 渲染组合贷款累计还款趋势面积图
+    // 渲染房贷环形还款进度图
+    this._renderLoanRingChart(loans);
+
+    // 渲染组合贷款剩余还款趋势面积图
     this._renderLoanRepaymentChart(loans);
   },
 
-  // ===================== 房贷累计还款趋势面积图 =====================
-  // 按贷款类型（公积金/商业贷款）分别累计本金和利息，以堆叠面积图展示
-  // 从最早放款日到最晚结清日，X 轴为月份，Y 轴为累计金额
+  // ===================== 房贷剩余还款趋势面积图 =====================
+  // 按贷款类型（公积金/商业贷款）分别剩余本金和剩余利息，以堆叠面积图展示
+  // 从最早放款日到最晚结清日，X 轴为月份，Y 轴为剩余待还金额
+  // 贷款结清后对应系列自然归零，避免已结清贷款在图表中继续占据空间
   _calcLoanMonthlySeries(loan) {
     var total = parseFloat(loan.total) || 0;
     var rate = parseFloat(loan.rate) || 0;
@@ -5011,16 +5015,32 @@ const App = {
     if (mode === 'equal-principal') {
       var principalPerMonth = total / months;
       for (var i = 0; i < months; i++) {
-        var remaining = total - i * principalPerMonth;
-        var interest = remaining * mr;
+        // 记录本期还款前的剩余本金
+        var remainingStart = total - i * principalPerMonth;
+        var interest = remainingStart * mr;
         cumPrincipal += principalPerMonth;
         cumInterest += interest;
-        series.push({ monthIndex: i, cumPrincipal: cumPrincipal, cumInterest: cumInterest });
+        var remainingMonths = months - i - 1;
+        var remainingInterest = 0;
+        if (remainingMonths > 0) {
+          remainingInterest = total * mr / months * remainingMonths * (remainingMonths + 1) / 2;
+        }
+        series.push({
+          monthIndex: i,
+          cumPrincipal: cumPrincipal,
+          cumInterest: cumInterest,
+          remainingPrincipal: remainingStart,
+          remainingInterest: remainingInterest
+        });
       }
+      // 在贷款结清日补充一个归零数据点，确保图表边缘收束到 0
+      series.push({ monthIndex: months, cumPrincipal: total, cumInterest: cumInterest, remainingPrincipal: 0, remainingInterest: 0 });
     } else {
       var monthly = this.calcMonthlyPayment(total, rate, months);
       var balance = total;
       for (var j = 0; j < months; j++) {
+        // 记录本期还款前的剩余本金
+        var remainingStart = balance;
         var interest = balance * mr;
         var principal = monthly - interest;
         if (principal < 0) principal = 0;
@@ -5031,8 +5051,21 @@ const App = {
         }
         cumPrincipal += principal;
         cumInterest += interest;
-        series.push({ monthIndex: j, cumPrincipal: cumPrincipal, cumInterest: cumInterest });
+        var remainingMonths = months - j - 1;
+        var remainingInterest = 0;
+        if (remainingMonths > 0) {
+          remainingInterest = monthly * remainingMonths - balance;
+        }
+        series.push({
+          monthIndex: j,
+          cumPrincipal: cumPrincipal,
+          cumInterest: cumInterest,
+          remainingPrincipal: remainingStart,
+          remainingInterest: remainingInterest
+        });
       }
+      // 在贷款结清日补充一个归零数据点
+      series.push({ monthIndex: months, cumPrincipal: total, cumInterest: cumInterest, remainingPrincipal: 0, remainingInterest: 0 });
     }
     return series;
   },
@@ -5084,7 +5117,7 @@ const App = {
     }
     var totalMonths = maxMonths;
 
-    // 按贷款类型聚合每月累计值
+    // 按贷款类型聚合每月剩余值（剩余本金 + 剩余利息）
     var monthlyData = [];
     for (var i = 0; i <= totalMonths; i++) {
       monthlyData.push({
@@ -5104,27 +5137,14 @@ const App = {
         var idx = offset + p.monthIndex;
         if (idx < 0 || idx > totalMonths) return;
         if (isFund) {
-          monthlyData[idx].fundPrincipal += p.cumPrincipal;
-          monthlyData[idx].fundInterest += p.cumInterest;
+          monthlyData[idx].fundPrincipal += p.remainingPrincipal;
+          monthlyData[idx].fundInterest += p.remainingInterest;
         } else {
-          monthlyData[idx].commercialPrincipal += p.cumPrincipal;
-          monthlyData[idx].commercialInterest += p.cumInterest;
+          monthlyData[idx].commercialPrincipal += p.remainingPrincipal;
+          monthlyData[idx].commercialInterest += p.remainingInterest;
         }
       });
-      // 结清后保持累计值不变（复制到后续月份）
-      var lastIdx = offset + series.length - 1;
-      if (lastIdx >= 0 && lastIdx < totalMonths) {
-        var last = monthlyData[lastIdx];
-        for (var k = lastIdx + 1; k <= totalMonths; k++) {
-          if (isFund) {
-            monthlyData[k].fundPrincipal = last.fundPrincipal;
-            monthlyData[k].fundInterest = last.fundInterest;
-          } else {
-            monthlyData[k].commercialPrincipal = last.commercialPrincipal;
-            monthlyData[k].commercialInterest = last.commercialInterest;
-          }
-        }
-      }
+      // 贷款结清后剩余值自然为 0，无需向后复制
     });
 
     // 计算堆叠边界
@@ -5136,9 +5156,9 @@ const App = {
       d.stack4 = d.stack3 + d.commercialInterest;
     });
 
-    var yMax = monthlyData[totalMonths].stack4;
+    var yMax = Math.max.apply(null, monthlyData.map(function(d) { return d.stack4; }));
     if (yMax <= 0) {
-      container.innerHTML = '<div class="empty-tip">累计还款金额为零</div>';
+      container.innerHTML = '<div class="empty-tip">剩余还款金额为零</div>';
       return;
     }
 
@@ -5163,10 +5183,10 @@ const App = {
       commercialInterest: '#1e40af'
     };
     var labels = {
-      fundPrincipal: '公积金-累计本金',
-      fundInterest: '公积金-累计利息',
-      commercialPrincipal: '商业-累计本金',
-      commercialInterest: '商业-累计利息'
+      fundPrincipal: '公积金-剩余本金',
+      fundInterest: '公积金-剩余利息',
+      commercialPrincipal: '商业-剩余本金',
+      commercialInterest: '商业-剩余利息'
     };
 
     function fmtW(v) { return '¥' + (v / 10000).toFixed(1) + '万'; }
@@ -5259,9 +5279,10 @@ const App = {
     svg.push('</svg>');
 
     // 汇总与图例
-    var totalPaid = monthlyData[Math.floor(todayIdx)].stack4;
-    var totalAll = monthlyData[totalMonths].stack4;
-    var pct = totalAll > 0 ? (totalPaid / totalAll * 100) : 0;
+    var totalRemaining = monthlyData[Math.floor(todayIdx)].stack4;
+    var totalInitial = monthlyData[0].stack4;
+    var paidAmount = totalInitial - totalRemaining;
+    var pct = totalInitial > 0 ? (paidAmount / totalInitial * 100) : 0;
 
     var legendHtml = '<div class="loan-chart-legend">' +
       '<div class="loan-chart-legend-item"><span class="loan-chart-legend-dot" style="background:' + colors.fundPrincipal + '"></span>' + labels.fundPrincipal + '</div>' +
@@ -5272,7 +5293,7 @@ const App = {
 
     var summaryHtml = '<div style="margin-bottom:12px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">' +
-      '<span style="font-size:14px;font-weight:600;color:#f1f5f9;">截至今日累计还款 ' + fmtFull(totalPaid) + ' / 预计总还款 ' + fmtFull(totalAll) + '</span>' +
+      '<span style="font-size:14px;font-weight:600;color:#f1f5f9;">截至今日剩余待还 ' + fmtFull(totalRemaining) + ' / 初始贷款总额 ' + fmtFull(totalInitial) + '</span>' +
       '<span style="font-size:24px;font-weight:800;color:#22c55e;">' + pct.toFixed(1) + '%</span>' +
       '</div>' +
       '<div style="height:12px;background:#1e1e38;border-radius:6px;overflow:hidden;">' +
@@ -5281,8 +5302,131 @@ const App = {
       '</div>';
 
     container.innerHTML = summaryHtml + svg.join('') + legendHtml;
+    // 暴露最近一次聚合数据，便于单元测试验证
+    this._lastLoanChartData = { monthlyData: monthlyData, yMax: yMax, todayIdx: todayIdx };
   },
-  // ===================== 房贷累计还款趋势面积图 结束 =====================
+  // ===================== 房贷剩余还款趋势面积图 结束 =====================
+
+  // ===================== 房贷环形还款进度图 =====================
+  // 绘制两个同心圆环：外环为商业贷款，内环为公积金贷款
+  // 每环用两种颜色区分已还期数与剩余期数，中心显示剩余本金与已还年限
+  _renderLoanRingChart(loans) {
+    var container = document.getElementById('loanRingChart');
+    if (!container) return;
+
+    var self = this;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+
+    var validLoans = loans.filter(function(l) {
+      return l.total && l.rate && l.term && l.startDate && (l.loanType === '公积金' || l.loanType === '商业贷款');
+    });
+    if (validLoans.length === 0) {
+      container.innerHTML = '<div class="empty-tip">暂无有效房贷数据，无法生成进度图</div>';
+      return;
+    }
+
+    // 计算每类贷款的已还/剩余期数与剩余本金
+    var ringData = {
+      fund: { paid: 0, remaining: 0, remainingPrincipal: 0, totalMonths: 0, label: '公积金贷款' },
+      commercial: { paid: 0, remaining: 0, remainingPrincipal: 0, totalMonths: 0, label: '商业贷款' }
+    };
+    var maxPaidYears = 0;
+    var totalRemainingPrincipal = 0;
+
+    validLoans.forEach(function(l) {
+      var prog = self.calcLoanProgress(l, today);
+      var type = l.loanType === '公积金' ? 'fund' : 'commercial';
+      var paid = Math.max(0, Math.min(prog.elapsed, prog.total));
+      var remaining = Math.max(0, prog.total - paid);
+      ringData[type].paid += paid;
+      ringData[type].remaining += remaining;
+      ringData[type].totalMonths += prog.total;
+      ringData[type].remainingPrincipal += prog.remainingPrincipal || 0;
+      totalRemainingPrincipal += prog.remainingPrincipal || 0;
+      var paidYears = Math.floor(paid / 12);
+      if (paidYears > maxPaidYears) maxPaidYears = paidYears;
+    });
+
+    function polarToCartesian(cx, cy, r, angleDeg) {
+      var rad = (angleDeg - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+
+    function describeArc(cx, cy, r, startAngle, endAngle) {
+      var start = polarToCartesian(cx, cy, r, endAngle);
+      var end = polarToCartesian(cx, cy, r, startAngle);
+      var largeArc = (endAngle - startAngle) <= 180 ? '0' : '1';
+      return ['M', start.x, start.y, 'A', r, r, 0, largeArc, 0, end.x, end.y].join(' ');
+    }
+
+    function describeRingSegment(cx, cy, innerR, outerR, startAngle, endAngle) {
+      var startOuter = polarToCartesian(cx, cy, outerR, endAngle);
+      var endOuter = polarToCartesian(cx, cy, outerR, startAngle);
+      var startInner = polarToCartesian(cx, cy, innerR, endAngle);
+      var endInner = polarToCartesian(cx, cy, innerR, startAngle);
+      var largeArc = (endAngle - startAngle) <= 180 ? '0' : '1';
+      return [
+        'M', startOuter.x, startOuter.y,
+        'A', outerR, outerR, 0, largeArc, 0, endOuter.x, endOuter.y,
+        'L', endInner.x, endInner.y,
+        'A', innerR, innerR, 0, largeArc, 1, startInner.x, startInner.y,
+        'Z'
+      ].join(' ');
+    }
+
+    function renderRing(data, innerR, outerR, paidColor, remainingColor) {
+      var total = data.paid + data.remaining;
+      if (total <= 0) return '';
+      var paidAngle = total > 0 ? (data.paid / total) * 360 : 0;
+      var remainingAngle = 360 - paidAngle;
+      var paths = [];
+
+      // 已还部分
+      if (paidAngle > 0) {
+        paths.push('<path d="' + describeRingSegment(120, 120, innerR, outerR, 0, paidAngle) + '" fill="' + paidColor + '"/>');
+      }
+      // 剩余部分
+      if (remainingAngle > 0) {
+        paths.push('<path d="' + describeRingSegment(120, 120, innerR, outerR, paidAngle, 360) + '" fill="' + remainingColor + '"/>');
+      }
+      // 外圈描边，增强层次感
+      paths.push('<path d="' + describeArc(120, 120, outerR, 0, 360) + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
+      paths.push('<path d="' + describeArc(120, 120, innerR, 0, 360) + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
+      return paths.join('');
+    }
+
+    var colors = {
+      fundPaid: '#16a34a',
+      fundRemaining: '#14532d',
+      commercialPaid: '#2563eb',
+      commercialRemaining: '#1e3a8a'
+    };
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" class="loan-ring-svg">';
+    svg += '<rect x="0" y="0" width="240" height="240" fill="transparent" rx="8"/>';
+
+    // 外环：商业贷款
+    svg += renderRing(ringData.commercial, 58, 73, colors.commercialPaid, colors.commercialRemaining);
+    // 内环：公积金贷款
+    svg += renderRing(ringData.fund, 38, 53, colors.fundPaid, colors.fundRemaining);
+
+    // 中心文字
+    var remainingWan = (totalRemainingPrincipal / 10000).toFixed(1);
+    svg += '<text x="120" y="110" class="loan-ring-center" font-size="22" font-weight="800">剩余 ' + remainingWan + ' 万</text>';
+    svg += '<text x="120" y="135" class="loan-ring-center-sub" font-size="13">已还 ' + maxPaidYears + ' 年</text>';
+
+    svg += '</svg>';
+
+    var legendHtml = '<div class="loan-ring-legend">' +
+      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.fundPaid + '"></span>公积金已还</div>' +
+      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.fundRemaining + '"></span>公积金剩余</div>' +
+      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.commercialPaid + '"></span>商业已还</div>' +
+      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.commercialRemaining + '"></span>商业剩余</div>' +
+      '</div>';
+
+    container.innerHTML = '<div class="loan-ring-chart">' + svg + '</div>' + legendHtml;
+  },
+  // ===================== 房贷环形还款进度图 结束 =====================
 
   // 从事件源 input 取值保存（onclick 写在 HTML 里取不到 this.value，所以用辅助方法）
   _saveLoanManualPaid(btn) {
