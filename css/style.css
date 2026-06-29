@@ -4293,31 +4293,6 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   min-width: 0;
 }
 
-/* 额外收支按钮 */
-.retirement-extra-btn {
-  width: 100%;
-  padding: 8px 12px;
-  background: rgba(59,130,246,0.12);
-  color: #60a5fa;
-  border: 1px dashed #3b82f6;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-}
-
-.retirement-extra-btn:hover {
-  background: rgba(59,130,246,0.22);
-  border-style: solid;
-}
-
-.retirement-extra-count {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-left: 6px;
-}
-
 /* 弹窗 */
 .modal-overlay {
   position: fixed;
@@ -4474,3 +4449,372 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 .password-verify-card.shake {
   animation: pwdShake 0.4s ease;
 }
+
+/* ===== 宏观趋势 ===== */
+.macro-trends-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 480px) {
+  .macro-trends-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.macro-trends-card-mini {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.macro-trends-card-mini-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.macro-trends-card-mini-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.macro-trends-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.macro-trends-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.macro-trends-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.macro-trends-card-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.macro-trends-chart {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.macro-trends-svg {
+  min-width: 100%;
+  height: 160px;
+}
+
+.macro-trends-readonly-svg {
+  width: 100%;
+  height: 80px;
+}
+
+.macro-trends-rec-curve {
+  margin-bottom: 16px;
+}
+
+.macro-rec-curve-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.macro-rec-curve-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.macro-trends-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.macro-trends-actions .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+.macro-trends-sources {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.macro-trends-sources-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.macro-trends-sources-list {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.macro-trends-source-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.macro-trends-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ===== 退休计算曲线编辑器 ===== */
+.retirement-curve-row {
+  grid-column: 1 / -1;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.retirement-curve-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.retirement-curve-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.retirement-curve-reset {
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.retirement-curve-reset:hover {
+  background: var(--accent-glow);
+}
+
+.retirement-curve-editor {
+  width: 100%;
+  margin-bottom: 8px;
+  user-select: none;
+  touch-action: none;
+}
+
+.retirement-curve-svg {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+}
+
+.retirement-curve-point {
+  cursor: grab;
+}
+
+.retirement-curve-point.control {
+  cursor: grab;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+.retirement-curve-point:active {
+  cursor: grabbing;
+}
+
+.retirement-curve-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.retirement-curve-btn,
+.retirement-curve-table-toggle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.retirement-curve-btn:hover,
+.retirement-curve-table-toggle:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-primary);
+}
+
+.retirement-curve-table {
+  max-height: 220px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.retirement-curve-table-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 6px;
+}
+
+.retirement-curve-table-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.retirement-curve-table-year {
+  width: 34px;
+}
+
+.retirement-curve-table-input {
+  width: 48px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 2px 4px;
+  font-size: 11px;
+  text-align: right;
+}
+
+.retirement-curve-table-unit {
+  width: 12px;
+  color: var(--text-muted);
+}
+
+.retirement-curve-table-flag {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+/* 额外收支图例 */
+.retirement-extra-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(59,130,246,0.12);
+  color: #60a5fa;
+  border: 1px dashed #3b82f6;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.retirement-extra-btn:hover {
+  background: rgba(59,130,246,0.22);
+  border-style: solid;
+}
+
+.retirement-extra-legend {
+  display: inline-flex;
+  align-items: center;
+}
+
+.extra-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.extra-badge-income {
+  background: #22c55e;
+}
+
+.extra-badge-expense {
+  background: #ef4444;
+}
+
+.extra-badge-both {
+  background: linear-gradient(135deg, #22c55e 50%, #ef4444 50%);
+}
+
+.retirement-extra-count {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 6px;
+}
+
+/* 退休计算房贷行与额外收支 */
+.retirement-mortgage-right {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  min-width: 120px;
+}
+
+.retirement-param-mortgage-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.retirement-mortgage-left {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .retirement-mortgage-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .retirement-param-mortgage-row {
+    flex-direction: column;
+  }
+  .retirement-curve-table-inner {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+

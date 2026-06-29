@@ -2752,7 +2752,7 @@ const App = {
     if (target) target.classList.add("active");
     document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
     document.querySelectorAll(".bottom-nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
-    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", retirement:"退休计算", alerts:"通知管理", settings:"设置与数据同步" };
+    const titles = { dashboard:"家庭资产管理", transactions:"现金资产", insurance:"保险管理", stocks:"股票管理", funds:"基金管理", loan:"房贷追踪", annuity:"年金管理", retirement:"退休计算", "macro-trends":"宏观趋势", alerts:"通知管理", settings:"设置与数据同步" };
     document.getElementById("headerTitle").textContent = titles[page] || "家庭资产管理";
     // 非 Dashboard 页面显示返回按钮
     var homeBtn = document.getElementById("homeBtn");
@@ -2761,7 +2761,7 @@ const App = {
   },
 
   loadPageData(page) {
-    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), retirement:()=>this.loadRetirementPage(), alerts:()=>this.loadAlertsPage(), settings:()=>this.onSettingsPageShow() };
+    const f = { dashboard:()=>this.loadDashboard(), transactions:()=>this.loadTransactions(), insurance:()=>{ this.autoRefreshDates(); this.loadInsuranceList(); }, stocks:()=>{ this.loadStockList(); this.loadRsuList(); }, funds:()=>this.loadFundList(), loan:()=>this.loadLoanList(), annuity:()=>this.loadAnnuityList(), retirement:()=>this.loadRetirementPage(), "macro-trends":()=>this.loadMacroTrendsPage(), alerts:()=>this.loadAlertsPage(), settings:()=>this.onSettingsPageShow() };
     if (f[page]) f[page]();
   },
 
@@ -5320,6 +5320,17 @@ const App = {
   // 基于当前资产，回答：今天能不能退休？还差多少钱？
   _retirementCalcTimer: null,
   _retirementParams: null,
+  _retirementCurveState: null,
+  _macroTrendsCache: null,
+
+  // 宏观趋势推荐曲线（从 data/macro-trends.json 读取）
+  _macroTrendsCurve: null,
+
+  // 曲线编辑器默认范围
+  CURVE_CONFIG: {
+    inflation: { min: 0, max: 8, step: 0.1, color: '#f59e0b', label: 'CPI' },
+    investmentReturn: { min: 0, max: 10, step: 0.1, color: '#22d3ee', label: '年化收益' }
+  },
 
   // 基本养老保险（来自截图：本息总额 460,126.76，个人缴费 2,984.16/月，累计 197 个月；成员2先按相同）
   RETIREMENT_PENSION: {
@@ -5364,6 +5375,8 @@ const App = {
     this._retirementParams = this._loadRetirementParams();
     this._bindRetirementInputs();
     this._bindExtraTransactionButtons();
+    this._bindRetirementCurveEditors();
+    this._updateExtraTransactionBadge();
 
     // 如果还没有缓存，立即计算一次（用户首次进入）
     if (!this._retirementCache) {
@@ -5379,6 +5392,7 @@ const App = {
     var defaults = {
       annualExpense: 20, annualEducation: 10, educationEndYear: 2035, extraTransactions: [],
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
+      inflationCurve: {}, investmentReturnCurve: {},
       pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
       pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
     };
@@ -5396,6 +5410,9 @@ const App = {
           }];
           delete parsed.annualExtraIncome;
         }
+        // 兼容旧版本：如果没有曲线，用固定值初始化
+        if (parsed.inflationCurve === undefined) parsed.inflationCurve = {};
+        if (parsed.investmentReturnCurve === undefined) parsed.investmentReturnCurve = {};
         defaults = Object.assign(defaults, parsed);
       }
     } catch(e) {}
@@ -5415,13 +5432,10 @@ const App = {
     var btnClose = document.getElementById('closeExtraTransactionModal');
     var btnConfirm = document.getElementById('confirmExtraTransaction');
     var listEl = document.getElementById('extraTransactionList');
-    var countEl = document.getElementById('extraTransactionCount');
 
     function renderList() {
       var txns = self._retirementParams.extraTransactions || [];
-      if (countEl) {
-        countEl.textContent = txns.length > 0 ? '(' + txns.length + '条)' : '';
-      }
+      self._updateExtraTransactionBadge();
       if (!listEl) return;
       if (txns.length === 0) {
         listEl.innerHTML = '<div style="font-size:12px;color:#64748b;text-align:center;padding:12px 0;">暂无记录</div>';
@@ -5520,8 +5534,6 @@ const App = {
       annualExpense: 'retirementParamAnnualExpense',
       annualEducation: 'retirementParamAnnualEducation',
       educationEndYear: 'retirementParamEducationEndYear',
-      inflation: 'retirementParamInflation',
-      investmentReturn: 'retirementParamReturn',
       lifeExpectancy: 'retirementParamLifeExpectancy',
       pensionMember1Balance: 'retirementParamPensionMember1Balance',
       pensionMember1Monthly: 'retirementParamPensionMember1Monthly',
@@ -5535,8 +5547,7 @@ const App = {
       var el = document.getElementById(inputs[key] + 'Value');
       if (!el) return;
       var text = value;
-      if (key === 'inflation' || key === 'investmentReturn') text = value + ' %';
-      else if (key === 'lifeExpectancy') text = value + ' 岁';
+      if (key === 'lifeExpectancy') text = value + ' 岁';
       else if (key === 'educationEndYear') text = value + ' 年';
       else if (key === 'annualExpense' || key === 'annualEducation') text = value + ' 万';
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
@@ -5600,7 +5611,13 @@ const App = {
       var premium = schedules.premiumSchedule[year] || 0;
       var mortgage = schedules.mortgagePaymentSchedule[year] || 0;
       var education = (year <= currentYear + Math.max(0, params.educationEndYear - currentYear) - 1) ? (params.annualEducation * 10000) : 0;
-      var expense = (params.annualExpense * 10000) * Math.pow(1 + params.inflation / 100, year - currentYear);
+      var inflationRate = (params.inflationCurve && params.inflationCurve[year] !== undefined)
+        ? params.inflationCurve[year]
+        : params.inflation;
+      var investmentReturnRate = (params.investmentReturnCurve && params.investmentReturnCurve[year] !== undefined)
+        ? params.investmentReturnCurve[year]
+        : params.investmentReturn;
+      var expense = (params.annualExpense * 10000) * Math.pow(1 + inflationRate / 100, year - currentYear);
       // 根据 extraTransactions 计算额外收支
       var extraIncome = 0;
       var extraExpense = 0;
@@ -5620,7 +5637,7 @@ const App = {
       var inflow = extraIncome + pension + insurance + enterpriseAnnuity;
       var netFlow = inflow - outflow;
       // 投资收益只对正资产计算；资产为负时不应再按收益率滚雪球（否则出现"收益越高负债越多"的反直觉现象）
-      var investmentGain = balance > 0 ? balance * (params.investmentReturn / 100) : 0;
+      var investmentGain = balance > 0 ? balance * (investmentReturnRate / 100) : 0;
       var endBalance = balance + investmentGain + netFlow;
 
       // 创赢未来领取策略
@@ -6358,6 +6375,574 @@ const App = {
     wrap.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + svg + cfSvg + cfLegend + '</div>';
 
     // 8) 图例说明已移除（收支堆积图自带分项图例）
+  },
+
+  // ── 宏观趋势 ──
+  loadMacroTrendsPage() {
+    var self = this;
+    this.fetchMacroTrendsData(function(data) {
+      self._macroTrendsCache = data;
+      if (data && data.retirementSuggestions && data.retirementSuggestions.curve) {
+        self._macroTrendsCurve = data.retirementSuggestions.curve;
+      }
+      self.renderMacroTrendsPage();
+      self._bindMacroTrendsActions();
+    });
+  },
+
+  fetchMacroTrendsData(callback) {
+    var self = this;
+    var cached = null;
+    try {
+      var ls = localStorage.getItem('fm_macro_trends');
+      if (ls) cached = JSON.parse(ls);
+    } catch(e) {}
+
+    // 先读取静态包，成功后回调
+    fetch('./data/macro-trends.json?v=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        try { localStorage.setItem('fm_macro_trends', JSON.stringify(data)); } catch(e) {}
+        callback(data);
+      })
+      .catch(function() {
+        // 静态包失败时回退缓存
+        if (cached) callback(cached);
+        else callback(null);
+      });
+
+    // 后台刷新汇率（CORS 友好）
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then(function(r) { return r.json(); })
+      .then(function(fx) {
+        if (!fx || !fx.rates || !fx.rates.CNY) return;
+        var cny = fx.rates.CNY;
+        var eur = fx.rates.EUR ? cny / fx.rates.EUR * cny : null;
+        var hkd = fx.rates.HKD ? cny / fx.rates.HKD * cny : null;
+        var latest = { date: new Date().toISOString().slice(0,10), USD_CNY: cny, source: 'OpenER' };
+        if (eur) latest.EUR_CNY = parseFloat(eur.toFixed(4));
+        if (hkd) latest.HKD_CNY = parseFloat(hkd.toFixed(4));
+        try {
+          var ls = localStorage.getItem('fm_macro_trends');
+          var cur = ls ? JSON.parse(ls) : {};
+          if (!cur.exchangeRate) cur.exchangeRate = {};
+          cur.exchangeRate.latest = latest;
+          localStorage.setItem('fm_macro_trends', JSON.stringify(cur));
+        } catch(e) {}
+      }).catch(function(){});
+  },
+
+  renderMacroTrendsPage() {
+    var data = this._macroTrendsCache;
+    var summary = document.getElementById('macroTrendsSummary');
+    var cpiChart = document.getElementById('macroCpiChart');
+    var rateChart = document.getElementById('macroRateChart');
+    var fxChart = document.getElementById('macroFxChart');
+    var recCurve = document.getElementById('macroRecCurve');
+    var sources = document.getElementById('macroTrendsSources');
+
+    if (!data) {
+      if (summary) summary.innerHTML = '<div class="macro-trends-empty">宏观数据加载失败，请稍后重试</div>';
+      return;
+    }
+
+    // summary cards
+    var latestCpi = data.cpi && data.cpi.latest ? data.cpi.latest : {};
+    var latestLpr = data.lpr && data.lpr.latest ? data.lpr.latest : {};
+    var latestFx = data.exchangeRate && data.exchangeRate.latest ? data.exchangeRate.latest : {};
+    var rec = data.retirementSuggestions && data.retirementSuggestions.curve ? data.retirementSuggestions.curve : {};
+    var recStart = rec.startYear || 2026;
+    var recEnd = rec.endYear || 2050;
+    var recInflation = rec.inflation || [];
+    var recReturn = rec.investmentReturn || [];
+    var recInflationFirst = recInflation.length > 0 ? recInflation[0].value : '-';
+    var recInflationLast = recInflation.length > 0 ? recInflation[recInflation.length - 1].value : '-';
+    var recReturnFirst = recReturn.length > 0 ? recReturn[0].value : '-';
+    var recReturnLast = recReturn.length > 0 ? recReturn[recReturn.length - 1].value : '-';
+
+    if (summary) {
+      summary.innerHTML =
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">CPI 同比</div><div class="macro-trends-card-mini-value">' + (latestCpi.yoy !== undefined ? (latestCpi.yoy > 0 ? '+' : '') + latestCpi.yoy + '%' : '-') + '</div></div>' +
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">LPR 1Y</div><div class="macro-trends-card-mini-value">' + (latestLpr.oneYear !== undefined ? latestLpr.oneYear + '%' : '-') + '</div></div>' +
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">USD/CNY</div><div class="macro-trends-card-mini-value">' + (latestFx.USD_CNY !== undefined ? latestFx.USD_CNY : '-') + '</div></div>' +
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">推荐 CPI</div><div class="macro-trends-card-mini-value">' + recInflationFirst + '%–' + recInflationLast + '%</div></div>' +
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">推荐收益</div><div class="macro-trends-card-mini-value">' + recReturnFirst + '%–' + recReturnLast + '%</div></div>' +
+        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">数据更新</div><div class="macro-trends-card-mini-value">' + (data.updatedAt ? data.updatedAt.slice(0,10) : '-') + '</div></div>';
+    }
+
+    // CPI 图表
+    if (cpiChart) {
+      var cpiHistory = (data.cpi && data.cpi.history) ? data.cpi.history : [];
+      var cpiForecast = (data.cpi && data.cpi.forecast) ? data.cpi.forecast : [];
+      this._renderMacroLineChart(cpiChart, cpiHistory, cpiForecast, { valueKey: 'value', color: '#f59e0b', min: 0, max: 5 });
+    }
+
+    // 利率图表
+    if (rateChart) {
+      var lprHistory = (data.lpr && data.lpr.history) ? data.lpr.history : [];
+      var rateData = lprHistory.map(function(d) { return { x: d.date, value: d.oneYear }; });
+      this._renderMacroLineChart(rateChart, rateData, [], { valueKey: 'value', color: '#22d3ee', min: 0, max: 5 });
+    }
+
+    // 汇率图表
+    if (fxChart) {
+      var fxHistory = (data.exchangeRate && data.exchangeRate.history) ? data.exchangeRate.history : [];
+      var fxData = fxHistory.map(function(d) { return { x: d.date, value: d.USD_CNY }; });
+      this._renderMacroLineChart(fxChart, fxData, [], { valueKey: 'value', color: '#4ade80', min: 6, max: 8 });
+    }
+
+    // 推荐曲线
+    if (recCurve) {
+      recCurve.innerHTML =
+        '<div class="macro-rec-curve-row"><span class="macro-rec-curve-label">CPI</span>' + this._renderReadOnlyCurve(recInflation, { color: '#f59e0b', min: 0, max: 8 }) + '</div>' +
+        '<div class="macro-rec-curve-row"><span class="macro-rec-curve-label">年化收益</span>' + this._renderReadOnlyCurve(recReturn, { color: '#22d3ee', min: 0, max: 10 }) + '</div>';
+    }
+
+    // 数据来源
+    if (sources) {
+      var srcHtml = '<div class="macro-trends-sources-title">数据来源与说明</div><div class="macro-trends-sources-list">';
+      if (data.sources) {
+        Object.keys(data.sources).forEach(function(k) {
+          var s = data.sources[k];
+          srcHtml += '<div class="macro-trends-source-item"><strong>' + k + '</strong>：' + (s.name || '') + '</div>';
+        });
+      }
+      if (data.retirementSuggestions && data.retirementSuggestions.notes) {
+        srcHtml += '<div class="macro-trends-source-note">' + data.retirementSuggestions.notes + '</div>';
+      }
+      srcHtml += '</div>';
+      sources.innerHTML = srcHtml;
+    }
+  },
+
+  _bindMacroTrendsActions() {
+    var self = this;
+    var refreshBtn = document.getElementById('refreshMacroTrendsBtn');
+    var applyBtn = document.getElementById('applyMacroCurveToRetirementBtn');
+    var goBtn = document.getElementById('goToRetirementBtn');
+    if (refreshBtn) {
+      refreshBtn.onclick = function() {
+        self.showToast('正在刷新汇率...');
+        self.fetchMacroTrendsData(function(data) {
+          self._macroTrendsCache = data;
+          if (data && data.retirementSuggestions && data.retirementSuggestions.curve) {
+            self._macroTrendsCurve = data.retirementSuggestions.curve;
+          }
+          self.renderMacroTrendsPage();
+          self.showToast('宏观数据已刷新');
+        });
+      };
+    }
+    if (applyBtn) {
+      applyBtn.onclick = function() { self.applyMacroCurveToRetirement(); };
+    }
+    if (goBtn) {
+      goBtn.onclick = function() { self.navigateTo('retirement'); };
+    }
+  },
+
+  applyMacroCurveToRetirement() {
+    var data = this._macroTrendsCache;
+    if (!data || !data.retirementSuggestions || !data.retirementSuggestions.curve) {
+      this.showToast('暂无推荐曲线', 'error');
+      return;
+    }
+    var curve = data.retirementSuggestions.curve;
+    var params = this._loadRetirementParams();
+    params.inflationCurve = {};
+    params.investmentReturnCurve = {};
+    if (curve.inflation) {
+      curve.inflation.forEach(function(p) { params.inflationCurve[p.year] = p.value; });
+    }
+    if (curve.investmentReturn) {
+      curve.investmentReturn.forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
+    }
+    // 默认值为起始年或全局固定值
+    if (curve.inflation && curve.inflation.length > 0) {
+      params.inflation = curve.inflation[0].value;
+    }
+    if (curve.investmentReturn && curve.investmentReturn.length > 0) {
+      params.investmentReturn = curve.investmentReturn[0].value;
+    }
+    this._saveRetirementParams(params);
+    this._retirementParams = params;
+    this._retirementCache = this.calculateRetirement(params);
+    this.showToast('已应用宏观推荐曲线到退休计算');
+    this.navigateTo('retirement');
+  },
+
+  _getCurveValueForYear(curve, year, defaultValue) {
+    if (curve && curve[year] !== undefined) return curve[year];
+    return defaultValue;
+  },
+
+  _interpolateCurve(curve, startYear, endYear) {
+    var points = [];
+    for (var y = startYear; y <= endYear; y++) {
+      if (curve[y] !== undefined) points.push({ year: y, value: curve[y] });
+    }
+    if (points.length === 0) return {};
+    var result = {};
+    for (var y = startYear; y <= endYear; y++) {
+      if (curve[y] !== undefined) {
+        result[y] = curve[y];
+        continue;
+      }
+      // 线性插值
+      var prev = null, next = null;
+      for (var i = 0; i < points.length; i++) {
+        if (points[i].year < y) prev = points[i];
+        if (points[i].year > y && !next) { next = points[i]; break; }
+      }
+      if (prev && next) {
+        var t = (y - prev.year) / (next.year - prev.year);
+        result[y] = prev.value + (next.value - prev.value) * t;
+      } else if (prev) {
+        result[y] = prev.value;
+      } else if (next) {
+        result[y] = next.value;
+      }
+    }
+    return result;
+  },
+
+  _renderMacroLineChart(container, history, forecast, options) {
+    options = options || {};
+    var valueKey = options.valueKey || 'value';
+    var color = options.color || '#4ade80';
+    var min = options.min !== undefined ? options.min : 0;
+    var max = options.max !== undefined ? options.max : 10;
+    var pad = 8;
+    var width = 680, height = 160;
+
+    var points = [];
+    history.forEach(function(d) {
+      var x = d.x || d.year || d.month || d.date || '';
+      var v = d[valueKey];
+      if (v !== undefined) points.push({ x: x, v: v, type: 'hist' });
+    });
+    forecast.forEach(function(d) {
+      var x = d.x || d.year || d.month || d.date || '';
+      var v = d[valueKey];
+      if (v !== undefined) points.push({ x: x, v: v, type: 'forecast' });
+    });
+    if (points.length === 0) {
+      container.innerHTML = '<div style="font-size:12px;color:#64748b;text-align:center;padding:30px 0;">暂无数据</div>';
+      return;
+    }
+    var n = points.length;
+    var xScale = function(i) { return pad + (width - 2 * pad) * (i / Math.max(1, n - 1)); };
+    var yScale = function(v) { return height - pad - (height - 2 * pad) * ((v - min) / (max - min)); };
+    var path = '';
+    points.forEach(function(p, i) { path += (i === 0 ? 'M' : 'L') + xScale(i) + ' ' + yScale(p.v); });
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="macro-trends-svg">';
+    svg += '<line x1="' + pad + '" y1="' + (height - pad) + '" x2="' + (width - pad) + '" y2="' + (height - pad) + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>';
+    svg += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (height - pad) + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>';
+    svg += '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    points.forEach(function(p, i) {
+      svg += '<circle cx="' + xScale(i) + '" cy="' + yScale(p.v) + '" r="3.5" fill="' + color + '" stroke="#0a0a14" stroke-width="1.5"/>';
+    });
+    svg += '<text x="' + (width - pad) + '" y="' + (pad + 10) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + max + '</text>';
+    svg += '<text x="' + (width - pad) + '" y="' + (height - pad - 4) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + min + '</text>';
+    svg += '</svg>';
+    container.innerHTML = svg;
+  },
+
+  _renderReadOnlyCurve(curveArr, options) {
+    options = options || {};
+    var color = options.color || '#4ade80';
+    var min = options.min !== undefined ? options.min : 0;
+    var max = options.max !== undefined ? options.max : 10;
+    var width = 560, height = 80, pad = 6;
+    if (!curveArr || curveArr.length === 0) return '<span style="font-size:12px;color:#64748b;">-</span>';
+    var points = curveArr.slice(0, 25); // 最多显示 25 年
+    var n = points.length;
+    var xScale = function(i) { return pad + (width - 2 * pad) * (i / Math.max(1, n - 1)); };
+    var yScale = function(v) { return height - pad - (height - 2 * pad) * ((v - min) / (max - min)); };
+    var path = '';
+    points.forEach(function(p, i) { path += (i === 0 ? 'M' : 'L') + xScale(i) + ' ' + yScale(p.value); });
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="macro-trends-readonly-svg">';
+    svg += '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    points.forEach(function(p, i) {
+      svg += '<circle cx="' + xScale(i) + '" cy="' + yScale(p.value) + '" r="2.5" fill="' + color + '"/>';
+    });
+    svg += '</svg>';
+    return svg;
+  },
+
+  // 退休曲线编辑
+  _bindRetirementCurveEditors() {
+    var self = this;
+    ['inflation', 'investmentReturn'].forEach(function(type) {
+      self._renderRetirementCurveEditor(type);
+      self._updateRetirementCurveTable(type);
+    });
+
+    // 恢复宏观推荐
+    document.querySelectorAll('.retirement-curve-reset').forEach(function(btn) {
+      btn.onclick = function() { self._resetCurveToMacro(btn.dataset.type); };
+    });
+    // 整体 +/-
+    document.querySelectorAll('.retirement-curve-btn').forEach(function(btn) {
+      btn.onclick = function() { self._shiftCurve(btn.dataset.type, parseFloat(btn.dataset.shift)); };
+    });
+    // 表格视图
+    document.querySelectorAll('.retirement-curve-table-toggle').forEach(function(btn) {
+      btn.onclick = function() { self._toggleCurveTable(btn.dataset.type); };
+    });
+  },
+
+  _getCurveYearRange() {
+    var currentYear = new Date().getFullYear();
+    var endYear = currentYear + (this._retirementParams.lifeExpectancy - 43);
+    return { start: currentYear, end: Math.min(endYear, 2050) };
+  },
+
+  _renderRetirementCurveEditor(type) {
+    var self = this;
+    var container = document.getElementById('retirementCurve' + (type === 'inflation' ? 'Inflation' : 'InvestmentReturn'));
+    if (!container) return;
+    var cfg = this.CURVE_CONFIG[type];
+    var range = this._getCurveYearRange();
+    var curveKey = type + 'Curve';
+    var curve = this._retirementParams[curveKey] || {};
+    // 如果曲线为空，用全局默认值填充
+    if (Object.keys(curve).length === 0) {
+      for (var y = range.start; y <= range.end; y++) curve[y] = this._retirementParams[type];
+    }
+    var width = container.clientWidth || 600;
+    var height = 120, pad = { top: 12, right: 12, bottom: 28, left: 36 };
+    var chartW = Math.max(100, width - pad.left - pad.right);
+    var chartH = height - pad.top - pad.bottom;
+    var n = range.end - range.start + 1;
+
+    var xScale = function(i) { return pad.left + chartW * (i / Math.max(1, n - 1)); };
+    var yScale = function(v) { return pad.top + chartH * (1 - (v - cfg.min) / (cfg.max - cfg.min)); };
+
+    var svg = '<svg class="retirement-curve-svg" data-type="' + type + '" viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:' + height + 'px;">';
+    // 网格
+    svg += '<line x1="' + pad.left + '" y1="' + (pad.top + chartH) + '" x2="' + (pad.left + chartW) + '" y2="' + (pad.top + chartH) + '" stroke="rgba(255,255,255,0.08)"/>';
+    svg += '<line x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + chartH) + '" stroke="rgba(255,255,255,0.08)"/>';
+    // 路径
+    var path = '';
+    for (var i = 0; i < n; i++) {
+      var y = range.start + i;
+      var v = this._getCurveValueForYear(curve, y, this._retirementParams[type]);
+      var x = xScale(i), yy = yScale(v);
+      path += (i === 0 ? 'M' : 'L') + x + ' ' + yy;
+    }
+    svg += '<path d="' + path + '" fill="none" stroke="' + cfg.color + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    // 控制点
+    for (var i = 0; i < n; i++) {
+      var y = range.start + i;
+      var v = this._getCurveValueForYear(curve, y, this._retirementParams[type]);
+      var cx = xScale(i), cy = yScale(v);
+      var isControl = curve[y] !== undefined;
+      svg += '<circle class="retirement-curve-point' + (isControl ? ' control' : '') + '" data-year="' + y + '" data-value="' + v.toFixed(2) + '" cx="' + cx + '" cy="' + cy + '" r="' + (isControl ? 5 : 3) + '" fill="' + (isControl ? cfg.color : '#64748b') + '" stroke="#0a0a14" stroke-width="1.5"/>';
+    }
+    // 年份标签（稀疏显示）
+    var step = Math.ceil(n / 6);
+    for (var i = 0; i < n; i += step) {
+      svg += '<text x="' + xScale(i) + '" y="' + (height - 6) + '" text-anchor="middle" font-size="9" fill="#94a3b8">' + (range.start + i) + '</text>';
+    }
+    // Y 轴标签
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (pad.top + 8) + '" text-anchor="end" font-size="9" fill="#94a3b8">' + cfg.max + '%</text>';
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (pad.top + chartH + 4) + '" text-anchor="end" font-size="9" fill="#94a3b8">' + cfg.min + '%</text>';
+    svg += '</svg>';
+    container.innerHTML = svg;
+
+    var svgEl = container.querySelector('svg');
+    if (!svgEl) return;
+
+    function getPoint(evt) {
+      var rect = svgEl.getBoundingClientRect();
+      var scaleX = width / rect.width;
+      var scaleY = height / rect.height;
+      return { x: (evt.clientX - rect.left) * scaleX, y: (evt.clientY - rect.top) * scaleY };
+    }
+    function yearFromX(x) {
+      var i = Math.round((x - pad.left) / chartW * (n - 1));
+      i = Math.max(0, Math.min(n - 1, i));
+      return range.start + i;
+    }
+    function valueFromY(y) {
+      var v = cfg.max - ((y - pad.top) / chartH) * (cfg.max - cfg.min);
+      return Math.max(cfg.min, Math.min(cfg.max, Math.round(v / cfg.step) * cfg.step));
+    }
+
+    var dragging = null;
+    svgEl.addEventListener('pointerdown', function(e) {
+      var pt = getPoint(e);
+      var year = yearFromX(pt.x);
+      var v = valueFromY(pt.y);
+      var target = e.target;
+      if (target.classList && target.classList.contains('retirement-curve-point')) {
+        // 已有控制点：开始拖拽
+        dragging = { year: parseInt(target.dataset.year) };
+        target.setPointerCapture(e.pointerId);
+      } else {
+        // 空白处：添加控制点
+        curve[year] = v;
+        self._retirementParams[curveKey] = curve;
+        self._saveRetirementParams(self._retirementParams);
+        self._retirementCache = self.calculateRetirement(self._retirementParams);
+        self.renderRetirementPage();
+        self._renderRetirementCurveEditor(type);
+        self._updateRetirementCurveTable(type);
+      }
+    });
+    svgEl.addEventListener('pointermove', function(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var pt = getPoint(e);
+      var year = dragging.year;
+      var v = valueFromY(pt.y);
+      curve[year] = v;
+      self._retirementParams[curveKey] = curve;
+      self._saveRetirementParams(self._retirementParams);
+      self._retirementCache = self.calculateRetirement(self._retirementParams);
+      self.renderRetirementPage();
+      self._renderRetirementCurveEditor(type);
+      self._updateRetirementCurveTable(type);
+    });
+    svgEl.addEventListener('pointerup', function(e) {
+      if (dragging) dragging = null;
+    });
+    svgEl.addEventListener('dblclick', function(e) {
+      var target = e.target;
+      if (target.classList && target.classList.contains('retirement-curve-point') && target.classList.contains('control')) {
+        var year = parseInt(target.dataset.year);
+        if (Object.keys(curve).length <= 2) {
+          self.showToast('至少保留 2 个控制点', 'error');
+          return;
+        }
+        delete curve[year];
+        self._retirementParams[curveKey] = curve;
+        self._saveRetirementParams(self._retirementParams);
+        self._retirementCache = self.calculateRetirement(self._retirementParams);
+        self.renderRetirementPage();
+        self._renderRetirementCurveEditor(type);
+        self._updateRetirementCurveTable(type);
+      }
+    });
+  },
+
+  _updateRetirementCurveTable(type) {
+    var container = document.getElementById('retirementCurveTable' + (type === 'inflation' ? 'Inflation' : 'InvestmentReturn'));
+    if (!container) return;
+    var cfg = this.CURVE_CONFIG[type];
+    var range = this._getCurveYearRange();
+    var curveKey = type + 'Curve';
+    var curve = this._retirementParams[curveKey] || {};
+    var html = '<div class="retirement-curve-table-inner">';
+    for (var y = range.start; y <= range.end; y++) {
+      var v = this._getCurveValueForYear(curve, y, this._retirementParams[type]);
+      var isControl = curve[y] !== undefined;
+      html += '<div class="retirement-curve-table-row">' +
+                '<span class="retirement-curve-table-year">' + y + '</span>' +
+                '<input type="number" class="retirement-curve-table-input" data-year="' + y + '" data-type="' + type + '" value="' + v.toFixed(2) + '" step="' + cfg.step + '" min="' + cfg.min + '" max="' + cfg.max + '">' +
+                '<span class="retirement-curve-table-unit">%</span>' +
+                '<span class="retirement-curve-table-flag" style="visibility:' + (isControl ? 'visible' : 'hidden') + '">●</span>' +
+              '</div>';
+    }
+    html += '</div>';
+    container.innerHTML = html;
+
+    var self = this;
+    container.querySelectorAll('.retirement-curve-table-input').forEach(function(input) {
+      input.addEventListener('change', function() {
+        var year = parseInt(input.dataset.year);
+        var val = parseFloat(input.value);
+        if (isNaN(val)) return;
+        val = Math.max(cfg.min, Math.min(cfg.max, val));
+        curve[year] = val;
+        self._retirementParams[curveKey] = curve;
+        self._saveRetirementParams(self._retirementParams);
+        self._retirementCache = self.calculateRetirement(self._retirementParams);
+        self.renderRetirementPage();
+        self._renderRetirementCurveEditor(type);
+        self._updateRetirementCurveTable(type);
+      });
+    });
+  },
+
+  _toggleCurveTable(type) {
+    var container = document.getElementById('retirementCurveTable' + (type === 'inflation' ? 'Inflation' : 'InvestmentReturn'));
+    if (!container) return;
+    container.style.display = container.style.display === 'none' ? 'block' : 'none';
+  },
+
+  _shiftCurve(type, delta) {
+    var curveKey = type + 'Curve';
+    var curve = this._retirementParams[curveKey] || {};
+    var cfg = this.CURVE_CONFIG[type];
+    var range = this._getCurveYearRange();
+    for (var y = range.start; y <= range.end; y++) {
+      var v = this._getCurveValueForYear(curve, y, this._retirementParams[type]);
+      var nv = Math.max(cfg.min, Math.min(cfg.max, v + delta));
+      curve[y] = nv;
+    }
+    this._retirementParams[curveKey] = curve;
+    this._saveRetirementParams(this._retirementParams);
+    this._retirementCache = this.calculateRetirement(this._retirementParams);
+    this.renderRetirementPage();
+    this._renderRetirementCurveEditor(type);
+    this._updateRetirementCurveTable(type);
+  },
+
+  _resetCurveToMacro(type) {
+    var self = this;
+    if (!this._macroTrendsCurve) {
+      this.fetchMacroTrendsData(function(data) {
+        self._macroTrendsCache = data;
+        if (data && data.retirementSuggestions && data.retirementSuggestions.curve) {
+          self._macroTrendsCurve = data.retirementSuggestions.curve;
+        }
+        self._applyMacroCurve(type);
+      });
+      return;
+    }
+    this._applyMacroCurve(type);
+  },
+
+  _applyMacroCurve(type) {
+    var curve = this._macroTrendsCurve;
+    if (!curve) {
+      this.showToast('暂无宏观推荐曲线', 'error');
+      return;
+    }
+    var curveKey = type + 'Curve';
+    var recArr = (type === 'inflation') ? curve.inflation : curve.investmentReturn;
+    if (!recArr) return;
+    var newCurve = {};
+    recArr.forEach(function(p) { newCurve[p.year] = p.value; });
+    this._retirementParams[curveKey] = newCurve;
+    if (recArr.length > 0) this._retirementParams[type] = recArr[0].value;
+    this._saveRetirementParams(this._retirementParams);
+    this._retirementCache = this.calculateRetirement(this._retirementParams);
+    this.renderRetirementPage();
+    this._renderRetirementCurveEditor(type);
+    this._updateRetirementCurveTable(type);
+    this.showToast('已恢复为宏观推荐曲线');
+  },
+
+  _updateExtraTransactionBadge() {
+    var legend = document.getElementById('extraTransactionLegend');
+    if (!legend) return;
+    var txns = this._retirementParams.extraTransactions || [];
+    if (txns.length === 0) {
+      legend.innerHTML = '';
+      return;
+    }
+    var hasIncome = txns.some(function(t) { return t.type === 'income'; });
+    var hasExpense = txns.some(function(t) { return t.type === 'expense'; });
+    if (hasIncome && hasExpense) {
+      legend.innerHTML = '<span class="extra-badge extra-badge-both" title="同时存在收入与支出记录"></span>';
+    } else if (hasIncome) {
+      legend.innerHTML = '<span class="extra-badge extra-badge-income" title="存在收入记录"></span>';
+    } else {
+      legend.innerHTML = '<span class="extra-badge extra-badge-expense" title="存在支出记录"></span>';
+    }
   },
 
   // ── 通知管理（iOS 风格日历） ──

@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-28-v155 -->
+  <!-- version: 2026-06-29-v157 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=156">
+  <link rel="stylesheet" href="./css/style.css?v=157">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -63,6 +63,9 @@
       </li>
       <li class="nav-item" data-page="retirement">
         <span class="nav-icon"><svg class="icon"><use href="#icon-piggy"/></svg></span>退休计算
+      </li>
+      <li class="nav-item" data-page="macro-trends">
+        <span class="nav-icon"><svg class="icon"><use href="#icon-trend"/></svg></span>宏观趋势
       </li>
       <li class="nav-item" data-page="alerts">
         <span class="nav-icon"><svg class="icon"><use href="#icon-alerts"/></svg></span>通知管理
@@ -622,13 +625,41 @@
               </div>
             </div>
             <div class="retirement-mortgage-right">
-              <div class="retirement-param-label">
-                <span>通货膨胀率</span>
-                <span class="retirement-param-value" id="retirementParamInflationValue">3 %</span>
-              </div>
-              <input type="range" class="retirement-param-range" id="retirementParamInflation" min="1" max="8" step="0.5" value="3">
+              <button class="retirement-extra-btn" id="btnAddExtraTransaction">
+                <span>额外收支</span>
+                <span class="retirement-extra-legend" id="extraTransactionLegend"></span>
+              </button>
             </div>
           </div>
+
+          <div class="retirement-curve-row">
+            <div class="retirement-curve-header">
+              <span class="retirement-curve-title">CPI</span>
+              <button class="retirement-curve-reset" data-type="inflation">恢复宏观推荐</button>
+            </div>
+            <div class="retirement-curve-editor" id="retirementCurveInflation"></div>
+            <div class="retirement-curve-tools">
+              <button class="retirement-curve-btn" data-type="inflation" data-shift="0.5">整体 +0.5%</button>
+              <button class="retirement-curve-btn" data-type="inflation" data-shift="-0.5">整体 -0.5%</button>
+              <button class="retirement-curve-table-toggle" data-type="inflation">表格视图</button>
+            </div>
+            <div class="retirement-curve-table" id="retirementCurveTableInflation" style="display:none;"></div>
+          </div>
+
+          <div class="retirement-curve-row">
+            <div class="retirement-curve-header">
+              <span class="retirement-curve-title">年化收益</span>
+              <button class="retirement-curve-reset" data-type="investmentReturn">恢复宏观推荐</button>
+            </div>
+            <div class="retirement-curve-editor" id="retirementCurveInvestmentReturn"></div>
+            <div class="retirement-curve-tools">
+              <button class="retirement-curve-btn" data-type="investmentReturn" data-shift="0.5">整体 +0.5%</button>
+              <button class="retirement-curve-btn" data-type="investmentReturn" data-shift="-0.5">整体 -0.5%</button>
+              <button class="retirement-curve-table-toggle" data-type="investmentReturn">表格视图</button>
+            </div>
+            <div class="retirement-curve-table" id="retirementCurveTableInvestmentReturn" style="display:none;"></div>
+          </div>
+
           <div class="retirement-param-grid">
             <div class="retirement-param-col">
               <div class="retirement-param-item">
@@ -645,19 +676,8 @@
                 </div>
                 <input type="range" class="retirement-param-range" id="retirementParamAnnualEducation" min="0" max="30" step="1" value="10">
               </div>
-              <div class="retirement-param-item">
-                <button class="retirement-extra-btn" id="btnAddExtraTransaction">额外收入/支出</button>
-                <span class="retirement-extra-count" id="extraTransactionCount"></span>
-              </div>
             </div>
             <div class="retirement-param-col">
-              <div class="retirement-param-item">
-                <div class="retirement-param-label">
-                  <span>投资年化收益</span>
-                  <span class="retirement-param-value" id="retirementParamReturnValue">2 %</span>
-                </div>
-                <input type="range" class="retirement-param-range" id="retirementParamReturn" min="0" max="6" step="0.5" value="2">
-              </div>
               <div class="retirement-param-item">
                 <div class="retirement-param-label">
                   <span>教育结束年份</span>
@@ -736,7 +756,7 @@
     <div class="modal-overlay" id="extraTransactionModal" style="display:none;">
       <div class="modal-content" style="max-width:420px;">
         <div class="modal-header">
-          <h3>额外收入/支出</h3>
+          <h3>额外收支</h3>
           <button class="modal-close" id="closeExtraTransactionModal">&times;</button>
         </div>
         <div class="modal-body">
@@ -768,6 +788,62 @@
         </div>
       </div>
     </div>
+
+    <!-- 宏观趋势页面 -->
+    <section class="page" id="page-macro-trends">
+      <div class="page-header">
+        <h2>宏观趋势</h2>
+        <button class="btn btn-outline" id="refreshMacroTrendsBtn" style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);white-space:nowrap;">
+          <svg class="icon"><use href="#icon-refresh"/></svg> 刷新
+        </button>
+      </div>
+
+      <div class="macro-trends-summary" id="macroTrendsSummary">
+        <!-- 动态渲染 summary cards -->
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">CPI 走势</span>
+          <span class="macro-trends-card-sub">历史 + 预测</span>
+        </div>
+        <div class="macro-trends-chart" id="macroCpiChart"></div>
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">利率走势</span>
+          <span class="macro-trends-card-sub">LPR / 定存</span>
+        </div>
+        <div class="macro-trends-chart" id="macroRateChart"></div>
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">汇率走势</span>
+          <span class="macro-trends-card-sub">USD / CNY</span>
+        </div>
+        <div class="macro-trends-chart" id="macroFxChart"></div>
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">退休计算推荐曲线</span>
+          <span class="macro-trends-card-sub">只读</span>
+        </div>
+        <div class="macro-trends-rec-curve" id="macroRecCurve">
+          <!-- 动态渲染推荐曲线 -->
+        </div>
+        <div class="macro-trends-actions">
+          <button class="btn btn-primary" id="applyMacroCurveToRetirementBtn">应用到退休计算</button>
+          <button class="btn btn-outline" id="goToRetirementBtn">查看退休计算</button>
+        </div>
+      </div>
+
+      <div class="macro-trends-sources" id="macroTrendsSources">
+        <!-- 动态渲染数据来源 -->
+      </div>
+    </section>
 
     <!-- 通知管理页面 -->
     <section class="page" id="page-alerts">
@@ -1050,6 +1126,12 @@
       <line x1="17" y1="18" x2="17" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
     </symbol>
 
+    <!-- 宏观趋势/折线：上升曲线 -->
+    <symbol id="icon-trend" viewBox="0 0 24 24">
+      <path d="M3 16l5-5 4 4 6-6 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M21 10v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
     <!-- 通知：几何铃铛 -->
     <symbol id="icon-notify" viewBox="0 0 24 24">
       <path d="M6 9a6 6 0 0112 0v3l2.5 3.5H3.5L6 12V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
@@ -1211,7 +1293,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=156"></script>
+  <script src="./js/storage.js?v=157"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1221,6 +1303,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=156"></script>
+  <script src="./js/app.js?v=157"></script>
 </body>
 </html>

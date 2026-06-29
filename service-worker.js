@@ -1,11 +1,12 @@
-const CACHE_NAME = 'family-finance-v156';
+const CACHE_NAME = 'family-finance-v157';
 const DATA_CACHE = 'family-finance-data-v1';
 const STATIC_ASSETS = [
   '.', '/index.html', '/css/style.css', '/js/app.js', '/js/storage.js',
   '/js/parser.js', '/js/insurance-data.js', '/js/stock-data.js',
   '/js/rsu-data.js', '/js/fund-data.js', '/js/loan-data.js',
   '/js/annuity-data.js', '/js/history-data.js', '/js/import-insurance.js',
-  '/manifest.json', '/data/stock-prices.json', '/data/stock-history.json'
+  '/manifest.json', '/data/stock-prices.json', '/data/stock-history.json',
+  '/data/macro-trends.json'
 ];
 
 // 需要绕过 GitHub Pages CDN 缓存的核心资源
