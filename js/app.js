@@ -6762,12 +6762,17 @@ const App = {
       else if (type === 'investmentReturnDeposit') returnKey = 'investmentReturnDeposit';
       else if (type === 'investmentReturnBroadIndex') returnKey = 'investmentReturnBroadIndex';
       else if (type === 'investmentReturnComposite') returnKey = 'investmentReturnComposite';
-      if (returnKey && curve[returnKey]) {
+      var returnCurveArr = null;
+      if (returnKey === 'investmentReturnComposite') {
+        // 综合收益按公式动态计算：30%国债 + 30%定存 + 40%宽基指数
+        returnCurveArr = this._computeCompositeReturnCurve(curve);
+      } else if (returnKey && curve[returnKey]) {
+        returnCurveArr = curve[returnKey];
+      }
+      if (returnCurveArr && returnCurveArr.length > 0) {
         params.investmentReturnCurve = {};
-        curve[returnKey].forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
-        if (curve[returnKey].length > 0) {
-          params.investmentReturn = curve[returnKey][0].value;
-        }
+        returnCurveArr.forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
+        params.investmentReturn = returnCurveArr[0].value;
       } else if (type === 'all' || type === 'investmentReturn') {
         params.investmentReturnCurve = {};
         if (curve.investmentReturn) {
@@ -6818,6 +6823,29 @@ const App = {
     return defaultValue;
   },
 
+  // 综合收益曲线 = 30% 10Y国债 + 30% 长期定存 + 40% 宽基指数
+  _computeCompositeReturnCurve(curve) {
+    if (!curve) return [];
+    var bondArr = curve.investmentReturnBond10Y || [];
+    var depositArr = curve.investmentReturnDeposit || [];
+    var broadArr = curve.investmentReturnBroadIndex || [];
+    var years = {};
+    bondArr.forEach(function(p) { years[p.year] = true; });
+    depositArr.forEach(function(p) { years[p.year] = true; });
+    broadArr.forEach(function(p) { years[p.year] = true; });
+    var result = [];
+    Object.keys(years).map(Number).sort(function(a, b) { return a - b; }).forEach(function(y) {
+      var bond = 2.2;
+      var deposit = 2.5;
+      var broad = 7.5;
+      for (var i = 0; i < bondArr.length; i++) { if (bondArr[i].year === y) { bond = bondArr[i].value; break; } }
+      for (var i = 0; i < depositArr.length; i++) { if (depositArr[i].year === y) { deposit = depositArr[i].value; break; } }
+      for (var i = 0; i < broadArr.length; i++) { if (broadArr[i].year === y) { broad = broadArr[i].value; break; } }
+      result.push({ year: y, value: Math.round((bond * 0.3 + deposit * 0.3 + broad * 0.4) * 100) / 100 });
+    });
+    return result;
+  },
+
   _isSameCurve(curveObj, curveArr) {
     if (!curveObj || !curveArr || curveArr.length === 0) return false;
     for (var i = 0; i < curveArr.length; i++) {
@@ -6843,7 +6871,7 @@ const App = {
     if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnBond10Y)) retType = 'investmentReturnBond10Y';
     else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnDeposit)) retType = 'investmentReturnDeposit';
     else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnBroadIndex)) retType = 'investmentReturnBroadIndex';
-    else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnComposite)) retType = 'investmentReturnComposite';
+    else if (this._isSameCurve(params.investmentReturnCurve, this._computeCompositeReturnCurve(curve))) retType = 'investmentReturnComposite';
     else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturn)) retType = 'investmentReturn';
 
     return { cpi: cpiType, ret: retType };

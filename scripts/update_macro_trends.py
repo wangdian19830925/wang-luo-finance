@@ -100,18 +100,28 @@ def extend_forecast(forecast, end_year=2050, default_value=2.5):
     return [years[y] for y in sorted(years)]
 
 
-def build_investment_return_curve(cpi_forecast, base_rate=1.95, premium=1.0):
-    """基于 3 年期定存利率 + 风险溢价构建年化收益曲线。"""
-    curve = []
-    for cf in cpi_forecast:
-        # 简单规则：3 年期定存 + 1% 左右溢价，随 CPI 轻微上浮
-        val = base_rate + premium + (cf["value"] - 2.0) * 0.15
-        curve.append({
-            "year": cf["year"],
-            "value": round(max(val, 1.5), 2),
-            "source": "3年期定存 + 1% 溢价"
-        })
-    return curve
+def build_investment_return_curves(cpi_forecast, years):
+    """
+    构建四条年化收益推荐曲线：
+    - 10Y国债：低风险债券收益（常数 2.2%）
+    - 长期定存：银行存款收益（常数 2.5%）
+    - 宽基指数：权益市场长期收益（常数 7.5%）
+    - 综合：30% 国债 + 30% 定存 + 40% 宽基指数，按年动态加权
+    """
+    bond = []
+    deposit = []
+    broad = []
+    composite = []
+    for y in years:
+        bond_val = 2.2
+        deposit_val = 2.5
+        broad_val = 7.5
+        composite_val = round(bond_val * 0.3 + deposit_val * 0.3 + broad_val * 0.4, 2)
+        bond.append({"year": y, "value": bond_val, "source": "10Y国债(常数)"})
+        deposit.append({"year": y, "value": deposit_val, "source": "长期定存(常数)"})
+        broad.append({"year": y, "value": broad_val, "source": "宽基指数(常数)"})
+        composite.append({"year": y, "value": composite_val, "source": "30%国债+30%定存+40%宽基指数"})
+    return bond, deposit, broad, composite
 
 
 def main():
@@ -131,8 +141,9 @@ def main():
         cpi_forecast = default_cpi_forecast()
     cpi_forecast = extend_forecast(cpi_forecast, end_year=2050, default_value=2.5)
 
-    # 3. 投资年化收益曲线
-    investment_return_curve = build_investment_return_curve(cpi_forecast, base_rate=1.95, premium=1.0)
+    # 3. 投资年化收益曲线（四条）
+    years = [f["year"] for f in cpi_forecast]
+    bond_curve, deposit_curve, broad_curve, composite_curve = build_investment_return_curves(cpi_forecast, years)
 
     payload = {
         "schemaVersion": 1,
@@ -197,7 +208,10 @@ def main():
                 "startYear": 2026,
                 "endYear": 2050,
                 "inflation": cpi_forecast,
-                "investmentReturn": investment_return_curve
+                "investmentReturnBond10Y": bond_curve,
+                "investmentReturnDeposit": deposit_curve,
+                "investmentReturnBroadIndex": broad_curve,
+                "investmentReturnComposite": composite_curve
             },
             "notes": "年度曲线更贴近经济周期，但预测不确定性更高。退休计算中可基于该推荐曲线手动微调。"
         }
@@ -210,7 +224,7 @@ def main():
     print(f"[INFO] 已生成 {OUTPUT_PATH}")
     print(f"[INFO] 更新时间: {payload['updatedAt']}")
     print(f"[INFO] CPI 预测年份: {payload['cpi']['forecast'][0]['year']} ~ {payload['cpi']['forecast'][-1]['year']}")
-    print(f"[INFO] 投资年化收益年份: {payload['retirementSuggestions']['curve']['investmentReturn'][0]['year']} ~ {payload['retirementSuggestions']['curve']['investmentReturn'][-1]['year']}")
+    print(f"[INFO] 投资年化收益年份: {payload['retirementSuggestions']['curve']['investmentReturnComposite'][0]['year']} ~ {payload['retirementSuggestions']['curve']['investmentReturnComposite'][-1]['year']}")
 
 
 if __name__ == "__main__":
