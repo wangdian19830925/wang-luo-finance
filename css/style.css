@@ -4876,6 +4876,10 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .extra-dot {
@@ -4922,6 +4926,7 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   min-width: 0;
   flex: 0 0 auto;
   padding-top: 0;
+  flex-wrap: nowrap;
 }
 
 .retirement-param-mortgage-row {
@@ -4930,13 +4935,31 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   justify-content: flex-start;
   align-items: center;
   gap: 24px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-bottom: 4px;
 }
 
 .retirement-mortgage-left {
   flex: 0 0 auto;
   min-width: 0;
+}
+
+.retirement-extra-btn {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+}
+
+.retirement-extra-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 @media (max-width: 480px) {

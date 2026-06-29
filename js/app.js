@@ -6160,8 +6160,8 @@ const App = {
     var maxVal = Math.max.apply(null, values);
     var minVal = Math.min.apply(null, values);
 
-    // 2) 纵轴：画全曲线（含负值），上限约400万，下限跟随最小值留边距
-    var yMax = Math.max(maxVal * 1.12, 4000000);
+    // 2) 纵轴：根据实际数据动态缩放，保留 12% 边距
+    var yMax = Math.max(maxVal * 1.12, Math.abs(minVal) * 1.15, 100000);
     var yMin = Math.min(minVal * 1.15, -100000); // 至少显示到-10万，但不强制为0
     if (yMin > 0) yMin = 0; // 如果全为正则下限为0
     var yRange = yMax - yMin || 1;
@@ -6279,9 +6279,15 @@ const App = {
     // 7) 收支明细堆积面积图（按分项多色堆叠）
     var cfHeight = 190, cfPadTop = 18, cfPadBottom = 52;
     var cfChartH = cfHeight - cfPadTop - cfPadBottom;
-    var cfMaxIn = Math.max.apply(null, years.map(function(y) { return y.inflow + y.investmentGain; }));
-    var cfMaxOut = Math.max.apply(null, years.map(function(y) { return y.outflow; }));
-    var cfMax = Math.max(cfMaxIn, cfMaxOut, 100000); // 至少显示到 10万
+    // 使用 95 分位数确定堆积图纵轴上限，避免单笔极端额外收支把正常年份压成一条线
+    var cfAllValues = [];
+    years.forEach(function(y) {
+      cfAllValues.push(y.inflow + y.investmentGain);
+      cfAllValues.push(y.outflow);
+    });
+    cfAllValues.sort(function(a, b) { return a - b; });
+    var cfP95 = cfAllValues.length ? cfAllValues[Math.min(cfAllValues.length - 1, Math.floor(cfAllValues.length * 0.95))] : 100000;
+    var cfMax = Math.max(cfP95, 100000); // 至少显示到 10万
 
     var cfZeroY = cfPadTop + cfChartH / 2;
     function cfpy(v) { return cfZeroY - (v / cfMax) * (cfChartH / 2); }
@@ -7113,9 +7119,11 @@ const App = {
       var cls = t.type === 'income' ? 'income' : 'expense';
       var sign = t.type === 'income' ? '+' : '-';
       var title = (t.note ? t.note + ' · ' : '') + (t.type === 'income' ? '收入' : '支出');
+      var amount = parseFloat(t.amount) || 0;
+      var amountText = amount >= 10000 ? (amount / 10000).toFixed(2).replace(/\.?0+$/, '') + '亿' : amount + '万';
       html += '<span class="extra-legend-item" title="' + this.escapeHtml(title) + '">' +
                 '<span class="extra-dot extra-dot-' + cls + '"></span>' +
-                '<span>' + t.year + '年 ' + sign + t.amount + '万</span>' +
+                '<span>' + t.year + '年 ' + sign + amountText + '</span>' +
               '</span>';
     }, this);
     legend.innerHTML = html;
