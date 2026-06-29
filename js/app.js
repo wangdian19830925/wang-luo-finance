@@ -5603,20 +5603,16 @@ const App = {
     var universalInsuranceBalance = 0;
     var years = [];
 
-    // 构建通胀率/收益率的完整年度序列（曲线有值用曲线，否则用固定值；曲线值向后延续）
+    // 构建通胀率/收益率的完整年度序列（曲线某年有值用曲线，否则用固定默认值；不向后延续）
     var inflationSeries = {};
     var returnSeries = {};
-    var prevInflation = params.inflation;
-    var prevReturn = params.investmentReturn;
     for (var y = currentYear; y <= endYear; y++) {
-      if (params.inflationCurve && params.inflationCurve[y] !== undefined) {
-        prevInflation = params.inflationCurve[y];
-      }
-      inflationSeries[y] = prevInflation;
-      if (params.investmentReturnCurve && params.investmentReturnCurve[y] !== undefined) {
-        prevReturn = params.investmentReturnCurve[y];
-      }
-      returnSeries[y] = prevReturn;
+      inflationSeries[y] = (params.inflationCurve && params.inflationCurve[y] !== undefined)
+        ? params.inflationCurve[y]
+        : params.inflation;
+      returnSeries[y] = (params.investmentReturnCurve && params.investmentReturnCurve[y] !== undefined)
+        ? params.investmentReturnCurve[y]
+        : params.investmentReturn;
     }
 
     for (var year = currentYear; year <= endYear; year++) {
@@ -6686,8 +6682,8 @@ const App = {
         btn.onclick = function() {
           var type = cpiScenarioMap[btnId];
           self._macroCpiHighlight = type.replace('cpi', '').toLowerCase();
-          self.renderMacroTrendsPage();
           self.applyMacroCurveToRetirement(type);
+          self.renderMacroTrendsPage();
         };
       }
     });
@@ -6784,6 +6780,11 @@ const App = {
       'investmentReturn': '年化收益'
     };
     var label = labelMap[type] || '预测参数';
+
+    // 同步更新两个页面的按钮选中状态
+    this._updateMacroTrendsButtonStates();
+    this._updateRetirementCurveButtonStates();
+
     this.showToast('已将宏观' + label + '应用到退休计算');
     // 宏观趋势页按钮不再跳转退休计算页
   },
