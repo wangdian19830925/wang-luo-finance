@@ -4917,14 +4917,15 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   margin-left: 6px;
 }
 
-/* 退休计算房贷行与额外收支 */
-.retirement-mortgage-right {
+/* 退休计算房贷行与额外收支：在 mortgage-row 内强制水平排列 */
+.retirement-param-mortgage-row > .retirement-mortgage-right {
   display: flex;
+  flex-direction: row !important;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
   min-width: 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   padding-top: 0;
   flex-wrap: nowrap;
 }
@@ -4963,9 +4964,8 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 @media (max-width: 480px) {
-  .retirement-mortgage-right {
+  .retirement-param-mortgage-row > .retirement-mortgage-right {
     width: 100%;
-    justify-content: stretch;
     flex: 1 1 auto;
   }
   .retirement-param-mortgage-row {
