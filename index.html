@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-29-v157 -->
+  <!-- version: 2026-06-29-v158 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=157">
+  <link rel="stylesheet" href="./css/style.css?v=158">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -625,17 +625,15 @@
               </div>
             </div>
             <div class="retirement-mortgage-right">
-              <button class="retirement-extra-btn" id="btnAddExtraTransaction">
-                <span>额外收支</span>
-                <span class="retirement-extra-legend" id="extraTransactionLegend"></span>
-              </button>
+              <button class="retirement-extra-btn" id="btnAddExtraTransaction">额外收支</button>
+              <span class="retirement-extra-legend" id="extraTransactionLegend"></span>
             </div>
           </div>
 
           <div class="retirement-curve-row">
             <div class="retirement-curve-header">
               <span class="retirement-curve-title">CPI</span>
-              <button class="retirement-curve-reset" data-type="inflation">恢复宏观推荐</button>
+              <button class="retirement-curve-reset" data-type="inflation">使用机构预测</button>
             </div>
             <div class="retirement-curve-editor" id="retirementCurveInflation"></div>
             <div class="retirement-curve-tools">
@@ -649,7 +647,7 @@
           <div class="retirement-curve-row">
             <div class="retirement-curve-header">
               <span class="retirement-curve-title">年化收益</span>
-              <button class="retirement-curve-reset" data-type="investmentReturn">恢复宏观推荐</button>
+              <button class="retirement-curve-reset" data-type="investmentReturn">使用机构预测</button>
             </div>
             <div class="retirement-curve-editor" id="retirementCurveInvestmentReturn"></div>
             <div class="retirement-curve-tools">
@@ -818,6 +816,16 @@
         <div class="macro-trends-chart" id="macroRateChart"></div>
       </div>
 
+      <div class="macro-trends-card macro-trends-actions-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">预测参数</span>
+          <span class="macro-trends-card-sub">应用到退休计算</span>
+        </div>
+        <div class="macro-trends-actions">
+          <button class="btn btn-primary" id="applyMacroToRetirementBtn">应用</button>
+        </div>
+      </div>
+
       <div class="macro-trends-card">
         <div class="macro-trends-card-header">
           <span class="macro-trends-card-title">汇率走势</span>
@@ -828,15 +836,11 @@
 
       <div class="macro-trends-card">
         <div class="macro-trends-card-header">
-          <span class="macro-trends-card-title">退休计算推荐曲线</span>
-          <span class="macro-trends-card-sub">只读</span>
+          <span class="macro-trends-card-title">每日新闻</span>
+          <span class="macro-trends-card-sub">全球市场 · 汇市 · 期货</span>
         </div>
-        <div class="macro-trends-rec-curve" id="macroRecCurve">
-          <!-- 动态渲染推荐曲线 -->
-        </div>
-        <div class="macro-trends-actions">
-          <button class="btn btn-primary" id="applyMacroCurveToRetirementBtn">应用到退休计算</button>
-          <button class="btn btn-outline" id="goToRetirementBtn">查看退休计算</button>
+        <div class="macro-news-body" id="macroNewsBody">
+          <div class="macro-trends-empty">加载中…</div>
         </div>
       </div>
 
@@ -1293,7 +1297,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=157"></script>
+  <script src="./js/storage.js?v=158"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1303,6 +1307,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=157"></script>
+  <script src="./js/app.js?v=158"></script>
 </body>
 </html>

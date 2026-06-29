@@ -133,6 +133,8 @@ def main():
         ("docs/测试报告-v154.md", "docs/测试报告-v154.md", False),
         ("docs/测试报告-v155.md", "docs/测试报告-v155.md", False),
         ("docs/测试报告-v156.md", "docs/测试报告-v156.md", False),
+        ("docs/测试报告-v157.md", "docs/测试报告-v157.md", False),
+        ("docs/测试报告-v158.md", "docs/测试报告-v158.md", False),
         ("docs/macro-trends-design.md", "docs/macro-trends-design.md", False),
         ("tests/loan_calc_tests.js", "tests/loan_calc_tests.js", False),
         ("tests/run_tests.js", "tests/run_tests.js", False),
