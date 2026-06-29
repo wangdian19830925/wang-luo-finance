@@ -5326,17 +5326,10 @@ const App = {
   // 宏观趋势推荐曲线（从 data/macro-trends.json 读取）
   _macroTrendsCurve: null,
 
-  // 宏观趋势利率走势当前选中的指标
-  _macroRateIndicator: 'bond10Y',
-
   // 曲线编辑器默认范围
   CURVE_CONFIG: {
     inflation: { min: -2, max: 5, step: 0.1, color: '#f59e0b', label: 'CPI' },
-    investmentReturn: { min: -2, max: 5, step: 0.1, color: '#22d3ee', label: '年化收益' },
-    investmentReturnBond10Y: { min: -2, max: 5, step: 0.1, color: '#22d3ee', label: '年化收益(10Y国债)' },
-    investmentReturnDeposit: { min: -2, max: 5, step: 0.1, color: '#a78bfa', label: '年化收益(定存)' },
-    investmentReturnBroadIndex: { min: -2, max: 5, step: 0.1, color: '#34d399', label: '年化收益(宽基)' },
-    investmentReturnComposite: { min: -2, max: 5, step: 0.1, color: '#f97316', label: '年化收益(综合)' }
+    investmentReturn: { min: -2, max: 5, step: 0.1, color: '#22d3ee', label: '年化收益' }
   },
 
   // 基本养老保险（来自截图：本息总额 460,126.76，个人缴费 2,984.16/月，累计 197 个月；成员2先按相同）
@@ -6499,30 +6492,27 @@ const App = {
       this._renderMacroLineChart(cpiChart, cpiHistory, cpiForecast, { valueKey: 'value', color: '#f59e0b', defaultMin: -2, defaultMax: 5, label: 'CPI', unit: '%' });
     }
 
-    // 利率图表（根据选中的指标动态渲染）
-    if (rateChart) {
-      var indicator = this._macroRateIndicator || 'bond10Y';
-      var rateHistory = [], rateForecast = [], rateColor = '#22d3ee', rateLabel = '', valueKey = 'value';
-      if (indicator === 'bond10Y') {
-        var bondData = data.bond10Y || {};
-        rateHistory = (bondData.history || []).map(function(d) { return { x: d.date, value: d.yield }; });
-        rateForecast = (bondData.forecast || []).map(function(d) { return { x: d.date, value: d.yield }; });
-        rateColor = '#22d3ee';
-        rateLabel = '10Y国债';
-      } else if (indicator === 'deposit') {
-        var depositData = data.depositRate || {};
-        rateHistory = (depositData.history || []).map(function(d) { return { x: d.date, value: d.threeYear }; });
-        rateForecast = [];
-        rateColor = '#a78bfa';
-        rateLabel = '长期定存';
-      } else if (indicator === 'broadIndex') {
-        var indexData = data.broadIndexReturn || {};
-        rateHistory = (indexData.history || []).map(function(d) { return { x: d.date, value: d.return }; });
-        rateForecast = (indexData.forecast || []).map(function(d) { return { x: d.date, value: d.return }; });
-        rateColor = '#34d399';
-        rateLabel = '宽基指数';
-      }
-      this._renderMacroLineChart(rateChart, rateHistory, rateForecast, { valueKey: 'value', color: rateColor, defaultMin: -2, defaultMax: 5, label: rateLabel, unit: '%' });
+    // 利率图表：10Y国债 / 长期定存 / 宽基指数 三图同屏
+    var rateChartBond = document.getElementById('macroRateChartBond');
+    var rateChartDeposit = document.getElementById('macroRateChartDeposit');
+    var rateChartIndex = document.getElementById('macroRateChartIndex');
+    // 10Y国债
+    if (rateChartBond) {
+      var bondHist = (data.bond10Y && data.bond10Y.history) ? data.bond10Y.history : [];
+      var bondFc = (data.bond10Y && data.bond10Y.forecast) ? data.bond10Y.forecast : [];
+      this._renderMacroLineChart(rateChartBond, bondHist, bondFc, { valueKey: 'yield', color: '#22d3ee', defaultMin: 0, defaultMax: 5, label: '10Y国债', unit: '%' });
+    }
+    // 长期定存
+    if (rateChartDeposit) {
+      var depHist = (data.depositRate && data.depositRate.history) ? data.depositRate.history : [];
+      var depData = depHist.map(function(d) { return { x: d.date, value: d.threeYear }; });
+      this._renderMacroLineChart(rateChartDeposit, depData, [], { valueKey: 'value', color: '#a78bfa', defaultMin: 0, defaultMax: 5, label: '定存', unit: '%' });
+    }
+    // 宽基指数年化收益
+    if (rateChartIndex) {
+      var idxHist = (data.broadIndexReturn && data.broadIndexReturn.history) ? data.broadIndexReturn.history : [];
+      var idxFc = (data.broadIndexReturn && data.broadIndexReturn.forecast) ? data.broadIndexReturn.forecast : [];
+      this._renderMacroLineChart(rateChartIndex, idxHist, idxFc, { valueKey: 'return', color: '#34d399', defaultMin: 0, defaultMax: 15, label: '宽基指数', unit: '%' });
     }
 
     // 汇率图表
@@ -6583,7 +6573,7 @@ const App = {
         return;
       }
       var html = '<div class="macro-news-list">';
-      items.slice(0, 5).forEach(function(item) {
+      items.slice(0, 15).forEach(function(item) {
         var tag = self._classifyNewsTag((item.title || '') + ' ' + (item.description || ''));
         var time = self._formatNewsTime(item.pubDate);
         html += '<a class="macro-news-item" href="' + self.escapeHtml(item.link || '') + '" target="_blank" rel="noopener">' +
@@ -6636,17 +6626,10 @@ const App = {
     var self = this;
     var refreshBtn = document.getElementById('refreshMacroTrendsBtn');
     var cpiBtn = document.getElementById('applyMacroCpiBtn');
-    // 利率指标选择器按钮
-    var rateSelector = document.getElementById('macroRateSelector');
-    // 利率应用按钮（4个）
-    var applyBond10YBtn = document.getElementById('applyMacroBond10YBtn');
-    var applyDepositBtn = document.getElementById('applyMacroDepositBtn');
-    var applyBroadIndexBtn = document.getElementById('applyMacroBroadIndexBtn');
-    var applyCompositeBtn = document.getElementById('applyMacroCompositeBtn');
-
+    var rateBtn = document.getElementById('applyMacroRateBtn');
     if (refreshBtn) {
       refreshBtn.onclick = function() {
-        self.showToast('正在刷新数据...');
+        self.showToast('正在刷新汇率...');
         self.fetchMacroTrendsData(function(data) {
           self._macroTrendsCache = data;
           if (data && data.retirementSuggestions && data.retirementSuggestions.curve) {
@@ -6657,46 +6640,11 @@ const App = {
         });
       };
     }
-
-    // CPI 应用按钮
     if (cpiBtn) {
       cpiBtn.onclick = function() { self.applyMacroCurveToRetirement('inflation'); };
     }
-
-    // 利率指标选择器
-    if (rateSelector) {
-      var btns = rateSelector.querySelectorAll('.macro-trends-rate-btn');
-      for (var i = 0; i < btns.length; i++) {
-        (function(btn) {
-          btn.onclick = function() {
-            var indicator = btn.getAttribute('data-indicator');
-            if (!indicator) return;
-            self._macroRateIndicator = indicator;
-            // 更新按钮样式
-            var allBtns = rateSelector.querySelectorAll('.macro-trends-rate-btn');
-            for (var j = 0; j < allBtns.length; j++) {
-              allBtns[j].classList.remove('active');
-            }
-            btn.classList.add('active');
-            // 重新渲染利率图表
-            self.renderMacroTrendsPage();
-          };
-        })(btns[i]);
-      }
-    }
-
-    // 利率应用按钮（4个）
-    if (applyBond10YBtn) {
-      applyBond10YBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnBond10Y'); };
-    }
-    if (applyDepositBtn) {
-      applyDepositBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnDeposit'); };
-    }
-    if (applyBroadIndexBtn) {
-      applyBroadIndexBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnBroadIndex'); };
-    }
-    if (applyCompositeBtn) {
-      applyCompositeBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnComposite'); };
+    if (rateBtn) {
+      rateBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturn'); };
     }
   },
 
@@ -6709,17 +6657,6 @@ const App = {
     type = type || 'all';
     var curve = data.retirementSuggestions.curve;
     var params = this._loadRetirementParams();
-
-    // 支持的新曲线类型映射到 curve 对象的字段名
-    var curveTypeMap = {
-      inflation: 'inflation',
-      investmentReturn: 'investmentReturn',
-      investmentReturnBond10Y: 'investmentReturnBond10Y',
-      investmentReturnDeposit: 'investmentReturnDeposit',
-      investmentReturnBroadIndex: 'investmentReturnBroadIndex',
-      investmentReturnComposite: 'investmentReturnComposite'
-    };
-
     if (type === 'all' || type === 'inflation') {
       params.inflationCurve = {};
       if (curve.inflation) {
@@ -6729,34 +6666,19 @@ const App = {
         params.inflation = curve.inflation[0].value;
       }
     }
-
-    // 处理所有 investmentReturn 相关曲线
-    var investmentReturnTypes = ['investmentReturn', 'investmentReturnBond10Y', 'investmentReturnDeposit', 'investmentReturnBroadIndex', 'investmentReturnComposite'];
-    if (type === 'all' || investmentReturnTypes.indexOf(type) !== -1) {
-      var curveField = curveTypeMap[type];
-      if (curveField && curve[curveField]) {
-        params.investmentReturnCurve = {};
-        curve[curveField].forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
-        if (curve[curveField].length > 0) {
-          params.investmentReturn = curve[curveField][0].value;
-        }
+    if (type === 'all' || type === 'investmentReturn') {
+      params.investmentReturnCurve = {};
+      if (curve.investmentReturn) {
+        curve.investmentReturn.forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
+      }
+      if (curve.investmentReturn && curve.investmentReturn.length > 0) {
+        params.investmentReturn = curve.investmentReturn[0].value;
       }
     }
-
     this._saveRetirementParams(params);
     this._retirementParams = params;
     this._retirementCache = this.calculateRetirement(params);
-
-    // 标签映射
-    var labelMap = {
-      inflation: 'CPI',
-      investmentReturn: '年化收益',
-      investmentReturnBond10Y: '年化收益(10Y国债)',
-      investmentReturnDeposit: '年化收益(定存)',
-      investmentReturnBroadIndex: '年化收益(宽基)',
-      investmentReturnComposite: '年化收益(综合)'
-    };
-    var label = labelMap[type] || '预测参数';
+    var label = type === 'inflation' ? 'CPI' : (type === 'investmentReturn' ? '年化收益' : '预测参数');
     this.showToast('已将宏观' + label + '应用到退休计算');
     this.navigateTo('retirement');
   },

@@ -4533,70 +4533,28 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   overflow-x: auto;
 }
 
+.macro-rate-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.macro-rate-chart-item {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.macro-rate-chart-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
 .macro-trends-svg {
   min-width: 100%;
   height: 160px;
-}
-
-/* 利率指标选择器 */
-.macro-trends-rate-selector {
-  display: flex;
-  gap: 6px;
-}
-
-.macro-trends-rate-btn {
-  padding: 4px 12px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.macro-trends-rate-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--accent);
-}
-
-.macro-trends-rate-btn.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-/* 利率应用按钮行 */
-.macro-trends-apply-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.macro-trends-apply-composite {
-  background: linear-gradient(135deg, #f97316, #fb923c);
-  border-color: #f97316;
-}
-
-.macro-trends-apply-composite:hover {
-  background: linear-gradient(135deg, #ea580c, #f97316);
-}
-
-/* 退休计算 - 年化收益曲线按钮行 */
-.retirement-curve-reset-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.retirement-curve-reset-composite {
-  background: linear-gradient(135deg, #f97316, #fb923c);
-  border-color: #f97316;
-}
-
-.retirement-curve-reset-composite:hover {
-  background: linear-gradient(135deg, #ea580c, #f97316);
 }
 
 .macro-trends-readonly-svg {
