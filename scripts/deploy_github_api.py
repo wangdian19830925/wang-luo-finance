@@ -140,7 +140,6 @@ def main():
         ("docs/macro-trends-design.md", "docs/macro-trends-design.md", False),
         ("tests/loan_calc_tests.js", "tests/loan_calc_tests.js", False),
         ("tests/loan_chart_tests.js", "tests/loan_chart_tests.js", False),
-        ("tests/loan_ring_tests.js", "tests/loan_ring_tests.js", False),
         ("tests/retirement_curve_tests.js", "tests/retirement_curve_tests.js", False),
         ("tests/run_tests.js", "tests/run_tests.js", False),
         ("tests/integration_tests.js", "tests/integration_tests.js", False),

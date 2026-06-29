@@ -4989,9 +4989,6 @@ const App = {
     });
     pc.innerHTML = pHtml;
 
-    // 渲染房贷环形还款进度图
-    this._renderLoanRingChart(loans);
-
     // 渲染组合贷款剩余还款趋势面积图
     this._renderLoanRepaymentChart(loans);
   },
@@ -5306,127 +5303,6 @@ const App = {
     this._lastLoanChartData = { monthlyData: monthlyData, yMax: yMax, todayIdx: todayIdx };
   },
   // ===================== 房贷剩余还款趋势面积图 结束 =====================
-
-  // ===================== 房贷环形还款进度图 =====================
-  // 绘制两个同心圆环：外环为商业贷款，内环为公积金贷款
-  // 每环用两种颜色区分已还期数与剩余期数，中心显示剩余本金与已还年限
-  _renderLoanRingChart(loans) {
-    var container = document.getElementById('loanRingChart');
-    if (!container) return;
-
-    var self = this;
-    var today = new Date(); today.setHours(0, 0, 0, 0);
-
-    var validLoans = loans.filter(function(l) {
-      return l.total && l.rate && l.term && l.startDate && (l.loanType === '公积金' || l.loanType === '商业贷款');
-    });
-    if (validLoans.length === 0) {
-      container.innerHTML = '<div class="empty-tip">暂无有效房贷数据，无法生成进度图</div>';
-      return;
-    }
-
-    // 计算每类贷款的已还/剩余期数与剩余本金
-    var ringData = {
-      fund: { paid: 0, remaining: 0, remainingPrincipal: 0, totalMonths: 0, label: '公积金贷款' },
-      commercial: { paid: 0, remaining: 0, remainingPrincipal: 0, totalMonths: 0, label: '商业贷款' }
-    };
-    var maxPaidYears = 0;
-    var totalRemainingPrincipal = 0;
-
-    validLoans.forEach(function(l) {
-      var prog = self.calcLoanProgress(l, today);
-      var type = l.loanType === '公积金' ? 'fund' : 'commercial';
-      var paid = Math.max(0, Math.min(prog.elapsed, prog.total));
-      var remaining = Math.max(0, prog.total - paid);
-      ringData[type].paid += paid;
-      ringData[type].remaining += remaining;
-      ringData[type].totalMonths += prog.total;
-      ringData[type].remainingPrincipal += prog.remainingPrincipal || 0;
-      totalRemainingPrincipal += prog.remainingPrincipal || 0;
-      var paidYears = Math.floor(paid / 12);
-      if (paidYears > maxPaidYears) maxPaidYears = paidYears;
-    });
-
-    function polarToCartesian(cx, cy, r, angleDeg) {
-      var rad = (angleDeg - 90) * Math.PI / 180;
-      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-    }
-
-    function describeArc(cx, cy, r, startAngle, endAngle) {
-      var start = polarToCartesian(cx, cy, r, endAngle);
-      var end = polarToCartesian(cx, cy, r, startAngle);
-      var largeArc = (endAngle - startAngle) <= 180 ? '0' : '1';
-      return ['M', start.x, start.y, 'A', r, r, 0, largeArc, 0, end.x, end.y].join(' ');
-    }
-
-    function describeRingSegment(cx, cy, innerR, outerR, startAngle, endAngle) {
-      var startOuter = polarToCartesian(cx, cy, outerR, endAngle);
-      var endOuter = polarToCartesian(cx, cy, outerR, startAngle);
-      var startInner = polarToCartesian(cx, cy, innerR, endAngle);
-      var endInner = polarToCartesian(cx, cy, innerR, startAngle);
-      var largeArc = (endAngle - startAngle) <= 180 ? '0' : '1';
-      return [
-        'M', startOuter.x, startOuter.y,
-        'A', outerR, outerR, 0, largeArc, 0, endOuter.x, endOuter.y,
-        'L', endInner.x, endInner.y,
-        'A', innerR, innerR, 0, largeArc, 1, startInner.x, startInner.y,
-        'Z'
-      ].join(' ');
-    }
-
-    function renderRing(data, innerR, outerR, paidColor, remainingColor) {
-      var total = data.paid + data.remaining;
-      if (total <= 0) return '';
-      var paidAngle = total > 0 ? (data.paid / total) * 360 : 0;
-      var remainingAngle = 360 - paidAngle;
-      var paths = [];
-
-      // 已还部分
-      if (paidAngle > 0) {
-        paths.push('<path d="' + describeRingSegment(120, 120, innerR, outerR, 0, paidAngle) + '" fill="' + paidColor + '"/>');
-      }
-      // 剩余部分
-      if (remainingAngle > 0) {
-        paths.push('<path d="' + describeRingSegment(120, 120, innerR, outerR, paidAngle, 360) + '" fill="' + remainingColor + '"/>');
-      }
-      // 外圈描边，增强层次感
-      paths.push('<path d="' + describeArc(120, 120, outerR, 0, 360) + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
-      paths.push('<path d="' + describeArc(120, 120, innerR, 0, 360) + '" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
-      return paths.join('');
-    }
-
-    var colors = {
-      fundPaid: '#16a34a',
-      fundRemaining: '#14532d',
-      commercialPaid: '#2563eb',
-      commercialRemaining: '#1e3a8a'
-    };
-
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" class="loan-ring-svg">';
-    svg += '<rect x="0" y="0" width="240" height="240" fill="transparent" rx="8"/>';
-
-    // 外环：商业贷款
-    svg += renderRing(ringData.commercial, 58, 73, colors.commercialPaid, colors.commercialRemaining);
-    // 内环：公积金贷款
-    svg += renderRing(ringData.fund, 38, 53, colors.fundPaid, colors.fundRemaining);
-
-    // 中心文字
-    var remainingWan = (totalRemainingPrincipal / 10000).toFixed(1);
-    svg += '<text x="120" y="110" class="loan-ring-center" font-size="22" font-weight="800">剩余 ' + remainingWan + ' 万</text>';
-    svg += '<text x="120" y="135" class="loan-ring-center-sub" font-size="13">已还 ' + maxPaidYears + ' 年</text>';
-
-    svg += '</svg>';
-
-    var legendHtml = '<div class="loan-ring-legend">' +
-      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.fundPaid + '"></span>公积金已还</div>' +
-      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.fundRemaining + '"></span>公积金剩余</div>' +
-      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.commercialPaid + '"></span>商业已还</div>' +
-      '<div class="loan-ring-legend-item"><span class="loan-ring-legend-dot" style="background:' + colors.commercialRemaining + '"></span>商业剩余</div>' +
-      '</div>';
-
-    container.innerHTML = '<div class="loan-ring-chart">' + svg + '</div>' + legendHtml;
-  },
-  // ===================== 房贷环形还款进度图 结束 =====================
 
   // 从事件源 input 取值保存（onclick 写在 HTML 里取不到 this.value，所以用辅助方法）
   _saveLoanManualPaid(btn) {
