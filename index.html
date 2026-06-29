@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-29-v158 -->
+  <!-- version: 2026-06-29-v159 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=158">
+  <link rel="stylesheet" href="./css/style.css?v=159">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -796,44 +796,6 @@
         </button>
       </div>
 
-      <div class="macro-trends-summary" id="macroTrendsSummary">
-        <!-- 动态渲染 summary cards -->
-      </div>
-
-      <div class="macro-trends-card">
-        <div class="macro-trends-card-header">
-          <span class="macro-trends-card-title">CPI 走势</span>
-          <span class="macro-trends-card-sub">历史 + 预测</span>
-        </div>
-        <div class="macro-trends-chart" id="macroCpiChart"></div>
-      </div>
-
-      <div class="macro-trends-card">
-        <div class="macro-trends-card-header">
-          <span class="macro-trends-card-title">利率走势</span>
-          <span class="macro-trends-card-sub">LPR / 定存</span>
-        </div>
-        <div class="macro-trends-chart" id="macroRateChart"></div>
-      </div>
-
-      <div class="macro-trends-card macro-trends-actions-card">
-        <div class="macro-trends-card-header">
-          <span class="macro-trends-card-title">预测参数</span>
-          <span class="macro-trends-card-sub">应用到退休计算</span>
-        </div>
-        <div class="macro-trends-actions">
-          <button class="btn btn-primary" id="applyMacroToRetirementBtn">应用</button>
-        </div>
-      </div>
-
-      <div class="macro-trends-card">
-        <div class="macro-trends-card-header">
-          <span class="macro-trends-card-title">汇率走势</span>
-          <span class="macro-trends-card-sub">USD / CNY</span>
-        </div>
-        <div class="macro-trends-chart" id="macroFxChart"></div>
-      </div>
-
       <div class="macro-trends-card">
         <div class="macro-trends-card-header">
           <span class="macro-trends-card-title">每日新闻</span>
@@ -842,6 +804,40 @@
         <div class="macro-news-body" id="macroNewsBody">
           <div class="macro-trends-empty">加载中…</div>
         </div>
+      </div>
+
+      <div class="macro-trends-summary" id="macroTrendsSummary">
+        <!-- 动态渲染 summary cards -->
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <div class="macro-trends-card-header-left">
+            <span class="macro-trends-card-title">CPI 走势</span>
+            <span class="macro-trends-card-sub">历史 + 预测</span>
+          </div>
+          <button class="btn btn-primary macro-trends-apply-btn" data-type="inflation" id="applyMacroCpiBtn">应用</button>
+        </div>
+        <div class="macro-trends-chart" id="macroCpiChart"></div>
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <div class="macro-trends-card-header-left">
+            <span class="macro-trends-card-title">利率走势</span>
+            <span class="macro-trends-card-sub">LPR / 定存</span>
+          </div>
+          <button class="btn btn-primary macro-trends-apply-btn" data-type="investmentReturn" id="applyMacroRateBtn">应用</button>
+        </div>
+        <div class="macro-trends-chart" id="macroRateChart"></div>
+      </div>
+
+      <div class="macro-trends-card">
+        <div class="macro-trends-card-header">
+          <span class="macro-trends-card-title">汇率走势</span>
+          <span class="macro-trends-card-sub">USD / CNY</span>
+        </div>
+        <div class="macro-trends-chart" id="macroFxChart"></div>
       </div>
 
       <div class="macro-trends-sources" id="macroTrendsSources">
@@ -1297,7 +1293,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=158"></script>
+  <script src="./js/storage.js?v=159"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1307,6 +1303,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=158"></script>
+  <script src="./js/app.js?v=159"></script>
 </body>
 </html>

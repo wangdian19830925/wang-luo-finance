@@ -6512,7 +6512,7 @@ const App = {
     if (this._macroNewsCache) { callback(this._macroNewsCache); return; }
     var self = this;
     var feedUrl = 'https://www.cnbc.com/id/100003114/device/rss/rss.html';
-    var apiUrl = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl) + '&count=20';
+    var apiUrl = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl);
     fetch(apiUrl)
       .then(function(r) { return r.json(); })
       .then(function(data) {
@@ -6591,8 +6591,8 @@ const App = {
   _bindMacroTrendsActions() {
     var self = this;
     var refreshBtn = document.getElementById('refreshMacroTrendsBtn');
-    var applyBtn = document.getElementById('applyMacroToRetirementBtn');
-    var goBtn = document.getElementById('goToRetirementBtn');
+    var cpiBtn = document.getElementById('applyMacroCpiBtn');
+    var rateBtn = document.getElementById('applyMacroRateBtn');
     if (refreshBtn) {
       refreshBtn.onclick = function() {
         self.showToast('正在刷新汇率...');
@@ -6606,41 +6606,46 @@ const App = {
         });
       };
     }
-    if (applyBtn) {
-      applyBtn.onclick = function() { self.applyMacroCurveToRetirement(); };
+    if (cpiBtn) {
+      cpiBtn.onclick = function() { self.applyMacroCurveToRetirement('inflation'); };
     }
-    if (goBtn) {
-      goBtn.onclick = function() { self.navigateTo('retirement'); };
+    if (rateBtn) {
+      rateBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturn'); };
     }
   },
 
-  applyMacroCurveToRetirement() {
+  applyMacroCurveToRetirement(type) {
     var data = this._macroTrendsCache;
     if (!data || !data.retirementSuggestions || !data.retirementSuggestions.curve) {
       this.showToast('暂无推荐曲线', 'error');
       return;
     }
+    type = type || 'all';
     var curve = data.retirementSuggestions.curve;
     var params = this._loadRetirementParams();
-    params.inflationCurve = {};
-    params.investmentReturnCurve = {};
-    if (curve.inflation) {
-      curve.inflation.forEach(function(p) { params.inflationCurve[p.year] = p.value; });
+    if (type === 'all' || type === 'inflation') {
+      params.inflationCurve = {};
+      if (curve.inflation) {
+        curve.inflation.forEach(function(p) { params.inflationCurve[p.year] = p.value; });
+      }
+      if (curve.inflation && curve.inflation.length > 0) {
+        params.inflation = curve.inflation[0].value;
+      }
     }
-    if (curve.investmentReturn) {
-      curve.investmentReturn.forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
-    }
-    // 默认值为起始年或全局固定值
-    if (curve.inflation && curve.inflation.length > 0) {
-      params.inflation = curve.inflation[0].value;
-    }
-    if (curve.investmentReturn && curve.investmentReturn.length > 0) {
-      params.investmentReturn = curve.investmentReturn[0].value;
+    if (type === 'all' || type === 'investmentReturn') {
+      params.investmentReturnCurve = {};
+      if (curve.investmentReturn) {
+        curve.investmentReturn.forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
+      }
+      if (curve.investmentReturn && curve.investmentReturn.length > 0) {
+        params.investmentReturn = curve.investmentReturn[0].value;
+      }
     }
     this._saveRetirementParams(params);
     this._retirementParams = params;
     this._retirementCache = this.calculateRetirement(params);
-    this.showToast('已应用宏观推荐曲线到退休计算');
+    var label = type === 'inflation' ? 'CPI' : (type === 'investmentReturn' ? '年化收益' : '预测参数');
+    this.showToast('已将宏观' + label + '应用到退休计算');
     this.navigateTo('retirement');
   },
 
@@ -6887,7 +6892,7 @@ const App = {
       var val = vr.min + (vr.max - vr.min) * t / yTicks;
       var yy = yScale(val);
       svg += '<line class="axis-tick" x1="' + pad.left + '" y1="' + yy + '" x2="' + (pad.left + chartW) + '" y2="' + yy + '"/>';
-      svg += '<text class="axis-text" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" font-size="9">' + val.toFixed(1) + '%</text>';
+      svg += '<text class="axis-text" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end" font-size="9" fill="#94a3b8">' + val.toFixed(1) + '%</text>';
     }
     svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + (pad.top + chartH) + '" x2="' + (pad.left + chartW) + '" y2="' + (pad.top + chartH) + '"/>';
     svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + chartH) + '"/>';
@@ -6911,11 +6916,8 @@ const App = {
     // 年份标签（稀疏显示）
     var step = Math.ceil(n / 6);
     for (var i = 0; i < n; i += step) {
-      svg += '<text class="axis-text" x="' + xScale(i) + '" y="' + (height - 8) + '" text-anchor="middle" font-size="9">' + (range.start + i) + '</text>';
+      svg += '<text class="axis-text" x="' + xScale(i) + '" y="' + (height - 8) + '" text-anchor="middle" font-size="9" fill="#94a3b8">' + (range.start + i) + '</text>';
     }
-    // 轴标题
-    svg += '<text class="axis-label" x="' + (width / 2) + '" y="' + (height - 2) + '" text-anchor="middle">年份</text>';
-    svg += '<text class="axis-label" x="8" y="' + (height / 2) + '" text-anchor="middle" transform="rotate(-90, 8, ' + (height / 2) + ')">' + cfg.label + ' (%)</text>';
     svg += '</svg>';
     container.innerHTML = svg;
 
