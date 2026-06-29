@@ -6492,27 +6492,11 @@ const App = {
       this._renderMacroLineChart(cpiChart, cpiHistory, cpiForecast, { valueKey: 'value', color: '#f59e0b', defaultMin: -2, defaultMax: 5, label: 'CPI', unit: '%' });
     }
 
-    // 利率图表：10Y国债 / 长期定存 / 宽基指数 三图同屏
-    var rateChartBond = document.getElementById('macroRateChartBond');
-    var rateChartDeposit = document.getElementById('macroRateChartDeposit');
-    var rateChartIndex = document.getElementById('macroRateChartIndex');
-    // 10Y国债
-    if (rateChartBond) {
-      var bondHist = (data.bond10Y && data.bond10Y.history) ? data.bond10Y.history : [];
-      var bondFc = (data.bond10Y && data.bond10Y.forecast) ? data.bond10Y.forecast : [];
-      this._renderMacroLineChart(rateChartBond, bondHist, bondFc, { valueKey: 'yield', color: '#22d3ee', defaultMin: 0, defaultMax: 5, label: '10Y国债', unit: '%' });
-    }
-    // 长期定存
-    if (rateChartDeposit) {
-      var depHist = (data.depositRate && data.depositRate.history) ? data.depositRate.history : [];
-      var depData = depHist.map(function(d) { return { x: d.date, value: d.threeYear }; });
-      this._renderMacroLineChart(rateChartDeposit, depData, [], { valueKey: 'value', color: '#a78bfa', defaultMin: 0, defaultMax: 5, label: '定存', unit: '%' });
-    }
-    // 宽基指数年化收益
-    if (rateChartIndex) {
-      var idxHist = (data.broadIndexReturn && data.broadIndexReturn.history) ? data.broadIndexReturn.history : [];
-      var idxFc = (data.broadIndexReturn && data.broadIndexReturn.forecast) ? data.broadIndexReturn.forecast : [];
-      this._renderMacroLineChart(rateChartIndex, idxHist, idxFc, { valueKey: 'return', color: '#34d399', defaultMin: 0, defaultMax: 15, label: '宽基指数', unit: '%' });
+    // 利率图表
+    if (rateChart) {
+      var lprHistory = (data.lpr && data.lpr.history) ? data.lpr.history : [];
+      var rateData = lprHistory.map(function(d) { return { x: d.date, value: d.oneYear }; });
+      this._renderMacroLineChart(rateChart, rateData, [], { valueKey: 'value', color: '#22d3ee', defaultMin: -2, defaultMax: 5, label: '利率', unit: '%' });
     }
 
     // 汇率图表

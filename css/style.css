@@ -4533,25 +4533,6 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   overflow-x: auto;
 }
 
-.macro-rate-charts {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.macro-rate-chart-item {
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.macro-rate-chart-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
 .macro-trends-svg {
   min-width: 100%;
   height: 160px;
