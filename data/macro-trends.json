@@ -18,6 +18,14 @@
     "depositRate": {
       "name": "中国人民银行基准利率 / 市场聚合",
       "url": "http://www.pbc.gov.cn"
+    },
+    "bond10Y": {
+      "name": "中国债券信息网 / Wind",
+      "url": "http://yield.chinabond.com.cn/"
+    },
+    "broadIndexReturn": {
+      "name": "CSI / Wind",
+      "url": "https://www.csindex.com.cn/"
     }
   },
   "cpi": {
@@ -434,134 +442,247 @@
           "source": "IMF-WEO(extended)"
         }
       ],
-      "investmentReturn": [
+      "investmentReturnBond10Y": [
         {
           "year": 2026,
-          "value": 2.83,
-          "source": "3年期定存 + 1% 溢价"
+          "value": 1.74,
+          "source": "10Y国债+综合预测"
         },
         {
           "year": 2027,
-          "value": 2.92,
-          "source": "3年期定存 + 1% 溢价"
+          "value": 1.7,
+          "source": "10Y国债+综合预测"
         },
         {
           "year": 2028,
-          "value": 2.95,
-          "source": "3年期定存 + 1% 溢价"
+          "value": 1.74,
+          "source": "10Y国债+综合预测"
         },
         {
           "year": 2029,
-          "value": 2.97,
-          "source": "3年期定存 + 1% 溢价"
+          "value": 1.78,
+          "source": "10Y国债+综合预测"
         },
         {
           "year": 2030,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "value": 1.82,
+          "source": "10Y国债+综合预测"
+        }
+      ],
+      "investmentReturnDeposit": [
+        {
+          "year": 2026,
+          "value": 1.48,
+          "source": "定存+综合预测"
         },
         {
-          "year": 2031,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2027,
+          "value": 1.48,
+          "source": "定存+综合预测"
         },
         {
-          "year": 2032,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2028,
+          "value": 1.48,
+          "source": "定存+综合预测"
         },
         {
-          "year": 2033,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2029,
+          "value": 1.48,
+          "source": "定存+综合预测"
         },
         {
-          "year": 2034,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2030,
+          "value": 1.48,
+          "source": "定存+综合预测"
+        }
+      ],
+      "investmentReturnBroadIndex": [
+        {
+          "year": 2026,
+          "value": 2.7,
+          "source": "宽基+机构预测"
         },
         {
-          "year": 2035,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2027,
+          "value": 2.55,
+          "source": "宽基+机构预测"
         },
         {
-          "year": 2036,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2028,
+          "value": 2.4,
+          "source": "宽基+机构预测"
         },
         {
-          "year": 2037,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2029,
+          "value": 2.4,
+          "source": "宽基+机构预测"
         },
         {
-          "year": 2038,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2030,
+          "value": 2.25,
+          "source": "宽基+机构预测"
+        }
+      ],
+      "investmentReturnComposite": [
+        {
+          "year": 2026,
+          "value": 2.17,
+          "source": "综合预测"
         },
         {
-          "year": 2039,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2027,
+          "value": 2.08,
+          "source": "综合预测"
         },
         {
-          "year": 2040,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2028,
+          "value": 2.02,
+          "source": "综合预测"
         },
         {
-          "year": 2041,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2029,
+          "value": 2.03,
+          "source": "综合预测"
         },
         {
-          "year": 2042,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2043,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2044,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2045,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2046,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2047,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2048,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2049,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
-        },
-        {
-          "year": 2050,
-          "value": 2.98,
-          "source": "3年期定存 + 1% 溢价"
+          "year": 2030,
+          "value": 1.97,
+          "source": "综合预测"
         }
       ]
     },
     "notes": "年度曲线更贴近经济周期，但预测不确定性更高。退休计算中可基于该推荐曲线手动微调。"
+  },
+  "bond10Y": {
+    "latest": {
+      "date": "2026-06-29",
+      "value": 1.65,
+      "source": "中国债券信息网"
+    },
+    "history": [
+      {
+        "year": 2020,
+        "value": 2.85,
+        "source": "Wind"
+      },
+      {
+        "year": 2021,
+        "value": 2.78,
+        "source": "Wind"
+      },
+      {
+        "year": 2022,
+        "value": 2.65,
+        "source": "Wind"
+      },
+      {
+        "year": 2023,
+        "value": 2.35,
+        "source": "Wind"
+      },
+      {
+        "year": 2024,
+        "value": 1.95,
+        "source": "Wind"
+      },
+      {
+        "year": 2025,
+        "value": 1.65,
+        "source": "Wind"
+      }
+    ],
+    "forecast": [
+      {
+        "year": 2026,
+        "value": 1.55,
+        "source": "综合预测"
+      },
+      {
+        "year": 2027,
+        "value": 1.5,
+        "source": "综合预测"
+      },
+      {
+        "year": 2028,
+        "value": 1.55,
+        "source": "综合预测"
+      },
+      {
+        "year": 2029,
+        "value": 1.6,
+        "source": "综合预测"
+      },
+      {
+        "year": 2030,
+        "value": 1.65,
+        "source": "综合预测"
+      }
+    ]
+  },
+  "broadIndexReturn": {
+    "latest": {
+      "date": "2026-06-29",
+      "value": 8.5,
+      "source": "CSI/ Wind"
+    },
+    "history": [
+      {
+        "year": 2020,
+        "value": 18.2,
+        "source": "CSI 300"
+      },
+      {
+        "year": 2021,
+        "value": -5.2,
+        "source": "CSI 300"
+      },
+      {
+        "year": 2022,
+        "value": -21.6,
+        "source": "CSI 300"
+      },
+      {
+        "year": 2023,
+        "value": -11.4,
+        "source": "CSI 300"
+      },
+      {
+        "year": 2024,
+        "value": 16.2,
+        "source": "CSI 300"
+      },
+      {
+        "year": 2025,
+        "value": 8.5,
+        "source": "CSI 300"
+      }
+    ],
+    "forecast": [
+      {
+        "year": 2026,
+        "value": 9.0,
+        "source": "机构预测"
+      },
+      {
+        "year": 2027,
+        "value": 8.5,
+        "source": "机构预测"
+      },
+      {
+        "year": 2028,
+        "value": 8.0,
+        "source": "机构预测"
+      },
+      {
+        "year": 2029,
+        "value": 8.0,
+        "source": "机构预测"
+      },
+      {
+        "year": 2030,
+        "value": 7.5,
+        "source": "机构预测"
+      }
+    ]
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'family-finance-v164';
+const CACHE_NAME = 'family-finance-v165';
 const DATA_CACHE = 'family-finance-data-v1';
 const STATIC_ASSETS = [
   '.', '/index.html', '/css/style.css', '/js/app.js', '/js/storage.js',
@@ -40,7 +40,7 @@ self.addEventListener('fetch', event => {
   const isNoCache = NO_CACHE_PATHS.includes(url.pathname);
   const request = isNoCache
     ? new Request(event.request, {
-        headers: new Headers(Object.assign({}, [...event.request.headers].reduce((o, [k,v]) => { o[k]=v; return o; }, {}), { 'Cache-Control': 'no-cache' }))
+        headers: Object.assign({}, event.request.headers, { 'Cache-Control': 'no-cache' })
       })
     : event.request;
 
@@ -56,4 +56,10 @@ self.addEventListener('fetch', event => {
         .catch(() => cached || new Response('', { status: 408, statusText: 'Offline' }));
     })
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

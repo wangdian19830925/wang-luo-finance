@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-06-29-v164 -->
+  <!-- version: 2026-06-29-v165 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=164">
+  <link rel="stylesheet" href="./css/style.css?v=165">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -652,7 +652,12 @@
           <div class="retirement-curve-row">
             <div class="retirement-curve-header">
               <span class="retirement-curve-title">年化收益</span>
-              <button class="retirement-curve-reset" data-type="investmentReturn">使用机构预测</button>
+              <div class="retirement-curve-reset-row">
+                <button class="retirement-curve-reset" data-type="investmentReturnBond10Y">10Y国债</button>
+                <button class="retirement-curve-reset" data-type="investmentReturnDeposit">长期定存</button>
+                <button class="retirement-curve-reset" data-type="investmentReturnBroadIndex">宽基指数</button>
+                <button class="retirement-curve-reset retirement-curve-reset-composite" data-type="investmentReturnComposite">综合</button>
+              </div>
             </div>
             <div class="retirement-curve-editor" id="retirementCurveInvestmentReturn"></div>
             <div class="retirement-curve-tools">
@@ -830,9 +835,19 @@
         <div class="macro-trends-card-header">
           <div class="macro-trends-card-header-left">
             <span class="macro-trends-card-title">利率走势</span>
-            <span class="macro-trends-card-sub">LPR / 定存</span>
+            <span class="macro-trends-card-sub">选择指标查看走势</span>
           </div>
-          <button class="btn btn-primary macro-trends-apply-btn" data-type="investmentReturn" id="applyMacroRateBtn">应用</button>
+          <div class="macro-trends-rate-selector" id="macroRateSelector">
+            <button class="macro-trends-rate-btn active" data-indicator="bond10Y">10Y国债</button>
+            <button class="macro-trends-rate-btn" data-indicator="deposit">长期定存</button>
+            <button class="macro-trends-rate-btn" data-indicator="broadIndex">宽基指数</button>
+          </div>
+        </div>
+        <div class="macro-trends-apply-row" id="macroRateApplyRow">
+          <button class="btn btn-primary macro-trends-apply-btn" data-type="investmentReturnBond10Y" id="applyMacroBond10YBtn">应用10Y国债</button>
+          <button class="btn btn-primary macro-trends-apply-btn" data-type="investmentReturnDeposit" id="applyMacroDepositBtn">应用长期定存</button>
+          <button class="btn btn-primary macro-trends-apply-btn" data-type="investmentReturnBroadIndex" id="applyMacroBroadIndexBtn">应用宽基指数</button>
+          <button class="btn btn-primary macro-trends-apply-btn macro-trends-apply-composite" data-type="investmentReturnComposite" id="applyMacroCompositeBtn">综合</button>
         </div>
         <div class="macro-trends-chart" id="macroRateChart"></div>
       </div>
@@ -1298,7 +1313,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=164"></script>
+  <script src="./js/storage.js?v=162"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1308,6 +1323,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=164"></script>
+  <script src="./js/app.js?v=165"></script>
 </body>
 </html>
