@@ -26,6 +26,18 @@
     "broadIndexReturn": {
       "name": "东方财富 / 沪深300指数",
       "url": "https://quote.eastmoney.com/zs000300.html"
+    },
+    "cpiOptimistic": {
+      "name": "IMF / 世界银行 / 市场乐观预测",
+      "url": "https://www.imf.org"
+    },
+    "cpiNeutral": {
+      "name": "国家统计局 / IMF WEO / 综合机构预测",
+      "url": "https://data.stats.gov.cn"
+    },
+    "cpiConservative": {
+      "name": "央行 / 投行保守预测 / 野村证券",
+      "url": "https://www.pbc.gov.cn"
     }
   },
   "cpi": {
@@ -976,9 +988,390 @@
           "year": 2050,
           "value": 5.86
         }
+      ],
+      "cpiOptimistic": [
+        {
+          "year": 2026,
+          "value": 0.8,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2027,
+          "value": 1.0,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2028,
+          "value": 1.1,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2029,
+          "value": 1.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2030,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2031,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2032,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2033,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2034,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2035,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2036,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2037,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2038,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2039,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2040,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2041,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2042,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2043,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2044,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2045,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2046,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2047,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2048,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2049,
+          "value": 1.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2050,
+          "value": 1.3,
+          "source": "宏观趋势"
+        }
+      ],
+      "cpiNeutral": [
+        {
+          "year": 2026,
+          "value": 1.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2027,
+          "value": 1.8,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2028,
+          "value": 2.0,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2029,
+          "value": 2.1,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2030,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2031,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2032,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2033,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2034,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2035,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2036,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2037,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2038,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2039,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2040,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2041,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2042,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2043,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2044,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2045,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2046,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2047,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2048,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2049,
+          "value": 2.2,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2050,
+          "value": 2.2,
+          "source": "宏观趋势"
+        }
+      ],
+      "cpiConservative": [
+        {
+          "year": 2026,
+          "value": 1.8,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2027,
+          "value": 2.3,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2028,
+          "value": 2.5,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2029,
+          "value": 2.6,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2030,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2031,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2032,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2033,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2034,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2035,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2036,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2037,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2038,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2039,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2040,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2041,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2042,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2043,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2044,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2045,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2046,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2047,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2048,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2049,
+          "value": 2.7,
+          "source": "宏观趋势"
+        },
+        {
+          "year": 2050,
+          "value": 2.7,
+          "source": "宏观趋势"
+        }
       ]
     },
-    "notes": "年度曲线更贴近经济周期，但预测不确定性更高。退休计算中可基于该推荐曲线手动微调。"
+    "notes": "CPI 提供乐观/中性/保守三条机构预测情景；年化收益提供 10Y国债/长期定存/宽基指数/综合 四条预测曲线。退休计算中可基于推荐曲线手动微调。"
   },
   "bond10Y": {
     "latest": {
@@ -1114,6 +1507,489 @@
         "date": "2030-12-31",
         "return": 7.5,
         "source": "机构预测(长期均值)"
+      }
+    ]
+  },
+  "cpiOptimistic": {
+    "history": [
+      {
+        "year": 2020,
+        "value": 2.5,
+        "source": "NBS"
+      },
+      {
+        "year": 2021,
+        "value": 0.9,
+        "source": "NBS"
+      },
+      {
+        "year": 2022,
+        "value": 2.0,
+        "source": "NBS"
+      },
+      {
+        "year": 2023,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2024,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2025,
+        "value": 0.3,
+        "source": "NBS"
+      }
+    ],
+    "forecast": [
+      {
+        "year": 2026,
+        "value": 0.8,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2027,
+        "value": 1.0,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2028,
+        "value": 1.1,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2029,
+        "value": 1.2,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2030,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2031,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2032,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2033,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2034,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2035,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2036,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2037,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2038,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2039,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2040,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2041,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2042,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2043,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2044,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2045,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2046,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2047,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2048,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2049,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      },
+      {
+        "year": 2050,
+        "value": 1.3,
+        "source": "乐观预测(IMF/世行)"
+      }
+    ]
+  },
+  "cpiNeutral": {
+    "history": [
+      {
+        "year": 2020,
+        "value": 2.5,
+        "source": "NBS"
+      },
+      {
+        "year": 2021,
+        "value": 0.9,
+        "source": "NBS"
+      },
+      {
+        "year": 2022,
+        "value": 2.0,
+        "source": "NBS"
+      },
+      {
+        "year": 2023,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2024,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2025,
+        "value": 0.3,
+        "source": "NBS"
+      }
+    ],
+    "forecast": [
+      {
+        "year": 2026,
+        "value": 1.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2027,
+        "value": 1.8,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2028,
+        "value": 2.0,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2029,
+        "value": 2.1,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2030,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2031,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2032,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2033,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2034,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2035,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2036,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2037,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2038,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2039,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2040,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2041,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2042,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2043,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2044,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2045,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2046,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2047,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2048,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2049,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      },
+      {
+        "year": 2050,
+        "value": 2.2,
+        "source": "中性预测(NBS/IMF)"
+      }
+    ]
+  },
+  "cpiConservative": {
+    "history": [
+      {
+        "year": 2020,
+        "value": 2.5,
+        "source": "NBS"
+      },
+      {
+        "year": 2021,
+        "value": 0.9,
+        "source": "NBS"
+      },
+      {
+        "year": 2022,
+        "value": 2.0,
+        "source": "NBS"
+      },
+      {
+        "year": 2023,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2024,
+        "value": 0.2,
+        "source": "NBS"
+      },
+      {
+        "year": 2025,
+        "value": 0.3,
+        "source": "NBS"
+      }
+    ],
+    "forecast": [
+      {
+        "year": 2026,
+        "value": 1.8,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2027,
+        "value": 2.3,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2028,
+        "value": 2.5,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2029,
+        "value": 2.6,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2030,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2031,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2032,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2033,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2034,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2035,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2036,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2037,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2038,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2039,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2040,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2041,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2042,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2043,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2044,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2045,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2046,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2047,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2048,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2049,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
+      },
+      {
+        "year": 2050,
+        "value": 2.7,
+        "source": "保守预测(央行/投行)"
       }
     ]
   }

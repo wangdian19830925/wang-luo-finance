@@ -5387,20 +5387,6 @@ const App = {
       this._retirementCache = this.calculateRetirement(this._retirementParams);
     }
     this.renderRetirementPage();
-    this._updateRetirementResetButtonSelection('inflation');
-    this._updateRetirementResetButtonSelection('investmentReturn');
-
-    // 若宏观数据未加载，异步获取一次以正确显示“使用机构预测”选中状态
-    if (!this._macroTrendsCurve) {
-      this.fetchMacroTrendsData(function(data) {
-        self._macroTrendsCache = data;
-        if (data && data.retirementSuggestions && data.retirementSuggestions.curve) {
-          self._macroTrendsCurve = data.retirementSuggestions.curve;
-        }
-        self._updateRetirementResetButtonSelection('inflation');
-        self._updateRetirementResetButtonSelection('investmentReturn');
-      });
-    }
 
     // 30 秒后基于最新数据重新计算（异步，不阻塞）
     this.scheduleRetirementCalculation();
@@ -6141,9 +6127,26 @@ const App = {
     // 4. 资金曲线
     this.renderRetirementChart(result);
 
-    // 5. 更新“使用机构预测”按钮选中状态
-    this._updateRetirementResetButtonSelection('inflation');
-    this._updateRetirementResetButtonSelection('investmentReturn');
+    // 5. 更新曲线应用按钮选中状态
+    this._updateRetirementCurveButtonStates();
+  },
+
+  _updateRetirementCurveButtonStates() {
+    var active = this._getActiveMacroCurveTypes();
+    var cpiRow = document.getElementById('retirementCpiApplyRow');
+    var retRow = document.getElementById('retirementReturnApplyRow');
+    if (cpiRow) {
+      cpiRow.querySelectorAll('.retirement-curve-apply-btn').forEach(function(btn) {
+        var isActive = (btn.dataset.type === active.cpi);
+        btn.classList.toggle('active', isActive);
+      });
+    }
+    if (retRow) {
+      retRow.querySelectorAll('.retirement-curve-apply-btn').forEach(function(btn) {
+        var isActive = (btn.dataset.type === active.ret);
+        btn.classList.toggle('active', isActive);
+      });
+    }
   },
 
   renderRetirementChart(result) {
@@ -6474,8 +6477,8 @@ const App = {
 
   renderMacroTrendsPage() {
     var data = this._macroTrendsCache;
-    var summary = document.getElementById('macroTrendsSummary');
     var cpiChart = document.getElementById('macroCpiChart');
+    var cpiSources = document.getElementById('macroCpiSources');
     var rateChartBond = document.getElementById('macroRateChartBond');
     var rateChartDeposit = document.getElementById('macroRateChartDeposit');
     var rateChartIndex = document.getElementById('macroRateChartIndex');
@@ -6483,53 +6486,43 @@ const App = {
     var sources = document.getElementById('macroTrendsSources');
 
     if (!data) {
-      if (summary) summary.innerHTML = '<div class="macro-trends-empty">宏观数据加载失败，请稍后重试</div>';
+      if (cpiChart) cpiChart.innerHTML = '<div class="macro-trends-empty">宏观数据加载失败，请稍后重试</div>';
       return;
     }
 
-    // summary cards
-    var latestCpi = data.cpi && data.cpi.latest ? data.cpi.latest : {};
-    var latestLpr = data.lpr && data.lpr.latest ? data.lpr.latest : {};
-    var latestFx = data.exchangeRate && data.exchangeRate.latest ? data.exchangeRate.latest : {};
-    var rec = data.retirementSuggestions && data.retirementSuggestions.curve ? data.retirementSuggestions.curve : {};
-    var recInflation = rec.inflation || [];
-    var recReturn = rec.investmentReturn || [];
-    var recInflationFirst = recInflation.length > 0 ? recInflation[0].value : '-';
-    var recInflationLast = recInflation.length > 0 ? recInflation[recInflation.length - 1].value : '-';
-    var recReturnFirst = recReturn.length > 0 ? recReturn[0].value : '-';
-    var recReturnLast = recReturn.length > 0 ? recReturn[recReturn.length - 1].value : '-';
-
-    if (summary) {
-      summary.innerHTML =
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">CPI 同比</div><div class="macro-trends-card-mini-value">' + (latestCpi.yoy !== undefined ? (latestCpi.yoy > 0 ? '+' : '') + latestCpi.yoy + '%' : '-') + '</div></div>' +
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">LPR 1Y</div><div class="macro-trends-card-mini-value">' + (latestLpr.oneYear !== undefined ? latestLpr.oneYear + '%' : '-') + '</div></div>' +
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">USD/CNY</div><div class="macro-trends-card-mini-value">' + (latestFx.USD_CNY !== undefined ? latestFx.USD_CNY : '-') + '</div></div>' +
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">预测 CPI</div><div class="macro-trends-card-mini-value">' + recInflationFirst + '%–' + recInflationLast + '%</div></div>' +
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">预测收益</div><div class="macro-trends-card-mini-value">' + recReturnFirst + '%–' + recReturnLast + '%</div></div>' +
-        '<div class="macro-trends-card-mini"><div class="macro-trends-card-mini-label">数据更新</div><div class="macro-trends-card-mini-value">' + (data.updatedAt ? data.updatedAt.slice(0,10) : '-') + '</div></div>';
+    // CPI 图表：三条情景曲线同屏
+    if (cpiChart) {
+      var opt = data.cpiOptimistic || {};
+      var neu = data.cpiNeutral || {};
+      var cons = data.cpiConservative || {};
+      var series = [
+        { key: 'optimistic', label: '乐观', color: '#22d3ee', history: opt.history || [], forecast: opt.forecast || [] },
+        { key: 'neutral', label: '中性', color: '#f59e0b', history: neu.history || [], forecast: neu.forecast || [] },
+        { key: 'conservative', label: '保守', color: '#f472b6', history: cons.history || [], forecast: cons.forecast || [] }
+      ];
+      this._renderMultiLineChart(cpiChart, series, { valueKey: 'value', defaultMin: -2, defaultMax: 5, unit: '%', highlight: this._macroCpiHighlight });
     }
 
-    // CPI 图表
-    if (cpiChart) {
-      var cpiHistory = (data.cpi && data.cpi.history) ? data.cpi.history : [];
-      var cpiForecast = (data.cpi && data.cpi.forecast) ? data.cpi.forecast : [];
-      this._renderMacroLineChart(cpiChart, cpiHistory, cpiForecast, { valueKey: 'value', color: '#f59e0b', defaultMin: -2, defaultMax: 5, label: 'CPI', unit: '%' });
+    // CPI 三曲线信源
+    if (cpiSources) {
+      var cpiSrcHtml = '<div class="macro-cpi-sources-title">CPI 情景预测来源</div>';
+      cpiSrcHtml += '<div class="macro-cpi-source-item"><span class="macro-cpi-source-dot" style="background:#22d3ee"></span><strong>乐观</strong>：' + (data.sources && data.sources.cpiOptimistic ? data.sources.cpiOptimistic.name : '-') + '</div>';
+      cpiSrcHtml += '<div class="macro-cpi-source-item"><span class="macro-cpi-source-dot" style="background:#f59e0b"></span><strong>中性</strong>：' + (data.sources && data.sources.cpiNeutral ? data.sources.cpiNeutral.name : '-') + '</div>';
+      cpiSrcHtml += '<div class="macro-cpi-source-item"><span class="macro-cpi-source-dot" style="background:#f472b6"></span><strong>保守</strong>：' + (data.sources && data.sources.cpiConservative ? data.sources.cpiConservative.name : '-') + '</div>';
+      cpiSources.innerHTML = cpiSrcHtml;
     }
 
     // 利率图表：10Y国债 / 长期定存 / 宽基指数 三图同屏
-    // 10Y国债
     if (rateChartBond) {
       var bondHist = (data.bond10Y && data.bond10Y.history) ? data.bond10Y.history : [];
       var bondFc = (data.bond10Y && data.bond10Y.forecast) ? data.bond10Y.forecast : [];
       this._renderMacroLineChart(rateChartBond, bondHist, bondFc, { valueKey: 'yield', color: '#22d3ee', defaultMin: 0, defaultMax: 5, label: '10Y国债', unit: '%' });
     }
-    // 长期定存
     if (rateChartDeposit) {
       var depHist = (data.depositRate && data.depositRate.history) ? data.depositRate.history : [];
       var depData = depHist.map(function(d) { return { x: d.date, value: d.threeYear }; });
       this._renderMacroLineChart(rateChartDeposit, depData, [], { valueKey: 'value', color: '#a78bfa', defaultMin: 0, defaultMax: 5, label: '定存', unit: '%' });
     }
-    // 宽基指数年化收益
     if (rateChartIndex) {
       var idxHist = (data.broadIndexReturn && data.broadIndexReturn.history) ? data.broadIndexReturn.history : [];
       var idxFc = (data.broadIndexReturn && data.broadIndexReturn.forecast) ? data.broadIndexReturn.forecast : [];
@@ -6559,11 +6552,29 @@ const App = {
       sources.innerHTML = srcHtml;
     }
 
-    // 更新按钮选中状态
-    this._updateMacroTrendsButtonSelection();
-
     // 每日新闻
     this._renderMacroNews(document.getElementById('macroNewsBody'));
+
+    // 更新按钮选中状态
+    this._updateMacroTrendsButtonStates();
+  },
+
+  _updateMacroTrendsButtonStates() {
+    var active = this._getActiveMacroCurveTypes();
+    var cpiRow = document.getElementById('macroCpiApplyRow');
+    var rateRow = document.getElementById('macroRateApplyRow');
+    if (cpiRow) {
+      cpiRow.querySelectorAll('.macro-trends-scenario-btn').forEach(function(btn) {
+        var isActive = (btn.dataset.type === active.cpi);
+        btn.classList.toggle('active', isActive);
+      });
+    }
+    if (rateRow) {
+      rateRow.querySelectorAll('.macro-trends-rate-btn').forEach(function(btn) {
+        var isActive = (btn.dataset.type === active.ret);
+        btn.classList.toggle('active', isActive);
+      });
+    }
   },
 
   _fetchMacroNews(callback) {
@@ -6597,7 +6608,7 @@ const App = {
         return;
       }
       var html = '<div class="macro-news-list">';
-      items.slice(0, 15).forEach(function(item) {
+      items.slice(0, 5).forEach(function(item) {
         var tag = self._classifyNewsTag((item.title || '') + ' ' + (item.description || ''));
         var time = self._formatNewsTime(item.pubDate);
         html += '<a class="macro-news-item" href="' + self.escapeHtml(item.link || '') + '" target="_blank" rel="noopener">' +
@@ -6649,8 +6660,6 @@ const App = {
   _bindMacroTrendsActions() {
     var self = this;
     var refreshBtn = document.getElementById('refreshMacroTrendsBtn');
-    var cpiBtn = document.getElementById('applyMacroCpiBtn');
-    var rateBtn = document.getElementById('applyMacroRateBtn');
     if (refreshBtn) {
       refreshBtn.onclick = function() {
         self.showToast('正在刷新汇率...');
@@ -6664,29 +6673,38 @@ const App = {
         });
       };
     }
-    if (cpiBtn) {
-      cpiBtn.onclick = function() { self.applyMacroCurveToRetirement('inflation'); };
-    }
-    if (rateBtn) {
-      rateBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturn'); };
-    }
-    // 绑定4个利率应用按钮
-    var bond10YBtn = document.getElementById('applyMacroBond10YBtn');
-    var depositBtn = document.getElementById('applyMacroDepositBtn');
-    var broadIndexBtn = document.getElementById('applyMacroBroadIndexBtn');
-    var compositeBtn = document.getElementById('applyMacroCompositeBtn');
-    if (bond10YBtn) {
-      bond10YBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnBond10Y'); };
-    }
-    if (depositBtn) {
-      depositBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnDeposit'); };
-    }
-    if (broadIndexBtn) {
-      broadIndexBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnBroadIndex'); };
-    }
-    if (compositeBtn) {
-      compositeBtn.onclick = function() { self.applyMacroCurveToRetirement('investmentReturnComposite'); };
-    }
+
+    // CPI 情景按钮：点击后高亮对应曲线并应用到退休计算
+    var cpiScenarioMap = {
+      'applyMacroCpiOptimisticBtn': 'cpiOptimistic',
+      'applyMacroCpiNeutralBtn': 'cpiNeutral',
+      'applyMacroCpiConservativeBtn': 'cpiConservative'
+    };
+    Object.keys(cpiScenarioMap).forEach(function(btnId) {
+      var btn = document.getElementById(btnId);
+      if (btn) {
+        btn.onclick = function() {
+          var type = cpiScenarioMap[btnId];
+          self._macroCpiHighlight = type.replace('cpi', '').toLowerCase();
+          self.renderMacroTrendsPage();
+          self.applyMacroCurveToRetirement(type);
+        };
+      }
+    });
+
+    // 利率应用按钮
+    var rateBtnMap = {
+      'applyMacroBond10YBtn': 'investmentReturnBond10Y',
+      'applyMacroDepositBtn': 'investmentReturnDeposit',
+      'applyMacroBroadIndexBtn': 'investmentReturnBroadIndex',
+      'applyMacroCompositeBtn': 'investmentReturnComposite'
+    };
+    Object.keys(rateBtnMap).forEach(function(btnId) {
+      var btn = document.getElementById(btnId);
+      if (btn) {
+        btn.onclick = function() { self.applyMacroCurveToRetirement(rateBtnMap[btnId]); };
+      }
+    });
   },
 
   applyMacroCurveToRetirement(type) {
@@ -6698,26 +6716,37 @@ const App = {
     type = type || 'all';
     var curve = data.retirementSuggestions.curve;
     var params = this._loadRetirementParams();
-    if (type === 'all' || type === 'inflation') {
+
+    // CPI 情景曲线
+    var cpiScenarioMap = {
+      'cpiOptimistic': 'cpiOptimistic',
+      'cpiNeutral': 'cpiNeutral',
+      'cpiConservative': 'cpiConservative'
+    };
+    if (type === 'all' || cpiScenarioMap[type]) {
+      var cpiKey = cpiScenarioMap[type] || 'inflation';
+      var cpiArr = curve[cpiKey] || curve.inflation;
       params.inflationCurve = {};
-      if (curve.inflation) {
-        curve.inflation.forEach(function(p) { params.inflationCurve[p.year] = p.value; });
+      if (cpiArr) {
+        cpiArr.forEach(function(p) { params.inflationCurve[p.year] = p.value; });
       }
-      if (curve.inflation && curve.inflation.length > 0) {
-        params.inflation = curve.inflation[0].value;
+      if (cpiArr && cpiArr.length > 0) {
+        params.inflation = cpiArr[0].value;
       }
     }
-    if (type === 'all' || type === 'investmentReturnBond10Y' || type === 'investmentReturnDeposit' || type === 'investmentReturnBroadIndex' || type === 'investmentReturnComposite') {
-      var curveKey = null;
-      if (type === 'investmentReturnBond10Y') curveKey = 'investmentReturnBond10Y';
-      else if (type === 'investmentReturnDeposit') curveKey = 'investmentReturnDeposit';
-      else if (type === 'investmentReturnBroadIndex') curveKey = 'investmentReturnBroadIndex';
-      else if (type === 'investmentReturnComposite') curveKey = 'investmentReturnComposite';
-      if (curveKey && curve[curveKey]) {
+
+    // 年化收益曲线
+    if (type === 'all' || type.indexOf('investmentReturn') === 0) {
+      var returnKey = null;
+      if (type === 'investmentReturnBond10Y') returnKey = 'investmentReturnBond10Y';
+      else if (type === 'investmentReturnDeposit') returnKey = 'investmentReturnDeposit';
+      else if (type === 'investmentReturnBroadIndex') returnKey = 'investmentReturnBroadIndex';
+      else if (type === 'investmentReturnComposite') returnKey = 'investmentReturnComposite';
+      if (returnKey && curve[returnKey]) {
         params.investmentReturnCurve = {};
-        curve[curveKey].forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
-        if (curve[curveKey].length > 0) {
-          params.investmentReturn = curve[curveKey][0].value;
+        curve[returnKey].forEach(function(p) { params.investmentReturnCurve[p.year] = p.value; });
+        if (curve[returnKey].length > 0) {
+          params.investmentReturn = curve[returnKey][0].value;
         }
       } else if (type === 'all' || type === 'investmentReturn') {
         params.investmentReturnCurve = {};
@@ -6729,11 +6758,25 @@ const App = {
         }
       }
     }
+
     this._saveRetirementParams(params);
     this._retirementParams = params;
     this._retirementCache = this.calculateRetirement(params);
+
+    // 同步刷新退休计算页面（如果当前在退休计算页）
+    if (this.currentPage === 'retirement') {
+      this.renderRetirementPage();
+      this._renderRetirementCurveEditor('inflation');
+      this._renderRetirementCurveEditor('investmentReturn');
+      this._updateRetirementCurveTable('inflation');
+      this._updateRetirementCurveTable('investmentReturn');
+    }
+
     var labelMap = {
       'inflation': 'CPI',
+      'cpiOptimistic': 'CPI 乐观',
+      'cpiNeutral': 'CPI 中性',
+      'cpiConservative': 'CPI 保守',
       'investmentReturnBond10Y': '10Y国债',
       'investmentReturnDeposit': '长期定存',
       'investmentReturnBroadIndex': '宽基指数',
@@ -6742,8 +6785,7 @@ const App = {
     };
     var label = labelMap[type] || '预测参数';
     this.showToast('已将宏观' + label + '应用到退休计算');
-    this._updateMacroTrendsButtonSelection();
-    this.navigateTo('retirement');
+    // 宏观趋势页按钮不再跳转退休计算页
   },
 
   _getCurveValueForYear(curve, year, defaultValue) {
@@ -6751,54 +6793,35 @@ const App = {
     return defaultValue;
   },
 
-  _curveMatchesArray(curveArr, curveObj) {
-    if (!curveArr || curveArr.length === 0 || !curveObj) return false;
+  _isSameCurve(curveObj, curveArr) {
+    if (!curveObj || !curveArr || curveArr.length === 0) return false;
     for (var i = 0; i < curveArr.length; i++) {
-      var p = curveArr[i];
-      if (curveObj[p.year] === undefined) return false;
-      var a = parseFloat(curveObj[p.year]);
-      var b = parseFloat(p.value);
-      if (Math.abs(a - b) > 0.0001) return false;
+      if (curveObj[curveArr[i].year] !== curveArr[i].value) return false;
     }
     return true;
   },
 
-  _updateMacroTrendsButtonSelection() {
+  _getActiveMacroCurveTypes() {
     var data = this._macroTrendsCache;
-    if (!data || !data.retirementSuggestions || !data.retirementSuggestions.curve) return;
-    var curve = data.retirementSuggestions.curve;
     var params = this._loadRetirementParams();
-
-    var cpiBtn = document.getElementById('applyMacroCpiBtn');
-    if (cpiBtn) {
-      cpiBtn.classList.toggle('selected', this._curveMatchesArray(curve.inflation, params.inflationCurve));
+    if (!data || !data.retirementSuggestions || !data.retirementSuggestions.curve) {
+      return { cpi: null, ret: null };
     }
+    var curve = data.retirementSuggestions.curve;
+    var cpiType = null;
+    if (this._isSameCurve(params.inflationCurve, curve.cpiOptimistic)) cpiType = 'cpiOptimistic';
+    else if (this._isSameCurve(params.inflationCurve, curve.cpiNeutral)) cpiType = 'cpiNeutral';
+    else if (this._isSameCurve(params.inflationCurve, curve.cpiConservative)) cpiType = 'cpiConservative';
+    else if (this._isSameCurve(params.inflationCurve, curve.inflation)) cpiType = 'inflation';
 
-    var rateMap = [
-      { id: 'applyMacroBond10YBtn', key: 'investmentReturnBond10Y' },
-      { id: 'applyMacroDepositBtn', key: 'investmentReturnDeposit' },
-      { id: 'applyMacroBroadIndexBtn', key: 'investmentReturnBroadIndex' },
-      { id: 'applyMacroCompositeBtn', key: 'investmentReturnComposite' }
-    ];
-    rateMap.forEach(function(item) {
-      var btn = document.getElementById(item.id);
-      if (btn) {
-        btn.classList.toggle('selected', this._curveMatchesArray(curve[item.key], params.investmentReturnCurve));
-      }
-    }, this);
-  },
+    var retType = null;
+    if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnBond10Y)) retType = 'investmentReturnBond10Y';
+    else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnDeposit)) retType = 'investmentReturnDeposit';
+    else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnBroadIndex)) retType = 'investmentReturnBroadIndex';
+    else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturnComposite)) retType = 'investmentReturnComposite';
+    else if (this._isSameCurve(params.investmentReturnCurve, curve.investmentReturn)) retType = 'investmentReturn';
 
-  _updateRetirementResetButtonSelection(type) {
-    var curve = this._macroTrendsCurve;
-    var btn = document.querySelector('.retirement-curve-reset[data-type="' + type + '"]');
-    if (!btn) return;
-    if (!curve) {
-      btn.classList.remove('selected');
-      return;
-    }
-    var recArr = (type === 'inflation') ? curve.inflation : curve.investmentReturn;
-    var curveObj = this._retirementParams[type + 'Curve'] || {};
-    btn.classList.toggle('selected', this._curveMatchesArray(recArr, curveObj));
+    return { cpi: cpiType, ret: retType };
   },
 
   _interpolateCurve(curve, startYear, endYear) {
@@ -6945,6 +6968,136 @@ const App = {
     container.innerHTML = svg;
   },
 
+  _renderMultiLineChart(container, seriesArray, options) {
+    options = options || {};
+    var valueKey = options.valueKey || 'value';
+    var defaultMin = options.defaultMin !== undefined ? options.defaultMin : 0;
+    var defaultMax = options.defaultMax !== undefined ? options.defaultMax : 10;
+    var unit = options.unit || '';
+    var highlight = options.highlight || null;
+    var width = 680, height = 200;
+    var pad = { top: 14, right: 16, bottom: 36, left: 44 };
+    var chartW = Math.max(100, width - pad.left - pad.right);
+    var chartH = Math.max(60, height - pad.top - pad.bottom);
+
+    // 收集所有 X 轴标签（假设所有序列一致）
+    function extractPoints(arr) {
+      var res = [];
+      (arr || []).forEach(function(d) {
+        var x = d.x || d.year || d.month || d.date || '';
+        var v = d[valueKey];
+        if (v !== undefined) res.push({ x: String(x), v: v });
+      });
+      return res;
+    }
+
+    var firstSeries = seriesArray[0] || {};
+    var allPoints = extractPoints((firstSeries.history || []).concat(firstSeries.forecast || []));
+    if (allPoints.length === 0) {
+      container.innerHTML = '<div style="font-size:12px;color:#64748b;text-align:center;padding:30px 0;">暂无数据</div>';
+      return;
+    }
+    var labels = allPoints.map(function(p) { return p.x; });
+    var n = labels.length;
+
+    // 计算全局 Y 范围
+    var allValues = [];
+    seriesArray.forEach(function(s) {
+      extractPoints((s.history || []).concat(s.forecast || [])).forEach(function(p) { allValues.push(p.v); });
+    });
+    var dataMin = Math.min.apply(null, allValues);
+    var dataMax = Math.max.apply(null, allValues);
+    var min = dataMin < defaultMin ? Math.min(defaultMin, Math.floor(dataMin)) : defaultMin;
+    var max = dataMax > defaultMax ? Math.max(defaultMax, Math.ceil(dataMax)) : defaultMax;
+    if (min >= max) max = min + 1;
+
+    var xScale = function(i) { return pad.left + chartW * (i / Math.max(1, n - 1)); };
+    var yScale = function(v) { return pad.top + chartH * (1 - (v - min) / (max - min)); };
+
+    var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" class="macro-trends-svg macro-multi-line-svg" preserveAspectRatio="xMidYMid meet">';
+
+    // 水平网格线与 Y 轴刻度
+    var yTicks = 4;
+    for (var t = 0; t <= yTicks; t++) {
+      var val = min + (max - min) * t / yTicks;
+      var yy = yScale(val);
+      svg += '<line class="axis-tick" x1="' + pad.left + '" y1="' + yy + '" x2="' + (pad.left + chartW) + '" y2="' + yy + '"/>';
+      svg += '<text class="axis-text" x="' + (pad.left - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + val.toFixed(1) + (unit ? unit : '') + '</text>';
+    }
+
+    // 坐标轴
+    svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + pad.top + '" x2="' + pad.left + '" y2="' + (pad.top + chartH) + '"/>';
+    svg += '<line class="axis-line" x1="' + pad.left + '" y1="' + (pad.top + chartH) + '" x2="' + (pad.left + chartW) + '" y2="' + (pad.top + chartH) + '"/>';
+
+    // 历史与预测分隔线
+    var firstHist = firstSeries.history || [];
+    var firstFc = firstSeries.forecast || [];
+    if (firstHist.length > 0 && firstFc.length > 0) {
+      var sepIdx = firstHist.length - 1;
+      var sepX = xScale(sepIdx);
+      svg += '<line class="forecast-separator" x1="' + sepX + '" y1="' + pad.top + '" x2="' + sepX + '" y2="' + (pad.top + chartH) + '"/>';
+    }
+
+    // 绘制每条序列
+    seriesArray.forEach(function(s) {
+      var isDimmed = highlight && highlight !== s.key;
+      var isHighlighted = highlight && highlight === s.key;
+      var opacity = isDimmed ? 0.25 : (isHighlighted ? 1 : 0.85);
+      var strokeWidth = isHighlighted ? 3.2 : 2.5;
+      var points = extractPoints((s.history || []).concat(s.forecast || []));
+      if (points.length === 0) return;
+      var histLen = (s.history || []).length;
+      var histPoints = points.slice(0, histLen);
+      var fcPoints = points.slice(histLen);
+      points.forEach(function(p, i) { p.idx = i; });
+      function buildPath(arr) {
+        var d = '';
+        arr.forEach(function(p, i) {
+          d += (i === 0 ? 'M' : 'L') + xScale(p.idx) + ' ' + yScale(p.v);
+        });
+        return d;
+      }
+      if (histPoints.length > 0) {
+        svg += '<path d="' + buildPath(histPoints) + '" fill="none" stroke="' + s.color + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" stroke-linejoin="round" opacity="' + opacity + '"/>';
+      }
+      if (fcPoints.length > 0) {
+        svg += '<path d="' + buildPath(fcPoints) + '" fill="none" stroke="' + s.color + '" stroke-width="' + strokeWidth + '" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4" opacity="' + opacity + '"/>';
+      }
+      // 最后一个点加粗
+      var last = points[points.length - 1];
+      svg += '<circle cx="' + xScale(last.idx) + '" cy="' + yScale(last.v) + '" r="' + (isHighlighted ? 4.5 : 3.5) + '" fill="' + s.color + '" stroke="#0a0a14" stroke-width="1.5" opacity="' + opacity + '"/>';
+    });
+
+    // X 轴刻度标签
+    var xStep = Math.ceil(n / 6);
+    for (var i = 0; i < n; i += xStep) {
+      var txt = labels[i];
+      if (txt.length > 7) txt = txt.slice(0, 4) + '…';
+      svg += '<text class="axis-text" x="' + xScale(i) + '" y="' + (pad.top + chartH + 16) + '" text-anchor="middle">' + txt + '</text>';
+    }
+    var lastIdx = n - 1;
+    if (lastIdx % xStep !== 0) {
+      var txtLast = labels[lastIdx];
+      if (txtLast.length > 7) txtLast = txtLast.slice(0, 4) + '…';
+      svg += '<text class="axis-text" x="' + xScale(lastIdx) + '" y="' + (pad.top + chartH + 16) + '" text-anchor="middle">' + txtLast + '</text>';
+    }
+
+    svg += '</svg>';
+
+    // 图例
+    var legendHtml = '<div class="macro-multi-line-legend">';
+    seriesArray.forEach(function(s) {
+      var isActive = highlight === s.key;
+      legendHtml += '<span class="macro-legend-item' + (isActive ? ' active' : '') + '" data-key="' + s.key + '">' +
+                      '<span class="macro-legend-dot" style="background:' + s.color + '"></span>' +
+                      '<span>' + s.label + '</span>' +
+                    '</span>';
+    });
+    legendHtml += '</div>';
+
+    container.innerHTML = svg + legendHtml;
+  },
+
   _renderReadOnlyCurve(curveArr, options) {
     options = options || {};
     var color = options.color || '#4ade80';
@@ -6975,9 +7128,9 @@ const App = {
       self._updateRetirementCurveTable(type);
     });
 
-    // 恢复宏观推荐
-    document.querySelectorAll('.retirement-curve-reset').forEach(function(btn) {
-      btn.onclick = function() { self._resetCurveToMacro(btn.dataset.type); };
+    // 退休计算页 CPI / 年化收益 应用按钮
+    document.querySelectorAll('.retirement-curve-apply-btn').forEach(function(btn) {
+      btn.onclick = function() { self.applyMacroCurveToRetirement(btn.dataset.type); };
     });
     // 整体 +/-
     document.querySelectorAll('.retirement-curve-btn').forEach(function(btn) {
@@ -7242,7 +7395,6 @@ const App = {
     this.renderRetirementPage();
     this._renderRetirementCurveEditor(type);
     this._updateRetirementCurveTable(type);
-    this._updateRetirementResetButtonSelection(type);
     this.showToast('已使用机构预测');
   },
 

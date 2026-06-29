@@ -603,25 +603,6 @@ body {
   border-color: var(--accent);
 }
 
-/* 实心/空心切换按钮（小） */
-.btn-toggle {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-}
-.btn-toggle.selected {
-  background: var(--accent);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 10px rgba(74, 222, 128, 0.25);
-}
-.btn-toggle:hover {
-  background: rgba(74, 222, 128, 0.1);
-}
-.btn-toggle.selected:hover {
-  background: var(--accent-light);
-  border-color: var(--accent-light);
-}
-
 /* ============================================
    表单系统
    ============================================ */
@@ -4540,11 +4521,45 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   border-radius: 10px;
 }
 
-.macro-trends-apply-btn {
+.macro-trends-apply-row,
+.macro-trends-cpi-apply-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.macro-trends-scenario-btn,
+.macro-trends-rate-btn {
   flex-shrink: 0;
   padding: 5px 14px;
   font-size: 12px;
   min-width: 56px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.macro-trends-scenario-btn:hover,
+.macro-trends-rate-btn:hover {
+  background: var(--accent-glow);
+}
+
+.macro-trends-scenario-btn.active,
+.macro-trends-rate-btn.active {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
+}
+
+.macro-trends-scenario-btn.active:hover,
+.macro-trends-rate-btn.active:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
 }
 
 .macro-trends-chart {
@@ -4668,6 +4683,102 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
   stroke-dasharray: 4,4;
 }
 
+/* CPI 多曲线图例 */
+.macro-multi-line-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.macro-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.macro-legend-item.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.macro-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* CPI 三曲线信源 */
+.macro-cpi-sources {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.macro-cpi-sources-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.macro-cpi-source-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.macro-cpi-source-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 退休计算曲线应用按钮 */
+.retirement-curve-apply-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.retirement-curve-apply-btn {
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.retirement-curve-apply-btn:hover {
+  background: var(--accent-glow);
+}
+
+.retirement-curve-apply-btn.active {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.retirement-curve-apply-btn.active:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-light);
+}
+
 /* 预测参数操作卡片 */
 .macro-trends-actions-card .macro-trends-actions {
   justify-content: flex-start;
@@ -4769,16 +4880,6 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 
 .retirement-curve-reset:hover {
   background: var(--accent-glow);
-}
-
-.retirement-curve-reset.selected {
-  background: var(--accent);
-  color: var(--text-inverse);
-}
-
-.retirement-curve-reset.selected:hover {
-  background: var(--accent-light);
-  border-color: var(--accent-light);
 }
 
 .retirement-curve-editor {
