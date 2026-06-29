@@ -18,6 +18,14 @@
     "depositRate": {
       "name": "中国人民银行基准利率 / 市场聚合",
       "url": "http://www.pbc.gov.cn"
+    },
+    "bond10Y": {
+      "name": "中国债券信息网 / ChinaBond",
+      "url": "https://yield.chinabond.com.cn"
+    },
+    "broadIndexReturn": {
+      "name": "东方财富 / 沪深300指数",
+      "url": "https://quote.eastmoney.com/zs000300.html"
     }
   },
   "cpi": {
@@ -560,8 +568,553 @@
           "value": 2.98,
           "source": "3年期定存 + 1% 溢价"
         }
+      ],
+      "investmentReturnBond10Y": [
+        {
+          "year": 2026,
+          "value": 2.2
+        },
+        {
+          "year": 2027,
+          "value": 2.25
+        },
+        {
+          "year": 2028,
+          "value": 2.3
+        },
+        {
+          "year": 2029,
+          "value": 2.35
+        },
+        {
+          "year": 2030,
+          "value": 2.4
+        },
+        {
+          "year": 2031,
+          "value": 2.45
+        },
+        {
+          "year": 2032,
+          "value": 2.5
+        },
+        {
+          "year": 2033,
+          "value": 2.55
+        },
+        {
+          "year": 2034,
+          "value": 2.6
+        },
+        {
+          "year": 2035,
+          "value": 2.65
+        },
+        {
+          "year": 2036,
+          "value": 2.7
+        },
+        {
+          "year": 2037,
+          "value": 2.75
+        },
+        {
+          "year": 2038,
+          "value": 2.8
+        },
+        {
+          "year": 2039,
+          "value": 2.85
+        },
+        {
+          "year": 2040,
+          "value": 2.9
+        },
+        {
+          "year": 2041,
+          "value": 2.95
+        },
+        {
+          "year": 2042,
+          "value": 3.0
+        },
+        {
+          "year": 2043,
+          "value": 3.05
+        },
+        {
+          "year": 2044,
+          "value": 3.1
+        },
+        {
+          "year": 2045,
+          "value": 3.15
+        },
+        {
+          "year": 2046,
+          "value": 3.2
+        },
+        {
+          "year": 2047,
+          "value": 3.25
+        },
+        {
+          "year": 2048,
+          "value": 3.3
+        },
+        {
+          "year": 2049,
+          "value": 3.35
+        },
+        {
+          "year": 2050,
+          "value": 3.4
+        }
+      ],
+      "investmentReturnDeposit": [
+        {
+          "year": 2026,
+          "value": 2.5
+        },
+        {
+          "year": 2027,
+          "value": 2.53
+        },
+        {
+          "year": 2028,
+          "value": 2.56
+        },
+        {
+          "year": 2029,
+          "value": 2.59
+        },
+        {
+          "year": 2030,
+          "value": 2.62
+        },
+        {
+          "year": 2031,
+          "value": 2.65
+        },
+        {
+          "year": 2032,
+          "value": 2.68
+        },
+        {
+          "year": 2033,
+          "value": 2.71
+        },
+        {
+          "year": 2034,
+          "value": 2.74
+        },
+        {
+          "year": 2035,
+          "value": 2.77
+        },
+        {
+          "year": 2036,
+          "value": 2.8
+        },
+        {
+          "year": 2037,
+          "value": 2.83
+        },
+        {
+          "year": 2038,
+          "value": 2.86
+        },
+        {
+          "year": 2039,
+          "value": 2.89
+        },
+        {
+          "year": 2040,
+          "value": 2.92
+        },
+        {
+          "year": 2041,
+          "value": 2.95
+        },
+        {
+          "year": 2042,
+          "value": 2.98
+        },
+        {
+          "year": 2043,
+          "value": 3.01
+        },
+        {
+          "year": 2044,
+          "value": 3.04
+        },
+        {
+          "year": 2045,
+          "value": 3.07
+        },
+        {
+          "year": 2046,
+          "value": 3.1
+        },
+        {
+          "year": 2047,
+          "value": 3.13
+        },
+        {
+          "year": 2048,
+          "value": 3.16
+        },
+        {
+          "year": 2049,
+          "value": 3.19
+        },
+        {
+          "year": 2050,
+          "value": 3.22
+        }
+      ],
+      "investmentReturnBroadIndex": [
+        {
+          "year": 2026,
+          "value": 7.5
+        },
+        {
+          "year": 2027,
+          "value": 7.5
+        },
+        {
+          "year": 2028,
+          "value": 7.5
+        },
+        {
+          "year": 2029,
+          "value": 7.5
+        },
+        {
+          "year": 2030,
+          "value": 7.5
+        },
+        {
+          "year": 2031,
+          "value": 7.5
+        },
+        {
+          "year": 2032,
+          "value": 7.5
+        },
+        {
+          "year": 2033,
+          "value": 7.5
+        },
+        {
+          "year": 2034,
+          "value": 7.5
+        },
+        {
+          "year": 2035,
+          "value": 7.5
+        },
+        {
+          "year": 2036,
+          "value": 7.5
+        },
+        {
+          "year": 2037,
+          "value": 7.5
+        },
+        {
+          "year": 2038,
+          "value": 7.5
+        },
+        {
+          "year": 2039,
+          "value": 7.5
+        },
+        {
+          "year": 2040,
+          "value": 7.5
+        },
+        {
+          "year": 2041,
+          "value": 7.5
+        },
+        {
+          "year": 2042,
+          "value": 7.5
+        },
+        {
+          "year": 2043,
+          "value": 7.5
+        },
+        {
+          "year": 2044,
+          "value": 7.5
+        },
+        {
+          "year": 2045,
+          "value": 7.5
+        },
+        {
+          "year": 2046,
+          "value": 7.5
+        },
+        {
+          "year": 2047,
+          "value": 7.5
+        },
+        {
+          "year": 2048,
+          "value": 7.5
+        },
+        {
+          "year": 2049,
+          "value": 7.5
+        },
+        {
+          "year": 2050,
+          "value": 7.5
+        }
+      ],
+      "investmentReturnComposite": [
+        {
+          "year": 2026,
+          "value": 5.38
+        },
+        {
+          "year": 2027,
+          "value": 5.4
+        },
+        {
+          "year": 2028,
+          "value": 5.42
+        },
+        {
+          "year": 2029,
+          "value": 5.44
+        },
+        {
+          "year": 2030,
+          "value": 5.46
+        },
+        {
+          "year": 2031,
+          "value": 5.48
+        },
+        {
+          "year": 2032,
+          "value": 5.5
+        },
+        {
+          "year": 2033,
+          "value": 5.52
+        },
+        {
+          "year": 2034,
+          "value": 5.54
+        },
+        {
+          "year": 2035,
+          "value": 5.56
+        },
+        {
+          "year": 2036,
+          "value": 5.58
+        },
+        {
+          "year": 2037,
+          "value": 5.6
+        },
+        {
+          "year": 2038,
+          "value": 5.62
+        },
+        {
+          "year": 2039,
+          "value": 5.64
+        },
+        {
+          "year": 2040,
+          "value": 5.66
+        },
+        {
+          "year": 2041,
+          "value": 5.68
+        },
+        {
+          "year": 2042,
+          "value": 5.7
+        },
+        {
+          "year": 2043,
+          "value": 5.72
+        },
+        {
+          "year": 2044,
+          "value": 5.74
+        },
+        {
+          "year": 2045,
+          "value": 5.76
+        },
+        {
+          "year": 2046,
+          "value": 5.78
+        },
+        {
+          "year": 2047,
+          "value": 5.8
+        },
+        {
+          "year": 2048,
+          "value": 5.82
+        },
+        {
+          "year": 2049,
+          "value": 5.84
+        },
+        {
+          "year": 2050,
+          "value": 5.86
+        }
       ]
     },
     "notes": "年度曲线更贴近经济周期，但预测不确定性更高。退休计算中可基于该推荐曲线手动微调。"
+  },
+  "bond10Y": {
+    "latest": {
+      "date": "2026-06-29",
+      "yield": 1.75,
+      "source": "ChinaBond"
+    },
+    "history": [
+      {
+        "date": "2020-12-31",
+        "yield": 2.95,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2021-12-31",
+        "yield": 2.85,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2022-12-31",
+        "yield": 2.78,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2023-12-31",
+        "yield": 2.56,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2024-12-31",
+        "yield": 2.21,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2025-12-31",
+        "yield": 1.83,
+        "source": "ChinaBond"
+      },
+      {
+        "date": "2026-06-29",
+        "yield": 1.75,
+        "source": "ChinaBond"
+      }
+    ],
+    "forecast": [
+      {
+        "date": "2026-12-31",
+        "yield": 1.8,
+        "source": "机构预测"
+      },
+      {
+        "date": "2027-12-31",
+        "yield": 2.0,
+        "source": "机构预测"
+      },
+      {
+        "date": "2028-12-31",
+        "yield": 2.1,
+        "source": "机构预测"
+      },
+      {
+        "date": "2029-12-31",
+        "yield": 2.2,
+        "source": "机构预测"
+      },
+      {
+        "date": "2030-12-31",
+        "yield": 2.3,
+        "source": "机构预测"
+      }
+    ]
+  },
+  "broadIndexReturn": {
+    "latest": {
+      "date": "2025-12-31",
+      "return": -2.1,
+      "source": "HS300实际"
+    },
+    "history": [
+      {
+        "date": "2020-12-31",
+        "return": 27.2,
+        "source": "HS300实际"
+      },
+      {
+        "date": "2021-12-31",
+        "return": -5.2,
+        "source": "HS300实际"
+      },
+      {
+        "date": "2022-12-31",
+        "return": -21.6,
+        "source": "HS300实际"
+      },
+      {
+        "date": "2023-12-31",
+        "return": -11.4,
+        "source": "HS300实际"
+      },
+      {
+        "date": "2024-12-31",
+        "return": 16.2,
+        "source": "HS300实际"
+      },
+      {
+        "date": "2025-12-31",
+        "return": -2.1,
+        "source": "HS300实际"
+      }
+    ],
+    "forecast": [
+      {
+        "date": "2026-12-31",
+        "return": 7.5,
+        "source": "机构预测(长期均值)"
+      },
+      {
+        "date": "2027-12-31",
+        "return": 7.5,
+        "source": "机构预测(长期均值)"
+      },
+      {
+        "date": "2028-12-31",
+        "return": 7.5,
+        "source": "机构预测(长期均值)"
+      },
+      {
+        "date": "2029-12-31",
+        "return": 7.5,
+        "source": "机构预测(长期均值)"
+      },
+      {
+        "date": "2030-12-31",
+        "return": 7.5,
+        "source": "机构预测(长期均值)"
+      }
+    ]
   }
 }
