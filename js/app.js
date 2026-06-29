@@ -5615,6 +5615,9 @@ const App = {
         : params.investmentReturn;
     }
 
+    // 家庭消费按实际年度 CPI 逐年复利（而不是用当年通胀率做指数）
+    var expenseMultiplier = 1;
+
     for (var year = currentYear; year <= endYear; year++) {
       var age = currentAge + (year - currentYear);
 
@@ -5629,7 +5632,10 @@ const App = {
       var education = (year <= currentYear + Math.max(0, params.educationEndYear - currentYear) - 1) ? (params.annualEducation * 10000) : 0;
       var inflationRate = inflationSeries[year];
       var investmentReturnRate = returnSeries[year];
-      var expense = (params.annualExpense * 10000) * Math.pow(1 + inflationRate / 100, year - currentYear);
+      if (year > currentYear) {
+        expenseMultiplier *= (1 + inflationRate / 100);
+      }
+      var expense = (params.annualExpense * 10000) * expenseMultiplier;
       // 根据 extraTransactions 计算额外收支
       var extraIncome = 0;
       var extraExpense = 0;
