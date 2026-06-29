@@ -459,7 +459,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v175',
+      clientVersion: 'v176',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -1279,10 +1279,149 @@ const Storage = {
     return total;
   },
 
-  // 计算总负债（优先使用 balance 字段，否则用 total - paid）
+  // 房贷进度推算（与 app.js calcLoanProgress 同逻辑，供 Storage 独立使用）
+  calcLoanProgress(loan, today) {
+    today = today ? new Date(today) : new Date();
+    today.setHours(0, 0, 0, 0);
+
+    var total = parseFloat(loan.total) || 0;
+    var rate = parseFloat(loan.rate) || 0;
+    var term = parseInt(loan.term) || 0;
+    var months = term * 12;
+    var mode = loan.mode || 'equal-payment';
+    var payDay = parseInt(loan.payDay) || 17;
+    var startStr = loan.startDate;
+
+    function parseDate(d) {
+      if (!d) return null;
+      var p = d.split('-');
+      return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+    }
+    var startDate = parseDate(startStr);
+
+    function monthDiff(d1, d2) {
+      return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    }
+
+    function getNextPayDate(start, payDay, today) {
+      var elapsed = monthDiff(start, today);
+      var next = new Date(start.getFullYear(), start.getMonth() + elapsed + 1, payDay);
+      var cur = new Date(start.getFullYear(), start.getMonth() + elapsed, payDay);
+      if (today < cur) return cur;
+      return next;
+    }
+
+    function calcMonthlyPayment(total, annualRate, months) {
+      if (!total || !annualRate || !months || months <= 0) return 0;
+      var mr = annualRate / 100 / 12;
+      if (mr === 0) return total / months;
+      var factor = Math.pow(1 + mr, months);
+      return (total * mr * factor) / (factor - 1);
+    }
+
+    if (months <= 0 || total <= 0) {
+      return {
+        elapsed: 0, total: 0, paidPrincipal: 0, remainingPrincipal: total,
+        percent: 0, monthlyPayment: 0, nextPayDate: null, monthsRemaining: 0,
+        totalInterest: 0, remainingInterest: 0, isFinished: false, basis: '数据不完整'
+      };
+    }
+
+    var mr = rate / 100 / 12;
+    var principalPerMonth = total / months;
+
+    var elapsed = 0;
+    if (startDate) {
+      if (today < startDate) {
+        elapsed = 0;
+      } else {
+        elapsed = monthDiff(startDate, today);
+        var thisMonthPayDate = new Date(today.getFullYear(), today.getMonth(), payDay);
+        if (today < thisMonthPayDate) elapsed -= 1;
+        if (elapsed < 0) elapsed = 0;
+        if (elapsed > months) elapsed = months;
+      }
+    }
+
+    var isFinished = elapsed >= months;
+    var paidPrincipal = 0;
+    var totalInterest = 0;
+    var remainingPrincipal = 0;
+
+    if (mode === 'equal-principal') {
+      paidPrincipal = principalPerMonth * elapsed;
+      if (isFinished) paidPrincipal = total;
+      var sumRemaining = 0;
+      for (var i = 0; i < elapsed; i++) {
+        sumRemaining += (total - i * principalPerMonth);
+      }
+      totalInterest = mr * sumRemaining;
+      remainingPrincipal = Math.max(0, total - paidPrincipal);
+    } else {
+      var origMonthly = calcMonthlyPayment(total, rate, months);
+      var balance = total;
+      for (var j = 0; j < elapsed; j++) {
+        var interest = balance * mr;
+        var principalPart = origMonthly - interest;
+        balance -= principalPart;
+        if (balance < 0.01) balance = 0;
+        paidPrincipal += principalPart;
+        totalInterest += interest;
+      }
+      if (isFinished) paidPrincipal = total;
+      remainingPrincipal = Math.max(0, balance);
+    }
+
+    var percent = total > 0 ? (paidPrincipal / total * 100) : 0;
+    var nextPayDate = startDate ? getNextPayDate(startDate, payDay, today) : null;
+    var monthsRemaining = Math.max(0, months - elapsed);
+
+    var monthlyPayment = 0;
+    var remainingInterest = 0;
+    if (monthsRemaining > 0) {
+      if (mode === 'equal-principal') {
+        monthlyPayment = principalPerMonth + remainingPrincipal * mr;
+        remainingInterest = mr * (monthsRemaining * remainingPrincipal -
+          principalPerMonth * monthsRemaining * (monthsRemaining - 1) / 2);
+      } else {
+        monthlyPayment = calcMonthlyPayment(remainingPrincipal, rate, monthsRemaining);
+        remainingInterest = monthlyPayment * monthsRemaining - remainingPrincipal;
+      }
+    }
+    if (remainingInterest < 0) remainingInterest = 0;
+
+    var basis = term + '年' + (mode === 'equal-principal' ? '等额本金' : '等额本息') +
+                ' · 利率 ' + rate.toFixed(2) + '%' +
+                ' · ' + startStr + ' 起 · 每月 ' + payDay + '号';
+
+    return {
+      elapsed: elapsed,
+      total: months,
+      paidPrincipal: paidPrincipal,
+      remainingPrincipal: remainingPrincipal,
+      percent: percent,
+      monthlyPayment: monthlyPayment,
+      nextPayDate: nextPayDate,
+      monthsRemaining: monthsRemaining,
+      totalInterest: totalInterest,
+      remainingInterest: remainingInterest,
+      isFinished: isFinished,
+      basis: basis
+    };
+  },
+
+  // 计算总负债（房贷优先使用实时剩余本金，未启用自动进度则回退 balance/total-paid）
   calcTotalDebts() {
     let total = 0;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     this.getLoans().forEach(l => {
+      // 启用自动进度且数据完整时，使用实时剩余本金
+      if (l.autoProgress !== false && l.total && l.rate && l.term && l.startDate) {
+        var prog = this.calcLoanProgress(l, today);
+        total += prog.remainingPrincipal || 0;
+        return;
+      }
+      // 回退：手动余额或 total - paid
       var b = parseFloat(l.balance);
       if (b >= 0) {
         total += b;

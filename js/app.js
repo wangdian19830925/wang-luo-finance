@@ -2929,13 +2929,19 @@ const App = {
     var insurCount = insurance.length;
     var insurAnnual = this.calcInsurancePaidTotal();
 
-    // 房贷
+    // 房贷（启用自动进度时使用实时剩余本金，与房贷追踪页同口径）
     var loans = Storage.get(Storage.keys.loans);
     var loanBalance = 0, loanCount = loans.length;
+    var today = new Date(); today.setHours(0,0,0,0);
     loans.forEach(function(l) {
-      var b = parseFloat(l.balance);
-      if (b >= 0) { loanBalance += b; }
-      else { loanBalance += Math.max(0, (parseFloat(l.total)||0)-(parseFloat(l.paid)||0)); }
+      if (l.autoProgress !== false && l.total && l.rate && l.term && l.startDate) {
+        var prog = Storage.calcLoanProgress(l, today);
+        loanBalance += prog.remainingPrincipal || 0;
+      } else {
+        var b = parseFloat(l.balance);
+        if (b >= 0) { loanBalance += b; }
+        else { loanBalance += Math.max(0, (parseFloat(l.total)||0)-(parseFloat(l.paid)||0)); }
+      }
     });
 
     // 年金
@@ -4888,139 +4894,7 @@ const App = {
   //   basis: 计算依据描述字符串
   // }
   calcLoanProgress(loan, today) {
-    today = today ? new Date(today) : new Date();
-    today.setHours(0, 0, 0, 0);
-
-    var total = parseFloat(loan.total) || 0;
-    var rate = parseFloat(loan.rate) || 0;
-    var term = parseInt(loan.term) || 0;       // 年
-    var months = term * 12;                     // 总期数
-    var mode = loan.mode || 'equal-payment';   // equal-payment | equal-principal
-    var payDay = parseInt(loan.payDay) || 17;   // 每月还款日（默认 17 号）
-    var startStr = loan.startDate;
-
-    // 解析起始日
-    function parseDate(d) {
-      if (!d) return null;
-      var p = d.split('-');
-      return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
-    }
-    var startDate = parseDate(startStr);
-
-    // 月份差（d2 - d1）
-    function monthDiff(d1, d2) {
-      return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
-    }
-
-    // 计算下个月还款日
-    function getNextPayDate(start, payDay, today) {
-      var elapsed = monthDiff(start, today);
-      // 第 elapsed+1 期还款日
-      var next = new Date(start.getFullYear(), start.getMonth() + elapsed + 1, payDay);
-      // 如果 today 还在第 elapsed+1 期之前（即本期还没到还款日），应该返回本期
-      var cur = new Date(start.getFullYear(), start.getMonth() + elapsed, payDay);
-      if (today < cur) return cur;
-      return next;
-    }
-
-    if (months <= 0 || total <= 0) {
-      return {
-        elapsed: 0, total: 0, paidPrincipal: 0, remainingPrincipal: total,
-        percent: 0, monthlyPayment: 0, nextPayDate: null, monthsRemaining: 0,
-        totalInterest: 0, remainingInterest: 0, isFinished: false, basis: '数据不完整'
-      };
-    }
-
-    var mr = rate / 100 / 12;
-    var principalPerMonth = total / months;
-
-    // 已还期数（基于日期推算）
-    var elapsed = 0;
-    if (startDate) {
-      if (today < startDate) {
-        elapsed = 0;
-      } else {
-        elapsed = monthDiff(startDate, today);
-        // 如果本月还款日还没到，elapsed 减 1（本期还没还）
-        var thisMonthPayDate = new Date(today.getFullYear(), today.getMonth(), payDay);
-        if (today < thisMonthPayDate) elapsed -= 1;
-        if (elapsed < 0) elapsed = 0;
-        if (elapsed > months) elapsed = months;
-      }
-    }
-
-    var isFinished = elapsed >= months;
-    var paidPrincipal = 0;
-    var totalInterest = 0;
-    var remainingPrincipal = 0;
-
-    if (mode === 'equal-principal') {
-      // 等额本金：每月本金固定
-      paidPrincipal = principalPerMonth * elapsed;
-      if (isFinished) paidPrincipal = total;
-      // 已还累计利息 = mr * Σ(总-(i-1)*principalPerMonth)
-      var sumRemaining = 0;
-      for (var i = 0; i < elapsed; i++) {
-        sumRemaining += (total - i * principalPerMonth);
-      }
-      totalInterest = mr * sumRemaining;
-      remainingPrincipal = Math.max(0, total - paidPrincipal);
-    } else {
-      // 等额本息：用原始月供逐期推算剩余本金
-      var origMonthly = this.calcMonthlyPayment(total, rate, months);
-      var balance = total;
-      for (var j = 0; j < elapsed; j++) {
-        var interest = balance * mr;
-        var principalPart = origMonthly - interest;
-        balance -= principalPart;
-        if (balance < 0.01) balance = 0;
-        paidPrincipal += principalPart;
-        totalInterest += interest;
-      }
-      if (isFinished) paidPrincipal = total;
-      remainingPrincipal = Math.max(0, balance);
-    }
-
-    var percent = total > 0 ? (paidPrincipal / total * 100) : 0;
-    var nextPayDate = startDate ? getNextPayDate(startDate, payDay, today) : null;
-    var monthsRemaining = Math.max(0, months - elapsed);
-
-    // 基于剩余本金与剩余期数重新计算当前月供 / 剩余利息
-    var monthlyPayment = 0;
-    var remainingInterest = 0;
-    if (monthsRemaining > 0) {
-      if (mode === 'equal-principal') {
-        // 等额本金：当前月还款 = 固定本金 + 当前剩余本金产生的利息（逐月递减）
-        monthlyPayment = principalPerMonth + remainingPrincipal * mr;
-        // 剩余利息 = mr * Σ(remainingPrincipal - k*principalPerMonth), k=0..monthsRemaining-1
-        remainingInterest = mr * (monthsRemaining * remainingPrincipal -
-          principalPerMonth * monthsRemaining * (monthsRemaining - 1) / 2);
-      } else {
-        // 等额本息：用剩余本金和剩余期数重新计算月供
-        monthlyPayment = this.calcMonthlyPayment(remainingPrincipal, rate, monthsRemaining);
-        remainingInterest = monthlyPayment * monthsRemaining - remainingPrincipal;
-      }
-    }
-    if (remainingInterest < 0) remainingInterest = 0;
-
-    var basis = term + '年' + (mode === 'equal-principal' ? '等额本金' : '等额本息') +
-                ' · 利率 ' + rate.toFixed(2) + '%' +
-                ' · ' + startStr + ' 起 · 每月 ' + payDay + '号';
-
-    return {
-      elapsed: elapsed,
-      total: months,
-      paidPrincipal: paidPrincipal,
-      remainingPrincipal: remainingPrincipal,
-      percent: percent,
-      monthlyPayment: monthlyPayment,
-      nextPayDate: nextPayDate,
-      monthsRemaining: monthsRemaining,
-      totalInterest: totalInterest,
-      remainingInterest: remainingInterest,
-      isFinished: isFinished,
-      basis: basis
-    };
+    return Storage.calcLoanProgress(loan, today);
   },
 
   loadLoanList() {
@@ -5829,21 +5703,59 @@ const App = {
     var insurance = Storage.get(Storage.keys.insurance);
     var self = this;
 
+    function parseNextPayDate(p) {
+      if (!p.nextPayDate) return null;
+      var parts = p.nextPayDate.split('-');
+      var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function daysInYear(year) {
+      return ((year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)) ? 366 : 365;
+    }
+
+    function daysFromDateToYearEnd(date) {
+      var end = new Date(date.getFullYear(), 11, 31);
+      return Math.max(0, Math.round((end - date) / 86400000) + 1);
+    }
+
     insurance.forEach(function(p) {
       var years = self._parsePayPeriodYears(p.payPeriod);
+      var premium = parseFloat(p.premium) || 0;
+      if (premium <= 0) return;
+
+      var nextPayDate = parseNextPayDate(p);
+      var npYear = nextPayDate ? nextPayDate.getFullYear() : null;
+
       if (!years || years.length === 0) {
-        // 每年单独购买：持续计入
+        // 每年单独购买：从 nextPayDate 所在年份开始，首年按剩余天数比例折算
         if (p.payPeriod && p.payPeriod.indexOf('每年') >= 0) {
-          for (var y = startYear; y <= endYear; y++) {
-            schedule[y] = (schedule[y] || 0) + (parseFloat(p.premium) || 0);
+          var yStart = npYear || startYear;
+          for (var y = Math.max(startYear, yStart); y <= endYear; y++) {
+            var amount = premium;
+            if (nextPayDate && y === npYear) {
+              amount = premium * daysFromDateToYearEnd(nextPayDate) / daysInYear(y);
+            }
+            schedule[y] = (schedule[y] || 0) + amount;
           }
         }
         return;
       }
-      // 有明确缴费区间
+
+      // 有明确缴费区间：只统计 nextPayDate 当年及之后的保费
       years.forEach(function(y) {
-        if (y >= startYear && y <= endYear) {
-          schedule[y] = (schedule[y] || 0) + (parseFloat(p.premium) || 0);
+        if (y < startYear || y > endYear) return;
+        if (!nextPayDate) {
+          schedule[y] = (schedule[y] || 0) + premium;
+          return;
+        }
+        if (y < npYear) return; // nextPayDate 已推进，该年保费已缴
+        if (y === npYear) {
+          // 首年按 nextPayDate 到年末的天数比例折算
+          var prorated = premium * daysFromDateToYearEnd(nextPayDate) / daysInYear(y);
+          schedule[y] = (schedule[y] || 0) + prorated;
+        } else {
+          schedule[y] = (schedule[y] || 0) + premium;
         }
       });
     });

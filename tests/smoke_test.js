@@ -36,6 +36,7 @@ for (const f of jsFiles) {
 // 2. 检查关键函数存在
 console.log('\n【2】关键函数存在性');
 const appCode = fs.readFileSync(path.join(__dirname, '..', 'js/app.js'), 'utf8');
+const storageCode = fs.readFileSync(path.join(__dirname, '..', 'js/storage.js'), 'utf8');
 const criticalFuncs = [
   'renderAssetTrend', 'renderFundTrend', 'renderStockCharts',
   'renderInsuranceProgress', 'loadLoanList', 'calcLoanProgress',
@@ -46,6 +47,8 @@ for (const fn of criticalFuncs) {
   assert(appCode.includes(fn + '(') || appCode.includes(fn + ' ('),
     'app.js 包含 ' + fn);
 }
+assert(storageCode.includes('calcLoanProgress') && storageCode.includes('calcTotalDebts'),
+  'storage.js 包含 calcLoanProgress 与 calcTotalDebts');
 
 // 3. 检查 Bug 修复
 console.log('\n【3】Bug 修复验证');
@@ -55,7 +58,7 @@ assert(appCode.match(/_loadAllHistoryData[\s\S]{0,500}Storage\.get\(Storage\.key
   'P1-01: _loadAllHistoryData 动态读取股票代码');
 assert(appCode.match(/_fetchLiveFxRates[\s\S]{0,200}location\.protocol\s*===\s*\'file:\'/),
   'P1-02: _fetchLiveFxRates 有 file: 检查');
-assert(appCode.match(/today\s*=\s*today\s*\?\s*new Date\(today\)/),
+assert((appCode + storageCode).match(/today\s*=\s*today\s*\?\s*new Date\(today\)/),
   'P2-02: calcLoanProgress 拷贝入参');
 
 // 4. 检查 data 文件
@@ -72,13 +75,13 @@ for (const f of dataFiles) {
 console.log('\n【5】HTML 引用检查');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert(html.includes('js/history-data.js'), 'index.html 引用 history-data.js');
-assert(html.includes('app.js?v=175'), 'index.html 版本 v175');
-assert(html.includes('style.css?v=175'), 'index.html 样式版本 v175');
+assert(html.includes('app.js?v=176'), 'index.html 版本 v176');
+assert(html.includes('style.css?v=176'), 'index.html 样式版本 v176');
 
 // 6. Service Worker
 console.log('\n【6】Service Worker');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert(sw.includes('family-finance-v175'), 'SW 版本 v175');
+assert(sw.includes('family-finance-v176'), 'SW 版本 v176');
 assert(sw.includes('history-data.js'), 'SW 预缓存 history-data.js');
 
 // 总结

@@ -4,9 +4,13 @@ const path = require('path');
 const vm = require('vm');
 
 const BASE = path.resolve(__dirname, '..');
+const mockStorage = {};
 const ctx = vm.createContext({
   console, JSON, Math, Date, String, Number, Array, Object, parseFloat, parseInt, isNaN, Set, localStorage: {
-    getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}
+    getItem(key) { return mockStorage[key] || null; },
+    setItem(key, val) { mockStorage[key] = String(val); },
+    removeItem(key) { delete mockStorage[key]; },
+    clear() { for (const k in mockStorage) delete mockStorage[k]; }
   }, document: {}, window: {}
 });
 
@@ -18,6 +22,7 @@ appCode = appCode.replace(/document\.addEventListener\("DOMContentLoaded"[^;]+\)
 vm.runInContext(appCode, ctx);
 
 const App = ctx.App;
+const Storage = ctx.Storage;
 
 let total = 0, passed = 0, failed = 0;
 function assertEq(actual, expected, msg) {
@@ -73,6 +78,25 @@ assertEq(result.years[1].expense, 10200, '2027 消费 = 10000 * 1.02');
 assertEq(result.years[2].expense, 10404, '2028 消费 = 10200 * 1.02');
 assertEq(result.years[3].expense, 10612.08, '2029 消费 = 10404 * 1.02');
 assertEq(result.years[4].expense, 11248.80, '2030 消费 = 10612.08 * 1.06');
+
+console.log('\n【保费现金流与 nextPayDate 对齐】');
+// 保单缴费区间 2020-2042，nextPayDate=2026-12-16
+Storage.set(Storage.keys.insurance, [
+  { id: 'p1', company: '友邦', product: '重疾', person: '典', premium: 10000, freq: 'yearly', payPeriod: '2020-2042 · 23年', baseNextPayDate: '2026-12-16', nextPayDate: '2026-12-16', expireDate: '2042-12-31' }
+]);
+var premSchedule = App._buildPremiumSchedule(2026, 2028);
+// 2026 年从 12-16 到年末共 16 天，2026 非闰年（365 天）
+assertEq(premSchedule[2026], 10000 * 16 / 365, 'PREM-01: 2026 保费按 nextPayDate 到年末天数比例折算');
+assertEq(premSchedule[2027], 10000, 'PREM-02: 2027 保费全额');
+assertEq(premSchedule[2028], 10000, 'PREM-03: 2028 保费全额');
+
+// nextPayDate 已推进到次年：2026 不应再计保费
+Storage.set(Storage.keys.insurance, [
+  { id: 'p2', company: '友邦', product: '年金', person: '典', premium: 12000, freq: 'yearly', payPeriod: '2023-2032 · 10年', baseNextPayDate: '2026-01-01', nextPayDate: '2027-01-01', expireDate: '2042-12-31' }
+]);
+premSchedule = App._buildPremiumSchedule(2026, 2028);
+assertEq(premSchedule[2026] || 0, 0, 'PREM-04: nextPayDate 已推进到 2027 时 2026 不计保费');
+assertEq(premSchedule[2027], 12000, 'PREM-05: 2027 全额保费');
 
 console.log('\n========== 退休曲线测试汇总 ==========');
 console.log('总计：' + total + ' 个断言');

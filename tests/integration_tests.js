@@ -143,6 +143,22 @@ assertEq(Storage.calcCashTotal(), 0, 'FUNC-02: 空数据现金为 0');
 Storage.set(Storage.keys.cashAccounts, [{ id: 'cmb', name: '招商银行', balance: 10000, updated: '2026-06-25' }]);
 assertEq(Storage.calcTotalAssets(), 10000, 'FUNC-03: 仅现金资产时总资产等于现金');
 
+console.log('\n【测试 6】数据库测试：房贷实时剩余本金同步到总负债');
+resetData();
+// 手动模式：仍使用 balance 字段
+Storage.set(Storage.keys.loans, [
+  { id: 'l1', bank: '公积金', balance: 500000, total: 1200000, rate: 3.1, term: 30, startDate: '2014-12-26', payDay: 17, mode: 'equal-payment', autoProgress: false }
+]);
+assertEq(Storage.calcTotalDebts(), 500000, 'DB-LOAN-01: 手动模式使用 balance');
+
+// 自动模式：使用 calcLoanProgress 实时剩余本金，忽略 balance
+Storage.set(Storage.keys.loans, [
+  { id: 'l2', bank: '公积金', balance: 999999, total: 700000, rate: 2.6, term: 15, startDate: '2014-12-26', payDay: 17, mode: 'equal-payment', autoProgress: true }
+]);
+var prog = Storage.calcLoanProgress(Storage.get(Storage.keys.loans)[0], '2026-06-27');
+assert(prog.remainingPrincipal > 0 && prog.remainingPrincipal < 700000, 'DB-LOAN-02: 自动模式剩余本金在合理范围');
+assertEq(Storage.calcTotalDebts(), prog.remainingPrincipal, 'DB-LOAN-03: 自动模式总负债等于实时剩余本金');
+
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
 console.log('通过：' + passed + ' 个');
