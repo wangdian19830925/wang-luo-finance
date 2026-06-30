@@ -927,21 +927,11 @@ const App = {
             needImport = true;
           }
         });
-        // 检查已有股票是否有缺失字段需要合并
-        if (!needImport) {
-          existing.forEach(function(ex) {
-            var src = null;
-            for (var i = 0; i < holdings.length; i++) {
-              if (holdings[i].code === ex.code) { src = holdings[i]; break; }
-            }
-            if (src && (ex.cost !== src.cost || ex.shares !== src.shares || ex.broker !== src.broker ||
-                // 源数据有有效价格时，才比较 price（避免用 0 覆盖已获取的实时价）
-                (src.currentPrice && ex.currentPrice !== src.currentPrice))) {
-              console.log('[App] 股票 ' + ex.code + ' 信息需更新，触发合并');
-              needImport = true;
-            }
-          });
-        }
+        // v187: 不再比较用户修改字段（shares/cost/broker/currentPrice）
+        // 因为用户在 app 内修改了 shares/cost 等字段后，与 STOCK_HOLDINGS 默认值不同
+        // 旧逻辑会触发 importStockData → Storage.update 把默认值覆盖回用户修改的字段
+        // 且 updatedAt 设为"此刻" → syncWithCloud LWW 让本地（默认值）胜出 → 云端被永久覆盖
+        // 现只检查是否有缺失的新股票需要导入，已有股票不再触发合并
       }
 
       if (needImport) {
@@ -985,7 +975,8 @@ const App = {
         };
 
         if (existingCodes.has(h.code)) {
-          // 已有：合并更新字段（保护已从网络获取的实时价格）
+          // 已有：v187 只更新模板字段（name/market/currency/accountNo），不覆盖用户修改字段
+          // 用户在 app 内修改的 shares/cost/broker/currentPrice 是用户真实数据，不应被默认值覆盖
           var idx = existing.findIndex(function(s) { return s.code === h.code; });
           if (idx >= 0) {
             var exist = existing[idx];
@@ -1002,14 +993,20 @@ const App = {
               }
               exist.id = h.code;
             }
-            // 如果源数据 currentPrice 为占位(0)，保留已获取的实时价格
-            if (!stockData.currentPrice && exist.currentPrice) {
-              stockData.currentPrice = exist.currentPrice;
-              console.log('[App] 保护已获取价格:', h.code, '保持', exist.currentPrice);
+            // v187: 只更新模板字段，保护用户修改的持仓数据
+            var templateUpdates = {
+              name: h.name,
+              currency: h.currency || "HKD",
+              market: h.market || "HK",
+              accountNo: h.accountNo || ""
+            };
+            // 如果源数据有有效 currentPrice 且本地 currentPrice 为空/0，才填充
+            if (stockData.currentPrice && (!exist.currentPrice || exist.currentPrice === 0)) {
+              templateUpdates.currentPrice = stockData.currentPrice;
             }
-            Storage.update(Storage.keys.stocks, h.code, stockData);
+            Storage.update(Storage.keys.stocks, h.code, templateUpdates);
             merged++;
-            console.log('[App] 合并更新股票:', h.code, h.name, '| 现价:', stockData.currentPrice);
+            console.log('[App] 合并模板字段:', h.code, h.name, '| 保护用户数据 shares/cost/broker');
           }
         } else {
           // 新增
