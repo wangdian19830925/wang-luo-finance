@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v185', 'PENSION-SYNC-03: clientVersion 为 v185');
+assertEq(pkg.clientVersion, 'v186', 'PENSION-SYNC-03: clientVersion 为 v186');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -371,7 +371,112 @@ assertEq(nioMerged.shares, 7392, 'BK-GUARD-02: 蔚来 shares=7392（较新版本
 // v185: updatedAt 不再被膨胀为 now()，应保留 winner 原始 updatedAt
 assertEq(nioMerged.updatedAt, '2026-06-30T13:00:00Z', 'BK-GUARD-02: updatedAt 保留 winner 原始值（不被膨胀为 now()）');
 
-console.log('\n========== 集成测试汇总 ==========');
+// ===================== v186 瞬态数据合并测试 =====================
+console.log('\n【测试 9】v186 瞬态数据合并：skipUpdatedAt + _mergeTransientFields');
+
+// TRANSIENT-01: Storage.update skipUpdatedAt=true 不膨胀 updatedAt，设置 priceUpdatedAt
+resetData();
+Storage.set(Storage.keys.stocks, [
+  { id: 'NIO', code: '9866', name: '蔚来', shares: 7392, currentPrice: 5.0, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+]);
+var nioBefore = Storage.get(Storage.keys.stocks).find(function(s) { return s.id === 'NIO'; });
+var oldUpdatedAt = nioBefore.updatedAt;
+Storage.update(Storage.keys.stocks, 'NIO', { currentPrice: 6.0 }, { skipUpdatedAt: true });
+var nioAfter = Storage.get(Storage.keys.stocks).find(function(s) { return s.id === 'NIO'; });
+assertEq(nioAfter.currentPrice, 6.0, 'TRANSIENT-01: currentPrice 更新为 6.0');
+assertEq(nioAfter.updatedAt, oldUpdatedAt, 'TRANSIENT-01: updatedAt 不变（skip=true）');
+assert(nioAfter.priceUpdatedAt && nioAfter.priceUpdatedAt !== oldUpdatedAt, 'TRANSIENT-01: priceUpdatedAt 已设置且不同于 updatedAt');
+
+// TRANSIENT-02: Storage.update 无 options 时仍膨胀 updatedAt
+resetData();
+Storage.set(Storage.keys.stocks, [
+  { id: 'AAPL', code: 'AAPL', name: '苹果', shares: 200, currentPrice: 150, updatedAt: '2026-06-28T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+]);
+var aaplBefore = Storage.get(Storage.keys.stocks).find(function(s) { return s.id === 'AAPL'; });
+var aaplOldUpdatedAt = aaplBefore.updatedAt;
+Storage.update(Storage.keys.stocks, 'AAPL', { shares: 300 });
+var aaplAfter = Storage.get(Storage.keys.stocks).find(function(s) { return s.id === 'AAPL'; });
+assertEq(aaplAfter.shares, 300, 'TRANSIENT-02: shares 更新为 300');
+assert(aaplAfter.updatedAt !== aaplOldUpdatedAt, 'TRANSIENT-02: updatedAt 已更新（skip 未设置）');
+
+// TRANSIENT-03: _mergeTransientFields — loser 有更鲜的 currentPrice 时合并到 winner
+var winner3 = { id: 'NIO', code: '9866', shares: 7392, currentPrice: 5.0, updatedAt: '2026-06-30T13:00:00Z', priceUpdatedAt: '2026-06-30T12:00:00Z' };
+var loser3  = { id: 'NIO', code: '9866', shares: 5372, currentPrice: 6.5, updatedAt: '2026-06-29T10:00:00Z', priceUpdatedAt: '2026-06-30T14:00:00Z' };
+var merged3 = Storage._mergeTransientFields(winner3, loser3, 'stocks');
+assertEq(merged3.shares, 7392, 'TRANSIENT-03: winner 的 shares=7392 保留（结构性数据）');
+assertEq(merged3.currentPrice, 6.5, 'TRANSIENT-03: loser 的 currentPrice=6.5 合并到 winner（瞬态数据更鲜）');
+assertEq(merged3.updatedAt, '2026-06-30T13:00:00Z', 'TRANSIENT-03: winner 的 updatedAt 保留');
+assertEq(merged3.priceUpdatedAt, '2026-06-30T14:00:00Z', 'TRANSIENT-03: priceUpdatedAt 更新为 loser 的值');
+
+// TRANSIENT-04: _mergeTransientFields — winner 有更鲜的 currentPrice 时不做合并
+var winner4 = { id: 'NIO', code: '9866', shares: 7392, currentPrice: 6.5, updatedAt: '2026-06-30T14:00:00Z', priceUpdatedAt: '2026-06-30T14:30:00Z' };
+var loser4  = { id: 'NIO', code: '9866', shares: 5372, currentPrice: 5.0, updatedAt: '2026-06-29T10:00:00Z', priceUpdatedAt: '2026-06-30T12:00:00Z' };
+var merged4 = Storage._mergeTransientFields(winner4, loser4, 'stocks');
+assertEq(merged4.currentPrice, 6.5, 'TRANSIENT-04: winner 的 currentPrice=6.5 保留（winner 更鲜）');
+assertEq(merged4.shares, 7392, 'TRANSIENT-04: winner 的 shares 保留');
+
+// TRANSIENT-05: _mergeTransientFields — 基金 nav 从 loser 合并到 winner，holdValue 用 winner.shares 重算
+var winner5 = { id: 'yuebao', name: '余额宝', shares: 10000, nav: 1.0, holdValue: 10000, updatedAt: '2026-06-30T13:00:00Z', priceUpdatedAt: '2026-06-30T12:00:00Z' };
+var loser5  = { id: 'yuebao', name: '余额宝', shares: 8000, nav: 1.05, holdValue: 8400, updatedAt: '2026-06-29T10:00:00Z', priceUpdatedAt: '2026-06-30T14:00:00Z' };
+var merged5 = Storage._mergeTransientFields(winner5, loser5, 'funds');
+assertEq(merged5.nav, 1.05, 'TRANSIENT-05: loser 的 nav=1.05 合并到 winner');
+assertEq(merged5.shares, 10000, 'TRANSIENT-05: winner 的 shares=10000 保留（结构性）');
+assertEq(merged5.holdValue, 10500, 'TRANSIENT-05: holdValue=10000*1.05=10500（用 winner.shares * loser.nav 重算）');
+
+// TRANSIENT-06: _mergeDataPackages — 股价刷新不膨胀 updatedAt 的场景模拟
+// 场景：iPhone 修改蔚来 shares=7392（updatedAt=T1），Mac 刷新股价 currentPrice=6.5（priceUpdatedAt=T2 > T1，但 updatedAt 不变=T0）
+// LWW 应按 updatedAt 比较：iPhone(T1) > Mac(T0)，iPhone 胜出 → shares=7392 保留
+// 瞬态合并：Mac priceUpdatedAt(T2) > iPhone(T1的priceUpdatedAt=None)，Mac 的 currentPrice 合并到 winner
+resetData();
+var iphonePkg6 = {
+  data: {
+    stocks: [
+      { id: 'NIO', code: '9866', name: '蔚来', shares: 7392, currentPrice: 5.0, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+    ]
+  },
+  updatedAt: '2026-06-30T13:00:00Z'
+};
+var macPkg6 = {
+  data: {
+    stocks: [
+      { id: 'NIO', code: '9866', name: '蔚来', shares: 5372, currentPrice: 6.5, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z', priceUpdatedAt: '2026-06-30T14:00:00Z' }
+    ]
+  },
+  updatedAt: '2026-06-29T10:00:00Z'
+};
+var mergedPkg6 = Storage._mergeDataPackages(iphonePkg6, macPkg6);
+var nio6 = mergedPkg6.data.stocks.find(function(s) { return s.code === '9866'; });
+assert(nio6, 'TRANSIENT-06: 合并结果中存在蔚来');
+assertEq(nio6.shares, 7392, 'TRANSIENT-06: 蔚来 shares=7392（iPhone 结构性数据胜出）');
+assertEq(nio6.currentPrice, 6.5, 'TRANSIENT-06: currentPrice=6.5（从 Mac 合并瞬态价格数据）');
+assertEq(nio6.updatedAt, '2026-06-30T13:00:00Z', 'TRANSIENT-06: updatedAt 为 iPhone 原始值');
+
+// TRANSIENT-07: _applyDataPackage — 本地 updatedAt 较新时仍合并瞬态价格数据
+resetData();
+Storage.set(Storage.keys.stocks, [
+  { id: 'NIO', code: '9866', name: '蔚来', shares: 7392, currentPrice: 5.0, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+]);
+var applyPkg7 = {
+  data: {
+    stocks: [
+      { id: 'NIO', code: '9866', name: '蔚来', shares: 5372, currentPrice: 6.5, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z', priceUpdatedAt: '2026-06-30T14:00:00Z' }
+    ]
+  },
+  updatedAt: '2026-06-29T10:00:00Z'
+};
+Storage._applyDataPackage(applyPkg7);
+var nio7 = JSON.parse(ctx.localStorage.getItem('fm_stocks')).find(function(s) { return s.id === 'NIO'; });
+assertEq(nio7.shares, 7392, 'TRANSIENT-07: 本地 shares=7392 保留（updatedAt 较新）');
+assertEq(nio7.currentPrice, 6.5, 'TRANSIENT-07: currentPrice=6.5（从合并结果合并瞬态价格数据）');
+assertEq(nio7.updatedAt, '2026-06-30T13:00:00Z', 'TRANSIENT-07: updatedAt 保留本地值');
+
+// TRANSIENT-08: 无 priceUpdatedAt 的旧数据（pre-v186）与 v186+ 数据合并
+// 旧数据没有 priceUpdatedAt 字段，_mergeTransientFields 不应干扰
+var winner8 = { id: 'NIO', code: '9866', shares: 7392, currentPrice: 5.0, updatedAt: '2026-06-30T13:00:00Z' };
+var loser8  = { id: 'NIO', code: '9866', shares: 5372, currentPrice: 6.5, updatedAt: '2026-06-29T10:00:00Z' };
+var merged8 = Storage._mergeTransientFields(winner8, loser8, 'stocks');
+assertEq(merged8.currentPrice, 5.0, 'TRANSIENT-08: winner 的 currentPrice 保留（loser 无 priceUpdatedAt，不合并）');
+assertEq(merged8.shares, 7392, 'TRANSIENT-08: winner 的 shares 保留');console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
 console.log('通过：' + passed + ' 个');
 console.log('失败：' + failed + ' 个');

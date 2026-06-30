@@ -1938,7 +1938,8 @@ const App = {
     stocks.forEach(function(stock) {
       var info = data.stocks && data.stocks[stock.code];
       if (info && info.price && parseFloat(info.price).toFixed(2) !== parseFloat(stock.currentPrice).toFixed(2)) {
-        Storage.update(Storage.keys.stocks, stock.id, { currentPrice: parseFloat(info.price) });
+        // v186: 股价刷新使用 skipUpdatedAt，避免 updatedAt 被膨胀导致 LWW 误判旧数据胜出
+        Storage.update(Storage.keys.stocks, stock.id, { currentPrice: parseFloat(info.price) }, { skipUpdatedAt: true });
         updated++;
         console.log('[股价] ' + stock.name + ': ' + stock.currentPrice + ' → ' + info.price);
       }
@@ -1949,7 +1950,8 @@ const App = {
     rsuList.forEach(function(r) {
       var info = data.stocks && data.stocks[r.code];
       if (info && info.price && parseFloat(info.price).toFixed(2) !== parseFloat(r.currentPrice).toFixed(2)) {
-        Storage.update(Storage.keys.rsu, r.id, { currentPrice: parseFloat(info.price) });
+        // v186: RSU 股价刷新使用 skipUpdatedAt
+        Storage.update(Storage.keys.rsu, r.id, { currentPrice: parseFloat(info.price) }, { skipUpdatedAt: true });
         updated++;
         console.log('[RSU股价] ' + r.name + ': ' + r.currentPrice + ' → ' + info.price);
       }
@@ -1963,11 +1965,12 @@ const App = {
         var newNav = parseFloat(info.nav);
         var newShares = (parseFloat(f.shares) > 0) ? parseFloat(f.shares) : (parseFloat(f.holdValue) / newNav);
         var newHoldValue = newShares * newNav;
+        // v186: 基金净值刷新使用 skipUpdatedAt
         Storage.update(Storage.keys.funds, f.id, {
           nav: newNav,
           shares: parseFloat(newShares.toFixed(2)),
           holdValue: parseFloat(newHoldValue.toFixed(2))
-        });
+        }, { skipUpdatedAt: true });
         updated++;
         console.log('[基金净值] ' + f.name + ': ' + f.nav + ' → ' + newNav);
       }

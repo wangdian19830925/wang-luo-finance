@@ -461,7 +461,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v185',
+      clientVersion: 'v186',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -496,9 +496,10 @@ const Storage = {
           const localTime = this._itemTimestamp(localItem);
           const mergeTime = this._itemTimestamp(item);
           if (localTime > mergeTime) {
-            // 本地记录 updatedAt 比合并结果更新（用户在同步期间修改了），保留本地
+            // v186: 本地 updatedAt 比合并结果更新，保留本地结构性数据
+            // 但仍需从合并结果（loser）合并更鲜的瞬态价格数据
             console.log('[CloudBase] 保护本地较新记录 ' + k + '/' + item.id + ': localTime=' + localItem.updatedAt + ' > mergeTime=' + item.updatedAt);
-            return localItem;
+            return this._mergeTransientFields(localItem, item, k);
           }
           return item; // 合并结果较新或相同，正常使用
         });
@@ -621,6 +622,57 @@ const Storage = {
     return isNaN(t) ? 0 : t;
   },
 
+  // v186: 瞬态价格字段列表（按数据类型区分）
+  _getTransientFields(key) {
+    if (key === 'stocks' || key === 'rsu') return ['currentPrice'];
+    if (key === 'funds') return ['nav', 'holdValue'];
+    return null;
+  },
+
+  // v186: 价格时间戳读取（priceUpdatedAt > updatedAt 的降级兼容）
+  _itemPriceTimestamp(item) {
+    if (!item) return 0;
+    // 优先使用 priceUpdatedAt（v186+ 瞬态更新专用）
+    var raw = item.priceUpdatedAt || 0;
+    var t = new Date(raw).getTime();
+    return isNaN(t) ? 0 : t;
+  },
+
+  // v186: 合并瞬态价格数据（从 loser 取更新鲜的 currentPrice/nav/holdValue）
+  // 场景：Mac 刷新蔚来股价 → updatedAt 不变（skipUpdatedAt），但 priceUpdatedAt 更新；
+  //       iPhone 修改 shares → updatedAt 更新 → iPhone 在 LWW 中胜出（结构性数据保留）；
+  //       但 Mac 的 currentPrice 可能比 iPhone 的更鲜，需要从 loser（Mac）合并到 winner（iPhone）
+  _mergeTransientFields(winner, loser, key) {
+    if (!winner || !loser) return winner;
+    var transientFields = this._getTransientFields(key);
+    if (!transientFields) return winner;
+    var winnerPriceTime = this._itemPriceTimestamp(winner);
+    var loserPriceTime = this._itemPriceTimestamp(loser);
+    // 如果 loser 没有更鲜的价格数据，直接返回 winner（无需合并）
+    if (loserPriceTime <= winnerPriceTime) return winner;
+    // loser 有更鲜的价格数据，合并瞬态字段
+    if (key === 'stocks' || key === 'rsu') {
+      if (loser.currentPrice !== undefined && loser.currentPrice !== null) {
+        winner.currentPrice = loser.currentPrice;
+      }
+    } else if (key === 'funds') {
+      if (loser.nav !== undefined && loser.nav !== null) {
+        winner.nav = loser.nav;
+        // 用 winner 的 shares（结构性）和 loser 的 nav（瞬态）重新计算 holdValue
+        var winnerShares = parseFloat(winner.shares) || 0;
+        if (winnerShares > 0) {
+          winner.holdValue = parseFloat((winnerShares * parseFloat(loser.nav)).toFixed(2));
+        } else if (loser.holdValue !== undefined) {
+          winner.holdValue = loser.holdValue;
+        }
+      }
+    }
+    // 将 loser 的 priceUpdatedAt 合并到 winner，标记价格数据的时间来源
+    winner.priceUpdatedAt = loser.priceUpdatedAt;
+    console.log('[CloudBase] 合并瞬态价格数据 ' + key + '/' + winner.id + ': loser priceUpdatedAt=' + loser.priceUpdatedAt + ' > winner=' + (winner.priceUpdatedAt || 'N/A'));
+    return winner;
+  },
+
   // 业务稳定键：用于跨设备去重（同一业务记录在不同设备可能生成不同随机 ID）
   _getStableBusinessKey(item, key) {
     if (!item) return null;
@@ -655,10 +707,16 @@ const Storage = {
           const oldTime = this._itemTimestamp(map[item.id]);
           const newTime = this._itemTimestamp(item);
           if (newTime > oldTime) {
-            map[item.id] = item;
+            // v186: item（云端）胜出，但可能需要从本地 loser 合并瞬态价格数据
+            map[item.id] = this._mergeTransientFields(item, map[item.id], k);
             conflictWinCloud++;
           } else if (newTime < oldTime) {
+            // v186: 本地胜出，但可能需要从云端 loser 合并瞬态价格数据
+            map[item.id] = this._mergeTransientFields(map[item.id], item, k);
             conflictWinLocal++;
+          } else {
+            // 时间相同：尝试从另一方合并更鲜的价格数据
+            map[item.id] = this._mergeTransientFields(map[item.id], item, k);
           }
         }
       });
@@ -689,6 +747,8 @@ const Storage = {
           }
           // 统一使用业务稳定键作为 ID，确保后续同步一致
           // v185: 不再膨胀 updatedAt（旧逻辑设为 new Date() 导致未来 LWW 误判旧数据为"更新"）
+          // v186: 从 loser 合并瞬态价格数据（loser 可能有更鲜的 currentPrice/nav）
+          winner = this._mergeTransientFields(winner, loser, k);
           if (winner.id !== bk) {
             winner.id = bk;
             // 保留 winner 原始 updatedAt，不做人为膨胀
@@ -1191,12 +1251,18 @@ const Storage = {
     return item;
   },
 
-  update(key, id, updates) {
+  // v186: options.skipUpdatedAt = true 时，瞬态更新（股价/净值刷新）不膨胀 updatedAt，
+  // 而是设置 priceUpdatedAt，避免 Mac 刷新股价后 updatedAt 被膨胀导致 LWW 误判旧数据为"较新"
+  update(key, id, updates, options) {
     const data = this.get(key, true); // 包含已删除，支持取消删除
     const index = data.findIndex(item => item && item.id === id);
     if (index !== -1) {
       const now = new Date().toISOString();
-      updates.updatedAt = now;
+      if (!options || !options.skipUpdatedAt) {
+        updates.updatedAt = now; // 结构性更新：膨胀 updatedAt，参与 LWW
+      } else {
+        updates.priceUpdatedAt = now; // 瞬态更新：只记录 priceUpdatedAt，不影响 updatedAt
+      }
       // 取消软删除（更新视为复活）
       if (data[index].deleted) {
         updates.deleted = false;
