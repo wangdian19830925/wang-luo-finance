@@ -4097,11 +4097,21 @@ const App = {
     var cx = 90, cy = 90, r = 70;
     var totalAngle = 0;
 
+    // 透明度径向渐变：中心透明 → 边缘实色，让饼图自然露出背景色
+    var defsSvg = '<defs>';
+    pieData.forEach(function(slice, i) {
+      defsSvg += '<radialGradient id="cashGrad' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" gradientUnits="userSpaceOnUse">' +
+        '<stop offset="0%" stop-color="' + slice.color + '" stop-opacity="0"/>' +
+        '<stop offset="100%" stop-color="' + slice.color + '" stop-opacity="0.85"/>' +
+        '</radialGradient>';
+    });
+    defsSvg += '</defs>';
+
     var slicesSvg = "";
     var legendHtml = "";
     var total = totalCash || 1;
 
-    pieData.forEach(function(slice) {
+    pieData.forEach(function(slice, i) {
       if (slice.balance <= 0) return;
       var angle = (slice.balance / total) * Math.PI * 2;
       var x1 = cx + r * Math.sin(totalAngle);
@@ -4111,7 +4121,7 @@ const App = {
       var x2 = cx + r * Math.sin(totalAngle);
       var y2 = cy - r * Math.cos(totalAngle);
 
-      slicesSvg += '<path d="M' + cx + ',' + cy + ' L' + x1 + ',' + y1 + ' A' + r + ',' + r + ' 0 ' + largeArc + ' 1 ' + x2 + ',' + y2 + ' Z" fill="' + slice.color + '" opacity="0.85" stroke="var(--bg-body)" stroke-width="2"/>';
+      slicesSvg += '<path d="M' + cx + ',' + cy + ' L' + x1 + ',' + y1 + ' A' + r + ',' + r + ' 0 ' + largeArc + ' 1 ' + x2 + ',' + y2 + ' Z" fill="url(#cashGrad' + i + ')" stroke="var(--bg-body)" stroke-width="2"/>';
 
       var pct = ((slice.balance / total) * 100).toFixed(1);
       legendHtml += '<div class="pie-legend-item">';
@@ -4120,7 +4130,7 @@ const App = {
       legendHtml += '</div>';
     });
 
-    var svg = '<svg viewBox="0 0 180 180" class="cash-pie-chart">' + slicesSvg + '</svg>';
+    var svg = '<svg viewBox="0 0 180 180" class="cash-pie-chart">' + defsSvg + slicesSvg + '</svg>';
 
     return '<div class="cash-pie-wrap">' +
       '<div class="cash-pie-title">资产分布</div>' +
@@ -5503,6 +5513,18 @@ const App = {
     // ==== 环形图 ====
     var colors = ["#4ade80", "#38bdf8", "#a78bfa", "#fbbf24", "#fb923c", "#f87171"];
     var cx = 190, cy = 190, rOuter = 130, rInner = 78;
+
+    // 透明度径向渐变：中心透明 → 外边缘实色，环形区域自然渐隐
+    var defsSvg = '<defs>';
+    list.forEach(function(item, i) {
+      var color = colors[i % colors.length];
+      defsSvg += '<radialGradient id="annuityGrad' + i + '" cx="' + cx + '" cy="' + cy + '" r="' + rOuter + '" gradientUnits="userSpaceOnUse">' +
+        '<stop offset="0%" stop-color="' + color + '" stop-opacity="0"/>' +
+        '<stop offset="100%" stop-color="' + color + '" stop-opacity="0.85"/>' +
+        '</radialGradient>';
+    });
+    defsSvg += '</defs>';
+
     var cumulative = 0;
     var slicesSvg = "";
     var legendHtml = "";
@@ -5522,7 +5544,7 @@ const App = {
         " A" + rOuter + " " + rOuter + " 0 " + largeArc + " 1 " + x2.toFixed(1) + " " + y2.toFixed(1) +
         " Z";
       var color = colors[i % colors.length];
-      slicesSvg += '<path d="' + d + '" fill="' + color + '" opacity="0.9"/>';
+      slicesSvg += '<path d="' + d + '" fill="url(#annuityGrad' + i + ')" stroke="var(--card-bg)" stroke-width="2"/>';
       legendHtml += '<div class="annuity-legend-item">' +
         '<span class="annuity-legend-dot" style="background:' + color + '"></span>' +
         '<span class="annuity-legend-name">' + self.escapeHtml(item.name) + '</span>' +
@@ -5531,7 +5553,7 @@ const App = {
     });
 
     var svgHtml = '<svg viewBox="0 0 380 380" class="annuity-donut">' +
-      slicesSvg +
+      defsSvg + slicesSvg +
       '<circle cx="' + cx + '" cy="' + cy + '" r="' + rInner + '" fill="var(--card-bg)"/>' +
       '<text x="' + cx + '" y="' + (cy - 20) + '" text-anchor="middle" class="annuity-donut-label">年金总额</text>' +
       '<text x="' + cx + '" y="' + (cy + 14) + '" text-anchor="middle" class="annuity-donut-value">' + self.formatMoney(total).replace("¥","") + '</text>' +
