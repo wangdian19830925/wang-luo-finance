@@ -5222,12 +5222,14 @@ const App = {
     var svg = [];
     svg.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:-apple-system,PingFang SC,sans-serif;font-size:12px;">');
 
-    // 渐变定义（与暗色主题适配的堆叠面积渐变）
+    // 渐变定义（所有层共享同一图表空间的线性渐变，避免 objectBoundingBox 导致薄层渐变被压缩）
+    var gradY1 = mt;
+    var gradY2 = mt + ch;
     svg.push('<defs>');
-    svg.push('  <linearGradient id="gradFundPrincipal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#14532d"/><stop offset="100%" stop-color="#0a2e18"/></linearGradient>');
-    svg.push('  <linearGradient id="gradFundInterest" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#166534"/><stop offset="100%" stop-color="#0a3d1f"/></linearGradient>');
-    svg.push('  <linearGradient id="gradCommercialPrincipal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#10204d"/></linearGradient>');
-    svg.push('  <linearGradient id="gradCommercialInterest" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e40af"/><stop offset="100%" stop-color="#122560"/></linearGradient>');
+    svg.push('  <linearGradient id="gradFundPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#22c55e"/><stop offset="100%" stop-color="#0a2e18"/></linearGradient>');
+    svg.push('  <linearGradient id="gradFundInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#0a3d1f"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#0c244d"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#0f2a5e"/></linearGradient>');
     svg.push('</defs>');
 
     // 背景

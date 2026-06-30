@@ -2,16 +2,16 @@
 set -e
 
 # Deploy to GitHub Pages using REST API (bypasses git push network restrictions)
-# Usage: GITHUB_TOKEN=xxx ./deploy.sh "v161: description"
+# Usage: GITHUB_TOKEN=xxx ./deploy.sh "v183: description"
 
 if [ -z "$GITHUB_TOKEN" ]; then
   echo "ERROR: GITHUB_TOKEN environment variable not set"
-  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v161: 描述\""
+  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v183: 描述\""
   exit 1
 fi
 
 if [ $# -lt 1 ]; then
-  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v161: description\""
+  echo "Usage: GITHUB_TOKEN=xxx ./deploy.sh \"v183: description\""
   exit 1
 fi
 
