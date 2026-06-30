@@ -60,6 +60,12 @@ assert(appCode.match(/_fetchLiveFxRates[\s\S]{0,200}location\.protocol\s*===\s*\
   'P1-02: _fetchLiveFxRates 有 file: 检查');
 assert((appCode + storageCode).match(/today\s*=\s*today\s*\?\s*new Date\(today\)/),
   'P2-02: calcLoanProgress 拷贝入参');
+assert(appCode.match(/_fetchEastMoneyHistory[\s\S]{0,800}var beg\s*=\s*ymd\(start\)/),
+  'STOCK-06M-01: _fetchEastMoneyHistory 使用6个月前日期作为 beg');
+assert(appCode.match(/_fetchEastMoneyHistory[\s\S]{0,2000}klines\.filter\(function\(k\) \{ return k\.date >= /),
+  'STOCK-06M-02: _fetchEastMoneyHistory 过滤6个月外数据');
+assert(appCode.match(/var STOCK_LOGOS[\s\S]{0,10000}'689009'\s*:\s*'data:image\/png;base64,/),
+  'LOGO-01: 九号公司 logo 为官方 PNG 图标');
 
 // 4. 检查 data 文件
 console.log('\n【4】数据文件完整性');
@@ -75,13 +81,13 @@ for (const f of dataFiles) {
 console.log('\n【5】HTML 引用检查');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert(html.includes('js/history-data.js'), 'index.html 引用 history-data.js');
-assert(html.includes('app.js?v=190'), 'index.html 版本 v190');
-assert(html.includes('style.css?v=190'), 'index.html 样式版本 v190');
+assert(html.includes('app.js?v=191'), 'index.html 版本 v191');
+assert(html.includes('style.css?v=191'), 'index.html 样式版本 v191');
 
 // 6. Service Worker
 console.log('\n【6】Service Worker');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert(sw.includes('family-finance-v190'), 'SW 版本 v190');
+assert(sw.includes('family-finance-v191'), 'SW 版本 v191');
 assert(sw.includes('history-data.js'), 'SW 预缓存 history-data.js');
 
 // 总结
