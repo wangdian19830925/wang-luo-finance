@@ -461,7 +461,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v184',
+      clientVersion: 'v185',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -472,9 +472,10 @@ const Storage = {
     if (!pkg || !pkg.data) return false;
     this._applyingCloudData = true;
     try {
-      // v184+: 逐项 updatedAt 保护——同步期间用户修改的数据 updatedAt 可能比合并快照更新，
-      // 直接全量覆盖会丢失用户在同步窗口中的新修改。改为：对每条记录做 updatedAt 比较，
-      // 只覆盖本地没有或比本地更旧的记录，保留 updatedAt 更新的本地记录。
+      // v185: 逐项 updatedAt 保护 + 业务键去重防护
+      // 问题1：同步期间用户修改的数据 updatedAt 可能比合并快照更新，直接覆盖会丢失
+      // 问题2：merge 可能改了 id（业务键去重），导致旧 id 的本地记录被当作"不在合并结果中"
+      //         重新加入，造成重复条目和旧数据覆盖新数据
       Object.keys(this.keys).forEach(k => {
         const incoming = Array.isArray(pkg.data[k]) ? pkg.data[k] : [];
         const current = this.get(this.keys[k], true);
@@ -501,12 +502,25 @@ const Storage = {
           }
           return item; // 合并结果较新或相同，正常使用
         });
-        // 保留本地中没有在合并结果中出现的记录（id 不在合并结果中的本地记录）
+        // v185: 回补本地中没有在合并结果中出现的记录
+        // 同时按业务键排除重复——如果本地记录的业务键（如股票 code）已在合并结果中存在，
+        // 则不回补（防止 merge 改了 id 后旧 id 版本被重复加入）
         const mergeIdSet = new Set(merged.filter(i => i && i.id).map(i => i.id));
+        const mergeBkSet = new Set();
+        merged.forEach(item => {
+          const bk = this._getStableBusinessKey(item, k);
+          if (bk) mergeBkSet.add(bk);
+        });
         current.forEach(item => {
-          if (item && item.id && !mergeIdSet.has(item.id)) {
-            merged.push(item);
+          if (!item || !item.id) return;
+          if (mergeIdSet.has(item.id)) return; // id 已在合并结果中，跳过
+          // v185: 检查业务键是否已在合并结果中（防止 merge 改 id 后的重复）
+          const localBk = this._getStableBusinessKey(item, k);
+          if (localBk && mergeBkSet.has(localBk)) {
+            console.log('[CloudBase] 跳过本地重复记录 ' + k + '/' + item.id + ': 业务键 ' + localBk + ' 已在合并结果中');
+            return;
           }
+          merged.push(item);
         });
         this.set(this.keys[k], merged);
       });
@@ -618,7 +632,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v184' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v185' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -674,9 +688,10 @@ const Storage = {
             if (b.id === bk) { winner = b; loser = a; }
           }
           // 统一使用业务稳定键作为 ID，确保后续同步一致
+          // v185: 不再膨胀 updatedAt（旧逻辑设为 new Date() 导致未来 LWW 误判旧数据为"更新"）
           if (winner.id !== bk) {
             winner.id = bk;
-            winner.updatedAt = new Date().toISOString();
+            // 保留 winner 原始 updatedAt，不做人为膨胀
           }
           groups[bk] = winner;
           toRemove.add(loser.id);
@@ -1098,9 +1113,46 @@ const Storage = {
     if (!this.cloudSyncEnabled || !this.cloudUser) return;
     if (this._applyingCloudData) return; // 应用云端数据时不触发反向同步
     if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
-    this.syncDebounceTimer = setTimeout(() => {
-      this.syncWithCloud().catch(e => console.error(e));
+    var self = this;
+    this.syncDebounceTimer = setTimeout(function() {
+      self.syncWithCloud().catch(function(e) { console.error(e); });
     }, 2000);
+  },
+
+  // v185: 页面即将关闭/隐藏时立即推送本地数据到云端（不走 merge，减少延迟）
+  // 解决：iPhone 修改数据后立即切 app，2s debounce 未触发导致云端缺数据
+  _emergencyPushToCloud() {
+    if (!this.cloudSyncEnabled || !this.cloudUser || !this.cloudDb) return;
+    if (this.cloudSyncing) return; // 正在同步中，无需紧急推送
+    try {
+      var pkg = this._getLocalDataPackage();
+      this.pushToCloud(pkg).then(function(ok) {
+        if (ok) console.log('[CloudBase] 紧急推送成功（页面即将关闭）');
+        else console.warn('[CloudBase] 紧急推送失败');
+      }).catch(function(e) { console.warn('[CloudBase] 紧急推送异常:', e); });
+    } catch (e) {
+      console.warn('[CloudBase] 紧急推送异常:', e);
+    }
+  },
+
+  // v185: 注册页面生命周期事件，确保数据在页面关闭前推送
+  _setupLifecycleSync() {
+    try {
+      var self = this;
+      // 页面即将关闭/刷新时紧急推送
+      window.addEventListener('beforeunload', function() {
+        self._emergencyPushToCloud();
+      });
+      // 页面进入后台时紧急推送（手机端切 app 场景）
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+          self._emergencyPushToCloud();
+        }
+      });
+      console.log('[CloudBase] 已注册生命周期同步事件（beforeunload + visibilitychange）');
+    } catch (e) {
+      console.warn('[CloudBase] 注册生命周期事件失败:', e);
+    }
   },
 
   get(key, includeDeleted) {

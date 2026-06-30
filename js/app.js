@@ -122,6 +122,9 @@ const App = {
         console.warn('[App] CloudBase 未初始化:', Storage.cloudInitError || '未知原因');
         return;
       }
+      // v185: 注册生命周期同步事件（beforeunload + visibilitychange hidden）
+      // 确保 iPhone 等移动设备切 app 时数据紧急推送到云端
+      Storage._setupLifecycleSync();
       console.log('[App] CloudBase 初始化完成，尝试恢复会话');
       const restoreResult = await Storage.restoreSession();
       console.log('[App] 会话恢复结果:', restoreResult);

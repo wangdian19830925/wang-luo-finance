@@ -75,13 +75,13 @@ for (const f of dataFiles) {
 console.log('\n【5】HTML 引用检查');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert(html.includes('js/history-data.js'), 'index.html 引用 history-data.js');
-assert(html.includes('app.js?v=184'), 'index.html 版本 v184');
-assert(html.includes('style.css?v=184'), 'index.html 样式版本 v184');
+assert(html.includes('app.js?v=185'), 'index.html 版本 v185');
+assert(html.includes('style.css?v=185'), 'index.html 样式版本 v185');
 
 // 6. Service Worker
 console.log('\n【6】Service Worker');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert(sw.includes('family-finance-v184'), 'SW 版本 v184');
+assert(sw.includes('family-finance-v185'), 'SW 版本 v185');
 assert(sw.includes('history-data.js'), 'SW 预缓存 history-data.js');
 
 // 总结

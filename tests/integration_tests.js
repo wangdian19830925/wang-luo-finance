@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v184', 'PENSION-SYNC-03: clientVersion 为 v184');
+assertEq(pkg.clientVersion, 'v185', 'PENSION-SYNC-03: clientVersion 为 v185');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -323,6 +323,53 @@ var stocksAfterGuard2 = JSON.parse(ctx.localStorage.getItem('fm_stocks'));
 var localNewRecord = stocksAfterGuard2.find(function(s) { return s.id === 'LOCAL_NEW'; });
 assert(localNewRecord, 'WRITE-GUARD-02: LOCAL_NEW 记录保留');
 assertEq(localNewRecord.shares, 50, 'WRITE-GUARD-02: LOCAL_NEW shares=50 保留');
+
+// BK-GUARD-01: v185 _applyDataPackage 业务键去重防护——merge 改了 id 后旧 id 版本不被重复加入
+resetData();
+ctx.localStorage.setItem('fm_stocks', JSON.stringify([
+  { id: '9866', code: '9866', name: '蔚来-SW', shares: 5372, updatedAt: '2026-06-28T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'xyz789', code: '9866', name: '蔚来-iPhone', shares: 7392, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-06-30T12:00:00Z' }
+]));
+// 合并结果中 id 已被改为业务键 '9866'（由 _mergeDataPackages 去重），shares=7392
+Storage._applyDataPackage({
+  data: {
+    income: [], expense: [], cashAccounts: [], assets: [], insurance: [],
+    stocks: [
+      { id: '9866', code: '9866', name: '蔚来', shares: 7392, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+    ],
+    rsu: [], funds: [], loans: [], annuities: [], notifications: [],
+    _authHash: null, _authEnabled: false
+  }
+});
+var stocksAfterBkGuard = JSON.parse(ctx.localStorage.getItem('fm_stocks'));
+var nio9866 = stocksAfterBkGuard.filter(function(s) { return s.code === '9866'; });
+assertEq(nio9866.length, 1, 'BK-GUARD-01: code=9866 只有一条记录（业务键去重防护生效）');
+assertEq(nio9866[0].shares, 7392, 'BK-GUARD-01: 蔚来 shares=7392（保留较新版本）');
+
+// BK-GUARD-02: v185 _mergeDataPackages 业务键去重不再膨胀 updatedAt
+resetData();
+var localPkgBk = {
+  data: {
+    stocks: [
+      { id: 'abc123', code: '9866', name: '蔚来-旧', shares: 5372, updatedAt: '2026-06-28T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+    ]
+  },
+  updatedAt: '2026-06-28T10:00:00Z'
+};
+var cloudPkgBk = {
+  data: {
+    stocks: [
+      { id: 'xyz789', code: '9866', name: '蔚来-新', shares: 7392, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-06-30T12:00:00Z' }
+    ]
+  },
+  updatedAt: '2026-06-30T13:00:00Z'
+};
+var mergedBk = Storage._mergeDataPackages(localPkgBk, cloudPkgBk);
+var nioMerged = mergedBk.data.stocks.find(function(s) { return s.code === '9866'; });
+assert(nioMerged, 'BK-GUARD-02: 合并结果中存在蔚来');
+assertEq(nioMerged.shares, 7392, 'BK-GUARD-02: 蔚来 shares=7392（较新版本胜出）');
+// v185: updatedAt 不再被膨胀为 now()，应保留 winner 原始 updatedAt
+assertEq(nioMerged.updatedAt, '2026-06-30T13:00:00Z', 'BK-GUARD-02: updatedAt 保留 winner 原始值（不被膨胀为 now()）');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
