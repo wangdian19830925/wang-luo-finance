@@ -420,6 +420,14 @@ const App = {
       this.loadLoanList();
       this.loadAnnuityList();
       this.loadAlertsPage();
+      // v181+: 同步后重新加载养老金参数并刷新退休计算页
+      if (this._retirementParams) {
+        this._retirementParams = this._loadRetirementParams();
+        this._retirementCache = this.calculateRetirement(this._retirementParams);
+        if (this.currentPage === 'retirement') {
+          this.renderRetirementPage();
+        }
+      }
     } catch (e) {
       console.error('[App] refreshAllPages 异常:', e);
     }
@@ -5616,6 +5624,10 @@ const App = {
   _saveRetirementParams(params) {
     try {
       localStorage.setItem('fm_retirement_params', JSON.stringify(params));
+      // v181+: 养老金参数已纳入云端同步，保存后触发推送
+      if (typeof Storage !== 'undefined' && Storage._triggerCloudSync) {
+        Storage._triggerCloudSync();
+      }
     } catch(e) {}
   },
 

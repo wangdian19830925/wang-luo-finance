@@ -159,6 +159,125 @@ var prog = Storage.calcLoanProgress(Storage.get(Storage.keys.loans)[0], '2026-06
 assert(prog.remainingPrincipal > 0 && prog.remainingPrincipal < 700000, 'DB-LOAN-02: 自动模式剩余本金在合理范围');
 assertEq(Storage.calcTotalDebts(), prog.remainingPrincipal, 'DB-LOAN-03: 自动模式总负债等于实时剩余本金');
 
+// ===================== 养老金参数云端同步测试 =====================
+console.log('\n【测试】养老金参数云端同步');
+resetData();
+
+// PENSION-SYNC-01: _extractPensionParams 从 fm_retirement_params 提取 6 个字段
+ctx.localStorage.setItem('fm_retirement_params', JSON.stringify({
+  pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
+  pensionMember2Balance: 300000, pensionMember2Monthly: 2000, pensionMember2RetireAge: 58,
+  inflation: 3, investmentReturn: 2, annualExpense: 20
+}));
+var extracted = Storage._extractPensionParams();
+assert(extracted !== null, 'PENSION-SYNC-01: 提取结果非 null');
+assertEq(extracted.pensionMember1Balance, 460126.76, 'PENSION-SYNC-01: pensionMember1Balance');
+assertEq(extracted.pensionMember1Monthly, 2984.16, 'PENSION-SYNC-01: pensionMember1Monthly');
+assertEq(extracted.pensionMember1RetireAge, 63, 'PENSION-SYNC-01: pensionMember1RetireAge');
+assertEq(extracted.pensionMember2Balance, 300000, 'PENSION-SYNC-01: pensionMember2Balance');
+assertEq(extracted.pensionMember2Monthly, 2000, 'PENSION-SYNC-01: pensionMember2Monthly');
+assertEq(extracted.pensionMember2RetireAge, 58, 'PENSION-SYNC-01: pensionMember2RetireAge');
+assert(extracted.inflation === undefined, 'PENSION-SYNC-01: 不包含非养老金字段 inflation');
+
+// PENSION-SYNC-02: fm_retirement_params 不存在时返回 null
+resetData();
+assertEq(Storage._extractPensionParams(), null, 'PENSION-SYNC-02: 无数据时返回 null');
+
+// PENSION-SYNC-03: _getLocalDataPackage 包含 _pensionParams
+resetData();
+ctx.localStorage.setItem('fm_retirement_params', JSON.stringify({
+  pensionMember1Balance: 500000, pensionMember1Monthly: 3000, pensionMember1RetireAge: 60,
+  pensionMember2Balance: 400000, pensionMember2Monthly: 2500, pensionMember2RetireAge: 55
+}));
+var pkg = Storage._getLocalDataPackage();
+assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
+assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
+assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
+assertEq(pkg.clientVersion, 'v181', 'PENSION-SYNC-03: clientVersion 为 v181');
+
+// PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
+resetData();
+ctx.localStorage.setItem('fm_retirement_params', JSON.stringify({
+  pensionMember1Balance: 100000, pensionMember1Monthly: 1000, pensionMember1RetireAge: 65,
+  pensionMember2Balance: 200000, pensionMember2Monthly: 2000, pensionMember2RetireAge: 60,
+  inflation: 3, annualExpense: 20
+}));
+Storage._applyPensionParams({
+  pensionMember1Balance: 500000, pensionMember1Monthly: 3000, pensionMember1RetireAge: 60,
+  pensionMember2Balance: 400000, pensionMember2Monthly: 2500, pensionMember2RetireAge: 55
+});
+var applied = JSON.parse(ctx.localStorage.getItem('fm_retirement_params'));
+assertEq(applied.pensionMember1Balance, 500000, 'PENSION-SYNC-04: 养老金余额已更新为云端值');
+assertEq(applied.pensionMember1RetireAge, 60, 'PENSION-SYNC-04: 退休年龄已更新为云端值');
+assertEq(applied.pensionMember2Monthly, 2500, 'PENSION-SYNC-04: 月缴费已更新为云端值');
+assertEq(applied.inflation, 3, 'PENSION-SYNC-04: 非养老金字段 inflation 保持不变');
+assertEq(applied.annualExpense, 20, 'PENSION-SYNC-04: 非养老金字段 annualExpense 保持不变');
+
+// PENSION-SYNC-05: _applyDataPackage 包含 _pensionParams 时写入 localStorage
+resetData();
+ctx.localStorage.setItem('fm_retirement_params', JSON.stringify({
+  pensionMember1Balance: 100000, pensionMember1Monthly: 1000, pensionMember1RetireAge: 65,
+  inflation: 3
+}));
+Storage._applyDataPackage({
+  data: {
+    income: [], expense: [], cashAccounts: [], assets: [], insurance: [],
+    stocks: [], rsu: [], funds: [], loans: [], annuities: [], notifications: [],
+    _authHash: null, _authEnabled: false,
+    _pensionParams: {
+      pensionMember1Balance: 999999, pensionMember1Monthly: 8888, pensionMember1RetireAge: 62,
+      pensionMember2Balance: 777777, pensionMember2Monthly: 6666, pensionMember2RetireAge: 57
+    }
+  }
+});
+var afterApply = JSON.parse(ctx.localStorage.getItem('fm_retirement_params'));
+assertEq(afterApply.pensionMember1Balance, 999999, 'PENSION-SYNC-05: _applyDataPackage 后养老金余额为云端值');
+assertEq(afterApply.pensionMember1RetireAge, 62, 'PENSION-SYNC-05: _applyDataPackage 后退休年龄为云端值');
+assertEq(afterApply.pensionMember2Balance, 777777, 'PENSION-SYNC-05: _applyDataPackage 后 pensionMember2Balance 为云端值');
+assertEq(afterApply.inflation, 3, 'PENSION-SYNC-05: 非养老金字段保持不变');
+
+// PENSION-SYNC-06: _mergeDataPackages LWW — 云端较新时使用云端养老金参数
+resetData();
+var localPkg6 = {
+  data: { _pensionParams: { pensionMember1Balance: 100000, pensionMember1Monthly: 1000, pensionMember1RetireAge: 65 } },
+  updatedAt: '2026-06-20T10:00:00Z'
+};
+var cloudPkg6 = {
+  data: { _pensionParams: { pensionMember1Balance: 500000, pensionMember1Monthly: 3000, pensionMember1RetireAge: 60 } },
+  updatedAt: '2026-06-25T10:00:00Z'
+};
+var merged6 = Storage._mergeDataPackages(localPkg6, cloudPkg6);
+assertEq(merged6.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-06: 云端较新，使用云端养老金余额');
+assertEq(merged6.data._pensionParams.pensionMember1RetireAge, 60, 'PENSION-SYNC-06: 云端较新，使用云端退休年龄');
+
+// PENSION-SYNC-07: _mergeDataPackages LWW — 本地较新时保留本地养老金参数
+resetData();
+var localPkg7 = {
+  data: { _pensionParams: { pensionMember1Balance: 600000, pensionMember1Monthly: 4000, pensionMember1RetireAge: 58 } },
+  updatedAt: '2026-06-28T10:00:00Z'
+};
+var cloudPkg7 = {
+  data: { _pensionParams: { pensionMember1Balance: 300000, pensionMember1Monthly: 2000, pensionMember1RetireAge: 65 } },
+  updatedAt: '2026-06-25T10:00:00Z'
+};
+var merged7 = Storage._mergeDataPackages(localPkg7, cloudPkg7);
+assertEq(merged7.data._pensionParams.pensionMember1Balance, 600000, 'PENSION-SYNC-07: 本地较新，保留本地养老金余额');
+assertEq(merged7.data._pensionParams.pensionMember1RetireAge, 58, 'PENSION-SYNC-07: 本地较新，保留本地退休年龄');
+
+// PENSION-SYNC-08: _mergeDataPackages — 云端无养老金参数时保留本地
+resetData();
+var localPkg8 = {
+  data: { _pensionParams: { pensionMember1Balance: 700000 } },
+  updatedAt: '2026-06-20T10:00:00Z'
+};
+var cloudPkg8 = {
+  data: {},
+  updatedAt: '2026-06-25T10:00:00Z'
+};
+var merged8 = Storage._mergeDataPackages(localPkg8, cloudPkg8);
+assert(merged8.data._pensionParams, 'PENSION-SYNC-08: 云端无养老金参数时保留本地');
+assertEq(merged8.data._pensionParams.pensionMember1Balance, 700000, 'PENSION-SYNC-08: 本地养老金余额保留');
+
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
 console.log('通过：' + passed + ' 个');

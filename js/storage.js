@@ -455,11 +455,13 @@ const Storage = {
     // v152+: 将密码信息嵌入业务数据内部，避免 CloudBase 对独立敏感字段的过滤/替换
     data._authHash = pwdHash;
     data._authEnabled = pwdEnabled;
-    console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled);
+    // v181+: 将养老金参数嵌入数据包，支持多端同步
+    data._pensionParams = this._extractPensionParams();
+    console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled, 'pensionParams:', !!data._pensionParams);
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v180',
+      clientVersion: 'v181',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -503,9 +505,63 @@ const Storage = {
           console.log('[CloudBase] 已应用合并后密码enabled:', pwdFields.passwordEnabled, '（来源:', localEnabled === pwdFields.passwordEnabled ? '本地' : '云端', '）');
         }
       }
+      // v181+: 应用养老金参数到 fm_retirement_params
+      if (pkg.data._pensionParams && typeof pkg.data._pensionParams === 'object') {
+        this._applyPensionParams(pkg.data._pensionParams);
+      }
       return true;
     } finally {
       this._applyingCloudData = false;
+    }
+  },
+
+  // v181+: 养老金参数字段名
+  _pensionFields: [
+    'pensionMember1Balance', 'pensionMember1Monthly', 'pensionMember1RetireAge',
+    'pensionMember2Balance', 'pensionMember2Monthly', 'pensionMember2RetireAge'
+  ],
+
+  // 从 fm_retirement_params 中提取养老金参数
+  _extractPensionParams() {
+    try {
+      var saved = localStorage.getItem('fm_retirement_params');
+      if (!saved) return null;
+      var parsed = JSON.parse(saved);
+      var result = {};
+      var hasAny = false;
+      this._pensionFields.forEach(function(f) {
+        if (parsed[f] !== undefined && parsed[f] !== null) {
+          result[f] = parsed[f];
+          hasAny = true;
+        }
+      });
+      return hasAny ? result : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  // 将云端同步的养老金参数合并写入 fm_retirement_params
+  _applyPensionParams(cloudParams) {
+    if (!cloudParams || typeof cloudParams !== 'object') return;
+    try {
+      var saved = localStorage.getItem('fm_retirement_params');
+      var params = saved ? JSON.parse(saved) : {};
+      var changed = false;
+      this._pensionFields.forEach(function(f) {
+        if (cloudParams[f] !== undefined && cloudParams[f] !== null) {
+          if (params[f] !== cloudParams[f]) {
+            params[f] = cloudParams[f];
+            changed = true;
+          }
+        }
+      });
+      if (changed) {
+        localStorage.setItem('fm_retirement_params', JSON.stringify(params));
+        console.log('[CloudBase] 已应用云端养老金参数:', JSON.stringify(cloudParams));
+      }
+    } catch (e) {
+      console.warn('[CloudBase] 应用养老金参数失败:', e);
     }
   },
 
@@ -528,7 +584,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v156' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v181' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -642,6 +698,27 @@ const Storage = {
       merged.data._authEnabled = !!mergedEnabled;
       merged.passwordHash = mergedHash;
       merged.passwordEnabled = !!mergedEnabled;
+    }
+
+    // v181+: 合并养老金参数（LWW，按 updatedAt 比较）
+    const localPension = (localPkg && localPkg.data && localPkg.data._pensionParams) || null;
+    const cloudPension = (cloudPkg && cloudPkg.data && cloudPkg.data._pensionParams) || null;
+    if (localPension && !cloudPension) {
+      merged.data._pensionParams = localPension;
+      console.log('[CloudBase] 养老金参数合并: 保留本地（云端无数据）');
+    } else if (!localPension && cloudPension) {
+      merged.data._pensionParams = cloudPension;
+      console.log('[CloudBase] 养老金参数合并: 使用云端（本地无数据）');
+    } else if (localPension && cloudPension) {
+      const localTime = new Date(localPkg.updatedAt || 0).getTime();
+      const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
+      if (cloudTime >= localTime) {
+        merged.data._pensionParams = cloudPension;
+        console.log('[CloudBase] 养老金参数合并: 云端较新，使用云端');
+      } else {
+        merged.data._pensionParams = localPension;
+        console.log('[CloudBase] 养老金参数合并: 本地较新，保留本地');
+      }
     }
 
     return merged;
