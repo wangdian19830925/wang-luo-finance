@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v183', 'PENSION-SYNC-03: clientVersion 为 v183');
+assertEq(pkg.clientVersion, 'v184', 'PENSION-SYNC-03: clientVersion 为 v184');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -277,6 +277,52 @@ var cloudPkg8 = {
 var merged8 = Storage._mergeDataPackages(localPkg8, cloudPkg8);
 assert(merged8.data._pensionParams, 'PENSION-SYNC-08: 云端无养老金参数时保留本地');
 assertEq(merged8.data._pensionParams.pensionMember1Balance, 700000, 'PENSION-SYNC-08: 本地养老金余额保留');
+
+// WRITE-GUARD-01: _applyDataPackage 逐项 updatedAt 保护——本地较新记录不被合并结果覆盖
+resetData();
+ctx.localStorage.setItem('fm_stocks', JSON.stringify([
+  { id: 'NIO', code: 'NIO', name: '蔚来', shares: 7392, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'AAPL', code: 'AAPL', name: '苹果', shares: 100, updatedAt: '2026-06-28T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+]));
+Storage._applyDataPackage({
+  data: {
+    income: [], expense: [], cashAccounts: [], assets: [], insurance: [],
+    stocks: [
+      { id: 'NIO', code: 'NIO', name: '蔚来', shares: 5372, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'AAPL', code: 'AAPL', name: '苹果', shares: 200, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+    ],
+    rsu: [], funds: [], loans: [], annuities: [], notifications: [],
+    _authHash: null, _authEnabled: false
+  }
+});
+var stocksAfterGuard = JSON.parse(ctx.localStorage.getItem('fm_stocks'));
+var nioRecord = stocksAfterGuard.find(function(s) { return s.id === 'NIO'; });
+var aaplRecord = stocksAfterGuard.find(function(s) { return s.id === 'AAPL'; });
+assert(nioRecord, 'WRITE-GUARD-01: NIO 记录存在');
+assertEq(nioRecord.shares, 7392, 'WRITE-GUARD-01: NIO shares=7392 保留（本地 updatedAt 较新）');
+assert(aaplRecord, 'WRITE-GUARD-01: AAPL 记录存在');
+assertEq(aaplRecord.shares, 200, 'WRITE-GUARD-01: AAPL shares=200 更新为合并值（合并 updatedAt 较新）');
+
+// WRITE-GUARD-02: _applyDataPackage 对本地新增但不在合并结果中的记录应保留
+resetData();
+ctx.localStorage.setItem('fm_stocks', JSON.stringify([
+  { id: 'NIO', code: 'NIO', name: '蔚来', shares: 7392, updatedAt: '2026-06-30T13:00:00Z', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'LOCAL_NEW', code: 'LOCAL_NEW', name: '本地新增', shares: 50, updatedAt: '2026-06-30T14:00:00Z', createdAt: '2026-06-30T14:00:00Z' }
+]));
+Storage._applyDataPackage({
+  data: {
+    income: [], expense: [], cashAccounts: [], assets: [], insurance: [],
+    stocks: [
+      { id: 'NIO', code: 'NIO', name: '蔚来', shares: 5372, updatedAt: '2026-06-29T10:00:00Z', createdAt: '2026-01-01T00:00:00Z' }
+    ],
+    rsu: [], funds: [], loans: [], annuities: [], notifications: [],
+    _authHash: null, _authEnabled: false
+  }
+});
+var stocksAfterGuard2 = JSON.parse(ctx.localStorage.getItem('fm_stocks'));
+var localNewRecord = stocksAfterGuard2.find(function(s) { return s.id === 'LOCAL_NEW'; });
+assert(localNewRecord, 'WRITE-GUARD-02: LOCAL_NEW 记录保留');
+assertEq(localNewRecord.shares, 50, 'WRITE-GUARD-02: LOCAL_NEW shares=50 保留');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');

@@ -25,7 +25,13 @@ echo "=== 通过 GitHub API 推送 ==="
 python3 scripts/deploy_github_api.py "$MSG"
 
 echo "=== 同步本地 git 历史 ==="
-git fetch origin || echo "git fetch failed, please sync manually later"
-git reset --hard origin/main || echo "git reset failed, please sync manually later"
+if git fetch origin; then
+  git reset --hard origin/main
+else
+  echo "⚠️ git fetch failed, 手动对齐 origin/main 到本地提交"
+  LOCAL_COMMIT=$(git rev-parse HEAD)
+  git update-ref refs/remotes/origin/main "$LOCAL_COMMIT"
+  echo "✅ origin/main 已对齐到 $LOCAL_COMMIT"
+fi
 
 echo "=== 完成 ==="

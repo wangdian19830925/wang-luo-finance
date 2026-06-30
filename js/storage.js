@@ -461,7 +461,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v183',
+      clientVersion: 'v184',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -472,9 +472,43 @@ const Storage = {
     if (!pkg || !pkg.data) return false;
     this._applyingCloudData = true;
     try {
+      // v184+: 逐项 updatedAt 保护——同步期间用户修改的数据 updatedAt 可能比合并快照更新，
+      // 直接全量覆盖会丢失用户在同步窗口中的新修改。改为：对每条记录做 updatedAt 比较，
+      // 只覆盖本地没有或比本地更旧的记录，保留 updatedAt 更新的本地记录。
       Object.keys(this.keys).forEach(k => {
         const incoming = Array.isArray(pkg.data[k]) ? pkg.data[k] : [];
-        this.set(this.keys[k], incoming);
+        const current = this.get(this.keys[k], true);
+        if (!Array.isArray(current) || current.length === 0) {
+          // 本地无数据，直接使用合并结果
+          this.set(this.keys[k], incoming);
+          return;
+        }
+        // 构建 id→item 映射，用于快速查找
+        const currentMap = {};
+        current.forEach(item => {
+          if (item && item.id) currentMap[item.id] = item;
+        });
+        const merged = incoming.map(item => {
+          if (!item || !item.id) return item;
+          const localItem = currentMap[item.id];
+          if (!localItem) return item; // 本地没有此 id，直接使用合并结果
+          const localTime = this._itemTimestamp(localItem);
+          const mergeTime = this._itemTimestamp(item);
+          if (localTime > mergeTime) {
+            // 本地记录 updatedAt 比合并结果更新（用户在同步期间修改了），保留本地
+            console.log('[CloudBase] 保护本地较新记录 ' + k + '/' + item.id + ': localTime=' + localItem.updatedAt + ' > mergeTime=' + item.updatedAt);
+            return localItem;
+          }
+          return item; // 合并结果较新或相同，正常使用
+        });
+        // 保留本地中没有在合并结果中出现的记录（id 不在合并结果中的本地记录）
+        const mergeIdSet = new Set(merged.filter(i => i && i.id).map(i => i.id));
+        current.forEach(item => {
+          if (item && item.id && !mergeIdSet.has(item.id)) {
+            merged.push(item);
+          }
+        });
+        this.set(this.keys[k], merged);
       });
       // 应用密码设置：只有传入有效密码时才覆盖本地；否则保留本地已有密码
       let localHash = localStorage.getItem('finance_password_hash');
@@ -584,7 +618,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v183' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v184' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
