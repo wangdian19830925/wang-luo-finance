@@ -957,6 +957,8 @@ body {
   height: 12px;
   border-radius: 3px;
 }
+
+.progress-bar {
   height: 8px;
   background: var(--bg-input);
   border-radius: 4px;

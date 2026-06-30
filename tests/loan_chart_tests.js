@@ -100,6 +100,9 @@ assert(capturedHtml.includes('<svg'), 'LOAN-CHART-03: 生成了 SVG');
 assert(capturedHtml.includes('M'), 'LOAN-CHART-03: SVG 包含路径');
 assert(capturedHtml.includes('剩余待还'), 'LOAN-CHART-03: 汇总显示剩余待还');
 assert(capturedHtml.includes('初始贷款总额'), 'LOAN-CHART-03: 汇总显示初始贷款总额');
+assert(capturedHtml.includes('url(#grad'), 'LOAN-CHART-03: 使用渐变填充');
+assert(capturedHtml.includes('stroke-dasharray'), 'LOAN-CHART-03: 包含虚线投影');
+assert(capturedHtml.includes('fill="#ef4444"'), 'LOAN-CHART-03: 包含红色标记');
 
 // LOAN-CHART-04: 无效数据不生成图表
 container.innerHTML = 'before';

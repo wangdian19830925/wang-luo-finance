@@ -5222,10 +5222,16 @@ const App = {
     var svg = [];
     svg.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:-apple-system,PingFang SC,sans-serif;font-size:12px;">');
 
+    // 渐变定义（与暗色主题适配的堆叠面积渐变）
+    svg.push('<defs>');
+    svg.push('  <linearGradient id="gradFundPrincipal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#14532d"/><stop offset="100%" stop-color="#0a2e18"/></linearGradient>');
+    svg.push('  <linearGradient id="gradFundInterest" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#166534"/><stop offset="100%" stop-color="#0a3d1f"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialPrincipal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e3a8a"/><stop offset="100%" stop-color="#10204d"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialInterest" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e40af"/><stop offset="100%" stop-color="#122560"/></linearGradient>');
+    svg.push('</defs>');
+
     // 背景
     svg.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#13132a" rx="8"/>');
-
-    // 标题（已移除，避免与今日标记重叠）
 
     // Y 轴刻度与网格
     var yTicks = [];
@@ -5234,27 +5240,50 @@ const App = {
     for (var t = 0; t <= yMax; t += yStep) yTicks.push(t);
     yTicks.forEach(function(t) {
       var y = yPos(t);
-      svg.push('<line x1="' + ml + '" y1="' + y + '" x2="' + (W - mr) + '" y2="' + y + '" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>');
-      svg.push('<text x="' + (ml - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="#94a3b8">' + fmtW(t) + '</text>');
+      svg.push('<line x1="' + ml + '" y1="' + y + '" x2="' + (W - mr) + '" y2="' + y + '" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>');
+      svg.push('<text x="' + (ml - 10) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="#94a3b8">' + fmtW(t) + '</text>');
     });
 
-    // 堆叠面积
-    svg.push('<path d="' + buildAreaPath('stack0', 'stack1') + '" fill="' + colors.fundPrincipal + '" opacity="0.85"/>');
-    svg.push('<path d="' + buildAreaPath('stack1', 'stack2') + '" fill="' + colors.fundInterest + '" opacity="0.85"/>');
-    svg.push('<path d="' + buildAreaPath('stack2', 'stack3') + '" fill="' + colors.commercialPrincipal + '" opacity="0.85"/>');
-    svg.push('<path d="' + buildAreaPath('stack3', 'stack4') + '" fill="' + colors.commercialInterest + '" opacity="0.85"/>');
+    // 堆叠面积（使用渐变填充，增强层次感）
+    svg.push('<path d="' + buildAreaPath('stack0', 'stack1') + '" fill="url(#gradFundPrincipal)" opacity="0.9"/>');
+    svg.push('<path d="' + buildAreaPath('stack1', 'stack2') + '" fill="url(#gradFundInterest)" opacity="0.9"/>');
+    svg.push('<path d="' + buildAreaPath('stack2', 'stack3') + '" fill="url(#gradCommercialPrincipal)" opacity="0.9"/>');
+    svg.push('<path d="' + buildAreaPath('stack3', 'stack4') + '" fill="url(#gradCommercialInterest)" opacity="0.9"/>');
 
     // 分界线（描边，便于看清各层）
-    svg.push('<path d="' + buildLinePath('stack1') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
-    svg.push('<path d="' + buildLinePath('stack2') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
-    svg.push('<path d="' + buildLinePath('stack3') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
-    svg.push('<path d="' + buildLinePath('stack4') + '" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack1') + '" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack2') + '" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack3') + '" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>');
+    svg.push('<path d="' + buildLinePath('stack4') + '" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>');
 
-    // 今日标记线（虚线）
+    // 总剩余还款趋势线：今日之前为柔和实线，今日之后为虚线投影
+    function buildLinePathRange(stackKey, startIdx, endIdx) {
+      var s = Math.max(0, Math.floor(startIdx));
+      var e = Math.min(totalMonths, Math.ceil(endIdx));
+      if (s > e) return '';
+      var path = '';
+      for (var i = s; i <= e; i++) {
+        var x = xPos(i), y = yPos(monthlyData[i][stackKey]);
+        path += (i === s ? 'M' : 'L') + x + ',' + y + ' ';
+      }
+      return path;
+    }
+    var todayIdxFloor = Math.max(0, Math.floor(todayIdx));
+    if (todayIdxFloor > 0) {
+      svg.push('<path d="' + buildLinePathRange('stack4', 0, todayIdxFloor) + '" fill="none" stroke="#f1f5f9" stroke-width="1.5" opacity="0.45"/>');
+    }
+    if (todayIdx < totalMonths) {
+      svg.push('<path d="' + buildLinePathRange('stack4', todayIdx, totalMonths) + '" fill="none" stroke="#4ade80" stroke-width="2" stroke-dasharray="5,4" opacity="0.85"/>');
+    }
+
+    // 今日标记线（虚线 + 顶部标签 + 底部红点）
     if (todayX >= ml && todayX <= W - mr) {
-      svg.push('<line x1="' + todayX + '" y1="' + mt + '" x2="' + todayX + '" y2="' + (mt + ch) + '" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" opacity="0.85"/>');
-      svg.push('<rect x="' + (todayX - 28) + '" y="' + (mt + 2) + '" width="56" height="18" rx="9" fill="#ef4444"/>');
-      svg.push('<text x="' + todayX + '" y="' + (mt + 14) + '" text-anchor="middle" font-size="11" font-weight="700" fill="#0a0a14">今日</text>');
+      svg.push('<line x1="' + todayX + '" y1="' + (mt + 2) + '" x2="' + todayX + '" y2="' + (mt + ch) + '" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" opacity="0.85"/>');
+      svg.push('<rect x="' + (todayX - 28) + '" y="' + (mt + 2) + '" width="56" height="20" rx="10" fill="#ef4444"/>');
+      svg.push('<text x="' + todayX + '" y="' + (mt + 15) + '" text-anchor="middle" font-size="12" font-weight="700" fill="#0a0a14">今日</text>');
+      // 底部红点（与参考图一致）
+      svg.push('<circle cx="' + todayX + '" cy="' + (mt + ch) + '" r="5" fill="#ef4444"/>');
+      svg.push('<circle cx="' + todayX + '" cy="' + (mt + ch) + '" r="2.5" fill="#0a0a14"/>');
     }
 
     // X 轴标签：起止年份 + 每 2 年 + 今日所在年
