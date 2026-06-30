@@ -102,6 +102,7 @@ assert(capturedHtml.includes('剩余待还'), 'LOAN-CHART-03: 汇总显示剩余
 assert(capturedHtml.includes('初始贷款总额'), 'LOAN-CHART-03: 汇总显示初始贷款总额');
 assert(capturedHtml.includes('url(#grad'), 'LOAN-CHART-03: 使用渐变填充');
 assert(capturedHtml.includes('gradientUnits="userSpaceOnUse"'), 'LOAN-CHART-03: 渐变使用 userSpaceOnUse，确保所有层共享同一图表空间');
+assert(capturedHtml.includes('stop-opacity'), 'LOAN-CHART-03: 渐变使用透明度渐变（stop-opacity）而非暗色终止');
 assert(capturedHtml.includes('stroke-dasharray'), 'LOAN-CHART-03: 包含虚线投影');
 assert(capturedHtml.includes('fill="#ef4444"'), 'LOAN-CHART-03: 包含红色标记');
 

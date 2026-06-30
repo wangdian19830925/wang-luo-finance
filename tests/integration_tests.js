@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v187', 'PENSION-SYNC-03: clientVersion 为 v187');
+assertEq(pkg.clientVersion, 'v189', 'PENSION-SYNC-03: clientVersion 为 v189');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -527,6 +527,56 @@ var addedStock = Storage.get(Storage.keys.stocks).find(function(s) { return s.co
 assertEq(addedStock !== null, true, 'IMPORT-GUARD-04: 新增股票正常添加');
 assertEq(addedStock.shares, 4000, 'IMPORT-GUARD-04: 新增股票 shares 使用默认值 4000');
 assertEq(addedStock.cost, 4.02, 'IMPORT-GUARD-04: 新增股票 cost 使用默认值 4.02');
+
+// === IMPORT-GUARD-05~08：importRsuData/importFundData 不覆盖用户修改字段 ===
+
+// IMPORT-GUARD-05: Storage.update 对已有 RSU 只更新模板字段，不覆盖用户修改的 currentPrice/totalShares/grantPrice
+// 模拟用户修改了 689009 currentPrice=40.00, totalShares=15000，importRsuData 应只更新模板字段
+ctx.localStorage.setItem('fm_rsu', JSON.stringify([
+  { id: '689009', code: '689009', name: '九号公司', totalShares: 15000, vested: 3371, locked: 11629, grantPrice: 24.50, currentPrice: 40.00, vesting: [{date:'2027-06-30',shares:3371},{date:'2028-06-30',shares:3371},{date:'2029-06-30',shares:3371},{date:'2030-06-30',shares:3371}], currency: 'CNY', market: 'CN', plan: '方案二', grantor: '九号有限公司', grantDate: '2026-06-30', updatedAt: '2026-06-30T12:00:00Z', createdAt: '2026-06-01T00:00:00Z' }
+]));
+// v188 importRsuData 对已有 RSU 只更新模板字段 + 重新计算 vested/locked
+var rsuTemplateUpdates = { name: '九号公司', currency: 'CNY', market: 'CN', plan: '方案二: RSU + 长期现金', grantor: '九号有限公司', grantDate: '2026-06-30', vesting: [{date:'2027-06-30',shares:3371},{date:'2028-06-30',shares:3371},{date:'2029-06-30',shares:3371},{date:'2030-06-30',shares:3371}], vested: 3371, locked: 11629 };
+Storage.update(Storage.keys.rsu, '689009', rsuTemplateUpdates);
+var rsuAfter = Storage.get(Storage.keys.rsu).find(function(r) { return r.code === '689009'; });
+assertEq(rsuAfter.currentPrice, 40.00, 'IMPORT-GUARD-05: importRsuData 不覆盖用户修改的 currentPrice（40.00 保留）');
+assertEq(rsuAfter.totalShares, 15000, 'IMPORT-GUARD-05: importRsuData 不覆盖用户修改的 totalShares（15000 保留）');
+assertEq(rsuAfter.grantPrice, 24.50, 'IMPORT-GUARD-05: importRsuData 不覆盖用户修改的 grantPrice（24.50 保留）');
+assertEq(rsuAfter.name, '九号公司', 'IMPORT-GUARD-05: importRsuData 更新模板字段 name');
+
+// IMPORT-GUARD-06: 模拟旧版本 importRsuData 用默认值覆盖 → 验证 v188 不会发生
+// 旧逻辑: Storage.update('rsu', '689009', { totalShares: 13484, currentPrice: 33.01, ... })
+ctx.localStorage.setItem('fm_rsu', JSON.stringify([
+  { id: '689009', code: '689009', name: '九号公司', totalShares: 15000, vested: 3371, locked: 11629, grantPrice: 24.50, currentPrice: 40.00, vesting: [], currency: 'CNY', market: 'CN', updatedAt: '2026-06-30T12:00:00Z', createdAt: '2026-06-01T00:00:00Z' }
+]));
+var rsuSafeUpdates = { name: '九号公司', currency: 'CNY', market: 'CN', plan: '方案二', grantor: '九号有限公司', vesting: [], vested: 3371, locked: 11629 };
+var rsuResult = Storage.update(Storage.keys.rsu, '689009', rsuSafeUpdates);
+assertEq(rsuResult.currentPrice, 40.00, 'IMPORT-GUARD-06: v188 importRsuData 不覆盖 currentPrice（40.00 不变）');
+assertEq(rsuResult.totalShares, 15000, 'IMPORT-GUARD-06: v188 importRsuData 不覆盖 totalShares（15000 不变）');
+
+// IMPORT-GUARD-07: Storage.update 对已有基金只更新模板字段，不覆盖用户修改的 holdValue/costValue/nav/shares
+// 模拟用户修改了 013126 holdValue=90000, costValue=85000, nav=0.58, shares=155304
+ctx.localStorage.setItem('fm_funds', JSON.stringify([
+  { id: '013126', code: '013126', name: '华夏食品饮料ETF发起联接C', holdValue: 90000, costValue: 85000, nav: 0.58, shares: 155304, market: 'CN', currency: 'CNY', updatedAt: '2026-06-30T12:00:00Z', createdAt: '2026-06-01T00:00:00Z' }
+]));
+// v188 importFundData 对已有基金只更新模板字段
+var fundTemplateUpdates = { name: '华夏食品饮料ETF发起联接C', currency: 'CNY', market: 'CN' };
+Storage.update(Storage.keys.funds, '013126', fundTemplateUpdates);
+var fundAfter = Storage.get(Storage.keys.funds).find(function(f) { return f.code === '013126'; });
+assertEq(fundAfter.holdValue, 90000, 'IMPORT-GUARD-07: importFundData 不覆盖用户修改的 holdValue（90000 保留）');
+assertEq(fundAfter.costValue, 85000, 'IMPORT-GUARD-07: importFundData 不覆盖用户修改的 costValue（85000 保留）');
+assertEq(fundAfter.nav, 0.58, 'IMPORT-GUARD-07: importFundData 不覆盖用户修改的 nav（0.58 保留）');
+assertEq(fundAfter.shares, 155304, 'IMPORT-GUARD-07: importFundData 不覆盖用户修改的 shares（155304 保留）');
+assertEq(fundAfter.name, '华夏食品饮料ETF发起联接C', 'IMPORT-GUARD-07: importFundData 更新模板字段 name');
+
+// IMPORT-GUARD-08: 新增基金时 importFundData 正常添加默认数据
+ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
+var newFundData = { id: '013126', code: '013126', name: '华夏食品饮料ETF发起联接C', holdValue: 82637.18, costValue: 100000.00, nav: 0.5321, shares: 155304.0, market: 'CN', currency: 'CNY' };
+Storage.add(Storage.keys.funds, newFundData);
+var addedFund = Storage.get(Storage.keys.funds).find(function(f) { return f.code === '013126'; });
+assertEq(addedFund !== null, true, 'IMPORT-GUARD-08: 新增基金正常添加');
+assertEq(addedFund.holdValue, 82637.18, 'IMPORT-GUARD-08: 新增基金 holdValue 使用默认值 82637.18');
+assertEq(addedFund.costValue, 100000.00, 'IMPORT-GUARD-08: 新增基金 costValue 使用默认值 100000.00');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');

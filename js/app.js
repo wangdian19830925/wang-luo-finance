@@ -1152,11 +1152,28 @@ const App = {
             }
             exist.id = g.code;
           }
-          if (!rsuData.currentPrice && exist.currentPrice) {
-            rsuData.currentPrice = exist.currentPrice;
+          // v188: 只更新模板字段 + 重新计算 vested/locked，保护用户修改字段
+          // 与 v187 股票修复同理：用户在 app 内修改 currentPrice/totalShares/grantPrice 后，
+          // 旧逻辑 importRsuData 全量覆盖 → updatedAt 膨胀 → sync LWW 本地胜出 → 云端被永久覆盖
+          // 现改为：模板字段可更新(name/currency/market/plan/grantor/grantDate/vesting)，
+          // 计算字段重新算(vested/locked)，用户字段保护(currentPrice/totalShares/grantPrice)
+          var templateUpdates = {
+            name: g.name,
+            currency: g.currency || "CNY",
+            market: g.market || "CN",
+            plan: g.plan || "",
+            grantor: g.grantor || "",
+            grantDate: g.grantDate,
+            vesting: g.vesting,
+            vested: vested,
+            locked: locked
+          };
+          // 如果源数据有有效 currentPrice 且本地 currentPrice 为空/0，才填充
+          if (rsuData.currentPrice && (!exist.currentPrice || exist.currentPrice === 0)) {
+            templateUpdates.currentPrice = rsuData.currentPrice;
           }
-          Storage.update(Storage.keys.rsu, g.code, rsuData);
-          console.log('[App] 合并更新 RSU:', g.code, g.name, '| 已解禁:', vested, '锁定:', locked);
+          Storage.update(Storage.keys.rsu, g.code, templateUpdates);
+          console.log('[App] 合并模板字段:', g.code, g.name, '| 已解禁:', vested, '锁定:', locked, '| 保护用户数据 currentPrice/totalShares/grantPrice');
         } else {
           Storage.add(Storage.keys.rsu, rsuData);
           console.log('[App] 新增 RSU:', g.code, g.name, '| 已解禁:', vested, '锁定:', locked);
@@ -1453,18 +1470,11 @@ const App = {
           var found = existing.some(function(ex) { return ex.code === h.code; });
           if (!found) { console.log('[App] 缺少基金 ' + h.code + '，需导入'); needImport = true; }
         });
-        // 检查是否需要更新
-        if (!needImport) {
-          existing.forEach(function(ex) {
-            var src = null;
-            for (var i = 0; i < holdings.length; i++) {
-              if (holdings[i].code === ex.code) { src = holdings[i]; break; }
-            }
-            if (src && (ex.costValue !== src.costValue || ex.holdValue !== src.holdValue)) {
-              console.log('[App] 基金 ' + ex.code + ' 信息需更新'); needImport = true;
-            }
-          });
-        }
+        // v188: 不再比较用户修改字段（costValue/holdValue/nav/shares）
+        // 与 v187 股票修复同理：用户在 app 内修改了 holdValue/costValue 等字段后，
+        // 旧逻辑比较 ex.costValue !== src.costValue 触发 importFundData → 全量覆盖 → updatedAt 膨胀
+        // → syncWithCloud LWW 让本地（默认值）胜出 → 云端被永久覆盖
+        // 现只检查是否有缺失的新基金需要导入，已有基金不再触发合并
       }
       if (needImport) this.importFundData();
     } catch(e) { console.error('[App] checkFundImportStatus 异常:', e); }
@@ -1481,14 +1491,6 @@ const App = {
       var added = 0, merged = 0, idFixed = 0;
 
       holdings.forEach(function(h) {
-        var fundData = {
-          id: h.code,
-          code: h.code, name: h.name,
-          holdValue: h.holdValue || 0, costValue: h.costValue || 0,
-          nav: h.nav || 0, shares: h.shares || 0,
-          market: h.market || "CN", currency: h.currency || "CNY"
-        };
-
         if (existingCodes.has(h.code)) {
           var idx = existing.findIndex(function(f) { return f.code === h.code; });
           if (idx >= 0) {
@@ -1506,12 +1508,35 @@ const App = {
               }
               exist.id = h.code;
             }
-            // 保护已有的净值
-            if (!fundData.nav && exist.nav) { fundData.nav = exist.nav; fundData.shares = exist.shares; fundData.holdValue = exist.holdValue; }
-            Storage.update(Storage.keys.funds, h.code, fundData);
+            // v188: 只更新模板字段，保护用户修改的持仓数据
+            // 与 v187 股票修复同理：用户在 app 内修改 holdValue/costValue/nav/shares 后，
+            // 旧逻辑 importFundData 全量覆盖 → updatedAt 膨胀 → sync LWW 本地胜出 → 云端被永久覆盖
+            // 现改为：模板字段可更新(name/currency/market)，用户字段保护(holdValue/costValue/nav/shares)
+            var templateUpdates = {
+              name: h.name,
+              currency: h.currency || "CNY",
+              market: h.market || "CN"
+            };
+            // 如果源数据有有效 nav 且本地 nav 为空/0，才填充
+            if ((h.nav && h.nav > 0) && (!exist.nav || exist.nav === 0)) {
+              templateUpdates.nav = h.nav;
+              templateUpdates.shares = h.shares || 0;
+              templateUpdates.holdValue = h.holdValue || 0;
+              templateUpdates.costValue = h.costValue || 0;
+            }
+            Storage.update(Storage.keys.funds, h.code, templateUpdates);
             merged++;
+            console.log('[App] 合并模板字段:', h.code, h.name, '| 保护用户数据 holdValue/costValue/nav/shares');
           }
         } else {
+          // 新增：首次导入可使用默认值
+          var fundData = {
+            id: h.code,
+            code: h.code, name: h.name,
+            holdValue: h.holdValue || 0, costValue: h.costValue || 0,
+            nav: h.nav || 0, shares: h.shares || 0,
+            market: h.market || "CN", currency: h.currency || "CNY"
+          };
           Storage.add(Storage.keys.funds, fundData);
           added++;
         }
@@ -5225,14 +5250,14 @@ const App = {
     var svg = [];
     svg.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:-apple-system,PingFang SC,sans-serif;font-size:12px;">');
 
-    // 渐变定义（所有层共享同一图表空间的线性渐变，避免 objectBoundingBox 导致薄层渐变被压缩）
+    // 渐变定义（透明度渐变：顶部色块高透明度→底部渐变到全透明，露出暗色背景 #13132a）
     var gradY1 = mt;
     var gradY2 = mt + ch;
     svg.push('<defs>');
-    svg.push('  <linearGradient id="gradFundPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#22c55e"/><stop offset="100%" stop-color="#0a2e18"/></linearGradient>');
-    svg.push('  <linearGradient id="gradFundInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#0a3d1f"/></linearGradient>');
-    svg.push('  <linearGradient id="gradCommercialPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#0c244d"/></linearGradient>');
-    svg.push('  <linearGradient id="gradCommercialInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#0f2a5e"/></linearGradient>');
+    svg.push('  <linearGradient id="gradFundPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#22c55e" stop-opacity="0.85"/><stop offset="100%" stop-color="#22c55e" stop-opacity="0"/></linearGradient>');
+    svg.push('  <linearGradient id="gradFundInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4ade80" stop-opacity="0.7"/><stop offset="100%" stop-color="#4ade80" stop-opacity="0"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialPrincipal" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.85"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient>');
+    svg.push('  <linearGradient id="gradCommercialInterest" x1="0" y1="' + gradY1 + '" x2="0" y2="' + gradY2 + '" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#60a5fa" stop-opacity="0.7"/><stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/></linearGradient>');
     svg.push('</defs>');
 
     // 背景
@@ -5249,11 +5274,11 @@ const App = {
       svg.push('<text x="' + (ml - 10) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="#94a3b8">' + fmtW(t) + '</text>');
     });
 
-    // 堆叠面积（使用渐变填充，增强层次感）
-    svg.push('<path d="' + buildAreaPath('stack0', 'stack1') + '" fill="url(#gradFundPrincipal)" opacity="0.9"/>');
-    svg.push('<path d="' + buildAreaPath('stack1', 'stack2') + '" fill="url(#gradFundInterest)" opacity="0.9"/>');
-    svg.push('<path d="' + buildAreaPath('stack2', 'stack3') + '" fill="url(#gradCommercialPrincipal)" opacity="0.9"/>');
-    svg.push('<path d="' + buildAreaPath('stack3', 'stack4') + '" fill="url(#gradCommercialInterest)" opacity="0.9"/>');
+    // 堆叠面积（使用透明度渐变填充：顶部色浓→底部渐隐至背景色）
+    svg.push('<path d="' + buildAreaPath('stack0', 'stack1') + '" fill="url(#gradFundPrincipal)"/>');
+    svg.push('<path d="' + buildAreaPath('stack1', 'stack2') + '" fill="url(#gradFundInterest)"/>');
+    svg.push('<path d="' + buildAreaPath('stack2', 'stack3') + '" fill="url(#gradCommercialPrincipal)"/>');
+    svg.push('<path d="' + buildAreaPath('stack3', 'stack4') + '" fill="url(#gradCommercialInterest)"/>');
 
     // 分界线（描边，便于看清各层）
     svg.push('<path d="' + buildLinePath('stack1') + '" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>');
