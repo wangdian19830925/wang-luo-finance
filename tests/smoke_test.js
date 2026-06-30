@@ -37,6 +37,7 @@ for (const f of jsFiles) {
 console.log('\n【2】关键函数存在性');
 const appCode = fs.readFileSync(path.join(__dirname, '..', 'js/app.js'), 'utf8');
 const storageCode = fs.readFileSync(path.join(__dirname, '..', 'js/storage.js'), 'utf8');
+const cssCode = fs.readFileSync(path.join(__dirname, '..', 'css/style.css'), 'utf8');
 const criticalFuncs = [
   'renderAssetTrend', 'renderFundTrend', 'renderStockCharts',
   'renderInsuranceProgress', 'loadLoanList', 'calcLoanProgress',
@@ -65,12 +66,19 @@ assert(appCode.match(/_fetchEastMoneyHistory[\s\S]{0,800}var beg\s*=\s*ymd\(star
 assert(appCode.match(/_fetchEastMoneyHistory[\s\S]{0,2000}klines\.filter\(function\(k\) \{ return k\.date >= /),
   'STOCK-06M-02: _fetchEastMoneyHistory 过滤6个月外数据');
 assert(appCode.match(/var STOCK_LOGOS[\s\S]{0,10000}'689009'\s*:\s*'data:image\/png;base64,/),
-  'LOGO-01: 九号公司 logo 为基于截图的 PNG 白色图标（透明背景）');
+  'LOGO-01: 九号公司 logo 为官方 PNG 图标（ninebot.cn）');
 // NIO logo 无蓝色背景 rect，只有白色天际线标志
 assert(!appCode.match(/'NIO':[\s\S]{0,5000}<rect[^>]*fill="#004EA2"/),
   'LOGO-02: NIO logo 无蓝色背景 rect');
 assert(appCode.match(/'NIO':[\s\S]{0,100}'data:image\/svg\+xml;base64,/),
   'LOGO-03: NIO logo 为 SVG data URI');
+// AIA 保险 logo
+assert(appCode.match(/var INSURANCE_LOGOS/),
+  'LOGO-04: INSURANCE_LOGOS 变量存在');
+assert(appCode.match(/'友邦保险'\s*:\s*'data:image\/svg\+xml,/),
+  'LOGO-05: 友邦保险 logo 为 SVG data URI');
+assert(cssCode.includes('insurance-logo'),
+  'LOGO-06: CSS 包含 .insurance-logo 类');
 
 // 4. 检查 data 文件
 console.log('\n【4】数据文件完整性');
@@ -86,13 +94,13 @@ for (const f of dataFiles) {
 console.log('\n【5】HTML 引用检查');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 assert(html.includes('js/history-data.js'), 'index.html 引用 history-data.js');
-assert(html.includes('app.js?v=192'), 'index.html 版本 v192');
-assert(html.includes('style.css?v=192'), 'index.html 样式版本 v192');
+assert(html.includes('app.js?v=193'), 'index.html 版本 v193');
+assert(html.includes('style.css?v=193'), 'index.html 样式版本 v193');
 
 // 6. Service Worker
 console.log('\n【6】Service Worker');
 const sw = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-assert(sw.includes('family-finance-v192'), 'SW 版本 v192');
+assert(sw.includes('family-finance-v193'), 'SW 版本 v193');
 assert(sw.includes('history-data.js'), 'SW 预缓存 history-data.js');
 
 // 总结

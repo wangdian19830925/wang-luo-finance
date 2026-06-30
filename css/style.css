@@ -734,6 +734,15 @@ body {
   vertical-align: middle;
   margin-right: 6px;
   object-fit: contain;
+}
+.insurance-logo {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  vertical-align: middle;
+  margin-right: 6px;
+  object-fit: contain;
   background-color: #1a1a2e;
 }
 
