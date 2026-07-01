@@ -1479,15 +1479,18 @@ const App = {
         self.loadDashboard();
         self.showToast(rsu.name + ' 已解禁: ' + oldVested + ' → ' + newVal + ' 股 (锁定 ' + newLocked + ')', 'success');
       } else if (type === 'provident-fund-balance' || type === 'provident-fund-monthly') {
-        // 获取当前参数
+        // 获取当前参数，保留未修改的字段
         var params = Storage.getProvidentFundParams();
-        var updates = {};
+        var currentBalance = parseFloat(params.providentFundBalance) || 0;
+        var currentMonthly = parseFloat(params.providentFundMonthly) || 0;
+        var newBalance = currentBalance;
+        var newMonthly = currentMonthly;
         if (type === 'provident-fund-balance') {
-          updates.balance = newVal;
+          newBalance = newVal;
         } else {
-          updates.monthly = newVal;
+          newMonthly = newVal;
         }
-        Storage.saveProvidentFundBalance(updates);
+        Storage.saveProvidentFundBalance(newBalance, newMonthly);
         self.loadProvidentFundBalance();
         self.loadDashboard(); // 刷新总资产显示
         var label = type === 'provident-fund-balance' ? '公积金余额' : '每月增加额';
@@ -1703,12 +1706,16 @@ const App = {
       // v202: 以当前持仓金额为优先，确保 holdValue 不被后续净值刷新覆盖
       // 用户输入持仓金额 + 净值 → 用持仓金额推算份额（忽略可能误填的份额）
       // 用户输入持仓金额 + 份额（无净值） → 用持仓金额/份额推导净值，并标记 navDerived
+      // 用户只输入持仓金额（无净值无份额） → 标记 navDerived，等净值刷新后从 holdValue 反算 shares
       if (holdValue > 0) {
         if (nav > 0) {
           shares = holdValue / nav;
           navDerived = false;
         } else if (shares > 0) {
           nav = holdValue / shares;
+          navDerived = true;
+        } else {
+          // holdValue > 0 但 nav=0 shares=0：标记 navDerived，holdValue 为权威值
           navDerived = true;
         }
       } else if (nav > 0 && shares > 0) {
@@ -1752,8 +1759,22 @@ const App = {
       var newNav = prompt("修改 " + fund.name + " 基金净值 (¥)", fund.nav);
       if (newNav !== null && !isNaN(parseFloat(newNav)) && parseFloat(newNav) > 0) {
         var nav = parseFloat(newNav);
-        var shares = (parseFloat(fund.shares) > 0) ? parseFloat(fund.shares) : (parseFloat(fund.holdValue) / nav);
-        var holdValue = shares * nav;
+        var oldNav = parseFloat(fund.nav) || 0;
+        var shares = parseFloat(fund.shares) || 0;
+        var holdValue = parseFloat(fund.holdValue) || 0;
+        // v202: holdValue-priority 逻辑，与 _applyPriceData 保持一致
+        if (shares > 0 && oldNav > 0 && !fund.navDerived) {
+          var impliedHoldValue = shares * oldNav;
+          if (holdValue > 0 && Math.abs(impliedHoldValue - holdValue) <= holdValue * 0.05) {
+            holdValue = shares * nav; // NAV 驱动更新 holdValue
+          } else {
+            shares = holdValue / nav; // holdValue 为权威，重算 shares
+          }
+        } else if (holdValue > 0) {
+          shares = holdValue / nav; // navDerived 或无可靠 oldNav → holdValue 优先
+        } else if (shares > 0) {
+          holdValue = shares * nav;
+        }
         Storage.update(Storage.keys.funds, id, {
           nav: nav,
           shares: parseFloat(shares.toFixed(2)),
@@ -5566,13 +5587,13 @@ const App = {
     // 显示每月增加额
     var monthlyEl = document.getElementById("providentFundMonthly");
     if (monthlyEl) {
-      monthlyEl.textContent = '¥' + (parseFloat(params.monthly) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      monthlyEl.textContent = '¥' + (parseFloat(params.providentFundMonthly) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
     
     // 显示最后更新时间
     var updateInfoEl = document.getElementById("providentFundUpdateInfo");
-    if (updateInfoEl && params.lastUpdate) {
-      var updateDate = new Date(params.lastUpdate);
+    if (updateInfoEl && params.providentFundLastUpdate) {
+      var updateDate = new Date(params.providentFundLastUpdate);
       updateInfoEl.textContent = '最后更新：' + updateDate.toLocaleDateString('zh-CN');
     }
   },

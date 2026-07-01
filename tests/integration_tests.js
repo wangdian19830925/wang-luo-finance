@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v202', 'PENSION-SYNC-03: clientVersion 为 v202');
+assertEq(pkg.clientVersion, 'v203', 'PENSION-SYNC-03: clientVersion 为 v203');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -885,6 +885,47 @@ Storage.update(Storage.keys.funds, '013176', updates04, { skipUpdatedAt: true })
 var fundAfterNav04 = Storage.get(Storage.keys.funds).find(f => f.id === '013176');
 assertEq(fundAfterNav04.holdValue, 282137.82, 'FUND-NAV-04: 新基金首次 NAV 刷新 holdValue 保留');
 assertApprox(fundAfterNav04.shares, 282137.82 / 0.5236, 0.01, 'FUND-NAV-04: 新基金首次 NAV 刷新 shares 按 holdValue/newNav 计算');
+
+// FUND-NAV-05: 添加基金时 holdValue>0 & nav=0 & shares=0 → navDerived=true（v203 新增）
+ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
+Storage.add(Storage.keys.funds, {
+  id: '013176', code: '013176', name: '新基金',
+  holdValue: 282137.82, costValue: 350000, nav: 0, shares: 0,
+  navDerived: true, currency: 'CNY', market: 'CN'
+});
+var fundNav05 = Storage.get(Storage.keys.funds).find(f => f.id === '013176');
+assertEq(fundNav05.navDerived, true, 'FUND-NAV-05: holdValue>0 & nav=0 & shares=0 时 navDerived=true');
+assertEq(fundNav05.holdValue, 282137.82, 'FUND-NAV-05: holdValue 保留用户输入值');
+assertEq(fundNav05.nav, 0, 'FUND-NAV-05: nav=0 等待刷新');
+assertEq(fundNav05.shares, 0, 'FUND-NAV-05: shares=0 等待刷新后从 holdValue/newNav 计算');
+
+// ========== PROVIDENT-FUND: 公积金余额保存与读取 ==========
+
+console.log('\n【测试 17】PROVIDENT-FUND: 公积金余额保存与读取');
+
+// PROVIDENT-FUND-01: saveProvidentFundBalance 正确保存两个数值参数
+ctx.localStorage.removeItem('fm_provident_fund');
+Storage.saveProvidentFundBalance(100000, 2000);
+var pfParams01 = Storage.getProvidentFundParams();
+assertEq(pfParams01.providentFundBalance, 100000, 'PROVIDENT-FUND-01: 保存余额 100000');
+assertEq(pfParams01.providentFundMonthly, 2000, 'PROVIDENT-FUND-01: 保存每月增加 2000');
+assertEq(pfParams01.providentFundLastUpdate !== undefined, true, 'PROVIDENT-FUND-01: 保存了更新时间');
+
+// PROVIDENT-FUND-02: getProvidentFundBalance 读取余额（含自动增长）
+var pfBalance02 = Storage.getProvidentFundBalance();
+assertEq(pfBalance02, 100000, 'PROVIDENT-FUND-02: 当前月份余额 = 100000（无月度增长）');
+
+// PROVIDENT-FUND-03: 修改余额时保留每月增加额
+Storage.saveProvidentFundBalance(150000, 2000);
+var pfParams03 = Storage.getProvidentFundParams();
+assertEq(pfParams03.providentFundBalance, 150000, 'PROVIDENT-FUND-03: 余额更新为 150000');
+assertEq(pfParams03.providentFundMonthly, 2000, 'PROVIDENT-FUND-03: 每月增加额保留 2000');
+
+// PROVIDENT-FUND-04: 修改每月增加额时保留余额
+Storage.saveProvidentFundBalance(150000, 3000);
+var pfParams04 = Storage.getProvidentFundParams();
+assertEq(pfParams04.providentFundBalance, 150000, 'PROVIDENT-FUND-04: 余额保留 150000');
+assertEq(pfParams04.providentFundMonthly, 3000, 'PROVIDENT-FUND-04: 每月增加额更新为 3000');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
