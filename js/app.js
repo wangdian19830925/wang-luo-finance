@@ -2916,6 +2916,10 @@ const App = {
       el = document.getElementById("addLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.add("show"));
       el = document.getElementById("cancelLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.remove("show"));
       el = document.getElementById("loanForm"); if (el) el.addEventListener("submit", e => { e.preventDefault(); this.saveLoan(); });
+      // v200+: 公积金余额编辑
+      el = document.getElementById("editProvidentFundBtn"); if (el) el.addEventListener("click", () => this.showProvidentFundModal());
+      el = document.getElementById("cancelProvidentFundBtn"); if (el) el.addEventListener("click", () => document.getElementById("providentFundModal").classList.remove("show"));
+      el = document.getElementById("providentFundForm"); if (el) el.addEventListener("submit", e => { e.preventDefault(); this.saveProvidentFundBalance(); });
       // 年金管理
       console.log('[App] setupForms 完成');
     } catch(e) {
@@ -4994,6 +4998,7 @@ const App = {
     const pc = document.getElementById("loanProgressList");
     if (loans.length === 0) {
       pc.innerHTML = "<div class=\"empty-tip\">暂无房贷记录</div>";
+      this.loadProvidentFundBalance();
       return;
     }
 
@@ -5083,6 +5088,8 @@ const App = {
 
     // 渲染组合贷款剩余还款趋势面积图
     this._renderLoanRepaymentChart(loans);
+    // v200+: 加载公积金余额
+    this.loadProvidentFundBalance();
   },
 
   // ===================== 房贷剩余还款趋势面积图 =====================
@@ -5458,6 +5465,82 @@ const App = {
     document.getElementById("loanFormModal").classList.remove("show");
     this.loadLoanList();
     this.showToast("房贷记录已保存");
+  },
+
+  // v200+: 显示公积金余额编辑模态框
+  showProvidentFundModal() {
+    var params = Storage.getProvidentFundParams();
+    document.getElementById("providentFundBalanceInput").value = params.balance || '';
+    document.getElementById("providentFundMonthlyInput").value = params.monthly || '';
+    document.getElementById("providentFundPasswordInput").value = '';
+    document.getElementById("providentFundModal").classList.add("show");
+  },
+
+  // v200+: 保存公积金余额（需密码验证）
+  saveProvidentFundBalance() {
+    var password = document.getElementById("providentFundPasswordInput").value;
+    var config = this.getPasswordConfig();
+    
+    if (!config || !config.enabled) {
+      // 未设置密码，直接保存
+      this._doSaveProvidentFund();
+      return;
+    }
+    
+    if (!password) {
+      this.showToast('请输入密码', 'error');
+      return;
+    }
+    
+    // 验证密码
+    var hash = this._hashPassword(password);
+    if (hash === config.hash) {
+      this._doSaveProvidentFund();
+    } else {
+      this.showToast('密码错误', 'error');
+    }
+  },
+
+  // v200+: 实际保存公积金余额
+  _doSaveProvidentFund() {
+    var balance = document.getElementById("providentFundBalanceInput").value;
+    var monthly = document.getElementById("providentFundMonthlyInput").value;
+    
+    if (!balance || isNaN(parseFloat(balance))) {
+      this.showToast('请输入有效的余额', 'error');
+      return;
+    }
+    
+    Storage.saveProvidentFundBalance(balance, monthly);
+    document.getElementById("providentFundModal").classList.remove("show");
+    this.loadProvidentFundBalance();
+    this.loadDashboard(); // 刷新总资产
+    this.showToast("公积金余额已保存");
+  },
+
+  // v200+: 加载并显示公积金余额
+  loadProvidentFundBalance() {
+    var params = Storage.getProvidentFundParams();
+    var balance = Storage.getProvidentFundBalance();
+    
+    // 显示余额
+    var balanceEl = document.getElementById("providentFundBalance");
+    if (balanceEl) {
+      balanceEl.textContent = '¥' + balance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    
+    // 显示每月增加额
+    var monthlyEl = document.getElementById("providentFundMonthly");
+    if (monthlyEl) {
+      monthlyEl.textContent = '¥' + (parseFloat(params.monthly) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    
+    // 显示最后更新时间
+    var updateInfoEl = document.getElementById("providentFundUpdateInfo");
+    if (updateInfoEl && params.lastUpdate) {
+      var updateDate = new Date(params.lastUpdate);
+      updateInfoEl.textContent = '最后更新：' + updateDate.toLocaleDateString('zh-CN');
+    }
   },
 
   // 切换单条房贷的自动/手动进度模式
@@ -6034,7 +6117,9 @@ const App = {
     var cash = this._sumCashAccounts();
     var stocks = this._sumStocksCNY();
     var funds = this._sumFundsCNY();
-    var liquidAssets = cash + stocks + funds;
+    // v200+: 公积金余额纳入今日可用资产
+    var providentFund = Storage.getProvidentFundBalance();
+    var liquidAssets = cash + stocks + funds + providentFund;
 
     var debug_assetBreakdown = {
       cash: { total: cash, accounts: Storage.get(Storage.keys.cashAccounts) },

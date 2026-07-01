@@ -480,11 +480,13 @@ const Storage = {
     data._authEnabled = pwdEnabled;
     // v181+: 将养老金参数嵌入数据包
     data._pensionParams = this._extractPensionParams();
-    console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled, 'pensionParams:', !!data._pensionParams);
+    // v200+: 将公积金余额参数嵌入数据包
+    data._providentFundParams = this._extractProvidentFundParams();
+    console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled, 'pensionParams:', !!data._pensionParams, 'providentFundParams:', !!data._providentFundParams);
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v198',
+      clientVersion: 'v200',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -583,6 +585,10 @@ const Storage = {
       if (pkg.data._pensionParams && typeof pkg.data._pensionParams === 'object') {
         this._applyPensionParams(pkg.data._pensionParams);
       }
+      // v200+: 应用公积金余额参数到 fm_provident_fund
+      if (pkg.data._providentFundParams && typeof pkg.data._providentFundParams === 'object') {
+        this._applyProvidentFundParams(pkg.data._providentFundParams);
+      }
       return true;
     } finally {
       this._applyingCloudData = false;
@@ -594,6 +600,55 @@ const Storage = {
     'pensionMember1Balance', 'pensionMember1Monthly', 'pensionMember1RetireAge',
     'pensionMember2Balance', 'pensionMember2Monthly', 'pensionMember2RetireAge'
   ],
+
+  // 公积金余额字段（云端同步）
+  _providentFundFields: [
+    'providentFundBalance', 'providentFundMonthly', 'providentFundLastUpdate'
+  ],
+
+  // 从 fm_provident_fund 中提取公积金余额参数
+  _extractProvidentFundParams() {
+    try {
+      var saved = localStorage.getItem('fm_provident_fund');
+      if (!saved) return null;
+      var parsed = JSON.parse(saved);
+      var result = {};
+      var hasAny = false;
+      this._providentFundFields.forEach(function(f) {
+        if (parsed[f] !== undefined && parsed[f] !== null) {
+          result[f] = parsed[f];
+          hasAny = true;
+        }
+      });
+      return hasAny ? result : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  // 将云端同步的公积金余额参数合并写入 fm_provident_fund
+  _applyProvidentFundParams(cloudParams) {
+    if (!cloudParams || typeof cloudParams !== 'object') return;
+    try {
+      var saved = localStorage.getItem('fm_provident_fund');
+      var params = saved ? JSON.parse(saved) : {};
+      var changed = false;
+      this._providentFundFields.forEach(function(f) {
+        if (cloudParams[f] !== undefined && cloudParams[f] !== null) {
+          if (params[f] !== cloudParams[f]) {
+            params[f] = cloudParams[f];
+            changed = true;
+          }
+        }
+      });
+      if (changed) {
+        localStorage.setItem('fm_provident_fund', JSON.stringify(params));
+        console.log('[CloudBase] 已应用云端公积金余额参数:', JSON.stringify(cloudParams));
+      }
+    } catch (e) {
+      console.warn('[CloudBase] 应用公积金余额参数失败:', e);
+    }
+  },
 
   // 从 fm_retirement_params 中提取养老金参数
   _extractPensionParams() {
@@ -854,6 +909,27 @@ const Storage = {
       } else {
         merged.data._pensionParams = localPension;
         console.log('[CloudBase] 养老金参数合并: 本地较新，保留本地');
+      }
+    }
+
+    // v200+: 合并公积金余额参数（LWW，按 updatedAt 比较）
+    const localProvident = (localPkg && localPkg.data && localPkg.data._providentFundParams) || null;
+    const cloudProvident = (cloudPkg && cloudPkg.data && cloudPkg.data._providentFundParams) || null;
+    if (localProvident && !cloudProvident) {
+      merged.data._providentFundParams = localProvident;
+      console.log('[CloudBase] 公积金余额合并: 保留本地（云端无数据）');
+    } else if (!localProvident && cloudProvident) {
+      merged.data._providentFundParams = cloudProvident;
+      console.log('[CloudBase] 公积金余额合并: 使用云端（本地无数据）');
+    } else if (localProvident && cloudProvident) {
+      const localTime = new Date(localPkg.updatedAt || 0).getTime();
+      const cloudTime = new Date(cloudPkg.updatedAt || 0).getTime();
+      if (cloudTime >= localTime) {
+        merged.data._providentFundParams = cloudProvident;
+        console.log('[CloudBase] 公积金余额合并: 云端较新，使用云端');
+      } else {
+        merged.data._providentFundParams = localProvident;
+        console.log('[CloudBase] 公积金余额合并: 本地较新，保留本地');
       }
     }
 
@@ -1384,6 +1460,8 @@ const Storage = {
     total += this.calcInsuranceSettledValue();
     // 现金资产：各账户余额（收入-支出）
     total += this.calcCashTotal();
+    // v200+: 公积金余额（从 fm_provident_fund 读取）
+    total += this.getProvidentFundBalance();
     return total;
   },
 
@@ -1393,6 +1471,61 @@ const Storage = {
     var total = 0;
     accounts.forEach(function(a) { total += parseFloat(a.balance) || 0; });
     return total;
+  },
+
+  // v200+: 获取公积金余额（自动计算月度增长）
+  getProvidentFundBalance() {
+    try {
+      var saved = localStorage.getItem('fm_provident_fund');
+      if (!saved) return 0;
+      var params = JSON.parse(saved);
+      var balance = parseFloat(params.providentFundBalance) || 0;
+      var monthly = parseFloat(params.providentFundMonthly) || 0;
+      var lastUpdate = params.providentFundLastUpdate || new Date().toISOString();
+      
+      // 计算自上次更新以来经过的月数
+      var lastDate = new Date(lastUpdate);
+      var now = new Date();
+      var monthsPassed = (now.getFullYear() - lastDate.getFullYear()) * 12 + (now.getMonth() - lastDate.getMonth());
+      
+      if (monthsPassed > 0 && monthly > 0) {
+        // 自动计算增长（但不自动保存，由用户保存时更新）
+        balance = balance + monthsPassed * monthly;
+      }
+      
+      return balance;
+    } catch (e) {
+      console.warn('[Storage] 读取公积金余额失败:', e);
+      return 0;
+    }
+  },
+
+  // v200+: 保存公积金余额参数
+  saveProvidentFundBalance(balance, monthly) {
+    try {
+      var params = {
+        providentFundBalance: parseFloat(balance) || 0,
+        providentFundMonthly: parseFloat(monthly) || 0,
+        providentFundLastUpdate: new Date().toISOString()
+      };
+      localStorage.setItem('fm_provident_fund', JSON.stringify(params));
+      console.log('[Storage] 保存公积金余额:', params);
+      return true;
+    } catch (e) {
+      console.warn('[Storage] 保存公积金余额失败:', e);
+      return false;
+    }
+  },
+
+  // v200+: 获取公积金余额参数（用于显示）
+  getProvidentFundParams() {
+    try {
+      var saved = localStorage.getItem('fm_provident_fund');
+      if (!saved) return { balance: 0, monthly: 0, lastUpdate: new Date().toISOString() };
+      return JSON.parse(saved);
+    } catch (e) {
+      return { balance: 0, monthly: 0, lastUpdate: new Date().toISOString() };
+    }
   },
 
   // 保险沉淀资产（=累计已缴保费, 纳入总资产）
