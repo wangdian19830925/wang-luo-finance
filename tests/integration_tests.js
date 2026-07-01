@@ -696,6 +696,102 @@ var merged = Storage._mergeDataPackages(localPkg, cloudPkg2);
 assertEq(merged.data._authHash, 'hcloud', 'AUTH-SYNC-06: 云端较新时密码使用云端 hash');
 assertEq(merged.data.authConfig[0].hash, 'hcloud', 'AUTH-SYNC-06: authConfig hash 使用云端较新值');
 
+// ========== IMPORT-LWW: 导入模板更新不应膨胀 updatedAt ==========
+
+console.log('\n【测试 15】IMPORT-LWW: 导入模板更新不膨胀 updatedAt');
+
+// 清空数据
+ctx.localStorage.clear();
+
+// IMPORT-LWW-01: Storage.update 模板字段使用 skipUpdatedAt 时 updatedAt 不变
+var origTime = '2026-01-15T10:00:00.000Z';
+Storage.add(Storage.keys.stocks, { id: 'NIO', code: 'NIO', name: '蔚来SW', shares: 7392, cost: 0, currentPrice: 5.05, currency: 'USD', market: 'US', updatedAt: origTime });
+var nioBefore = Storage.get(Storage.keys.stocks).find(s => s.code === 'NIO');
+assertEq(nioBefore.updatedAt, origTime, 'IMPORT-LWW-01: 添加股票后 updatedAt = ' + origTime);
+
+// 模板字段更新（v199: skipUpdatedAt=true）
+Storage.update(Storage.keys.stocks, 'NIO', { name: '蔚来', currency: 'USD', market: 'US' }, { skipUpdatedAt: true });
+var nioAfter = Storage.get(Storage.keys.stocks).find(s => s.code === 'NIO');
+assertEq(nioAfter.updatedAt, origTime, 'IMPORT-LWW-01: 模板更新后 updatedAt 保持不变');
+assertEq(nioAfter.shares, 7392, 'IMPORT-LWW-01: 用户修改的 shares 不被覆盖');
+assertEq(nioAfter.name, '蔚来', 'IMPORT-LWW-01: 模板字段 name 被更新');
+
+// IMPORT-LWW-02: Storage.update 不使用 skipUpdatedAt 时 updatedAt 被膨胀（对照组）
+Storage.add(Storage.keys.stocks, { id: '00992', code: '00992', name: '联想', shares: 4000, cost: 4.02, updatedAt: origTime });
+Storage.update(Storage.keys.stocks, '00992', { name: '联想集团' }); // 无 skipUpdatedAt
+var lenovoAfter = Storage.get(Storage.keys.stocks).find(s => s.code === '00992');
+assert(lenovoAfter.updatedAt !== origTime, 'IMPORT-LWW-02: 无 skipUpdatedAt 时 updatedAt 被膨胀');
+assertEq(lenovoAfter.shares, 4000, 'IMPORT-LWW-02: shares 不被覆盖（只更新指定字段）');
+
+// IMPORT-LWW-03: _mergeDataPackages LWW 正确保留用户修改的 shares
+ctx.localStorage.clear();
+var userTime = '2026-06-20T08:00:00.000Z'; // 用户修改 shares 时间
+var templateTime = '2026-07-01T12:00:00.000Z'; // 模板更新时间（v199 后不再膨胀）
+
+// 本地包：用户修改 shares=7392, updatedAt=userTime
+var localPkg = {
+  data: {
+    stocks: [{ id: 'NIO', code: 'NIO', name: '蔚来', shares: 7392, cost: 0, currentPrice: 5.05, currency: 'USD', market: 'US', updatedAt: userTime }],
+    authConfig: []
+  },
+  updatedAt: userTime
+};
+// 云端包：模板默认 shares=5372, updatedAt=templateTime（旧版本膨胀或首次导入）
+var cloudPkg = {
+  data: {
+    stocks: [{ id: 'NIO', code: 'NIO', name: '蔚来SW', shares: 5372, cost: 0, currentPrice: 4.80, currency: 'USD', market: 'US', updatedAt: templateTime }],
+    authConfig: []
+  },
+  updatedAt: templateTime
+};
+
+// 场景 A: 用户修改较新 → 本地胜出 → shares=7392 保留
+var mergedA = Storage._mergeDataPackages(localPkg, cloudPkg); // 本地 updatedAt 更早但这是用户修改时间
+var nioMergedA = mergedA.data.stocks.find(s => s.id === 'NIO');
+// LWW: cloudPkg updatedAt 较新 → 云端胜出 → shares=5372
+// 这正是 v199 要修复的：如果云端 updatedAt 是因模板更新膨胀的（而不是用户真实修改），shares=5372 不应胜出
+// 但 _mergeDataPackages 只看 updatedAt 时间戳，无法区分"膨胀"还是"真实修改"
+// 所以 v199 的修复是在 importStockData 端不膨胀 updatedAt，确保 updatedAt 反映真实修改时间
+assertEq(nioMergedA.shares, 5372, 'IMPORT-LWW-03a: LWW 按 updatedAt 决胜 → 云端 updatedAt 更新 → shares=5372（这是旧bug的行为）');
+
+// 场景 B: v199 修复后，模板更新不膨胀 updatedAt → 用户修改 updatedAt 保持较新
+var localPkgFixed = {
+  data: {
+    stocks: [{ id: 'NIO', code: 'NIO', name: '蔚来', shares: 7392, cost: 0, currentPrice: 5.05, currency: 'USD', market: 'US', updatedAt: userTime }],
+    authConfig: []
+  },
+  updatedAt: userTime
+};
+// 云端包：shares=5372 但 updatedAt 是原始导入时间（v199 不膨胀）
+var cloudPkgFixed = {
+  data: {
+    stocks: [{ id: 'NIO', code: 'NIO', name: '蔚来SW', shares: 5372, cost: 0, currentPrice: 4.80, currency: 'USD', market: 'US', updatedAt: '2026-01-10T00:00:00.000Z' }],
+    authConfig: []
+  },
+  updatedAt: '2026-01-10T00:00:00.000Z'
+};
+var mergedB = Storage._mergeDataPackages(localPkgFixed, cloudPkgFixed);
+var nioMergedB = mergedB.data.stocks.find(s => s.id === 'NIO');
+assertEq(nioMergedB.shares, 7392, 'IMPORT-LWW-03b: v199 后 updatedAt 反映真实修改 → 本地胜出 → shares=7392 保留');
+
+// IMPORT-LWW-04: RSU 模板更新 skipUpdatedAt
+ctx.localStorage.clear();
+Storage.add(Storage.keys.rsu, { id: 'RSU001', code: 'RSU001', name: '旧名', totalShares: 1000, grantPrice: 5, currentPrice: 6, updatedAt: origTime });
+Storage.update(Storage.keys.rsu, 'RSU001', { name: '新名', market: 'CN' }, { skipUpdatedAt: true });
+var rsuAfter = Storage.get(Storage.keys.rsu).find(r => r.id === 'RSU001');
+assertEq(rsuAfter.updatedAt, origTime, 'IMPORT-LWW-04: RSU 模板更新后 updatedAt 保持不变');
+assertEq(rsuAfter.totalShares, 1000, 'IMPORT-LWW-04: RSU 用户修改的 totalShares 不被覆盖');
+assertEq(rsuAfter.name, '新名', 'IMPORT-LWW-04: RSU 模板字段 name 被更新');
+
+// IMPORT-LWW-05: 基金模板更新 skipUpdatedAt
+ctx.localStorage.clear();
+Storage.add(Storage.keys.funds, { id: '515170', code: '515170', name: '旧名', shares: 2000, nav: 1.5, holdValue: 3000, updatedAt: origTime });
+Storage.update(Storage.keys.funds, '515170', { name: '新名', currency: 'CNY' }, { skipUpdatedAt: true });
+var fundAfter = Storage.get(Storage.keys.funds).find(f => f.id === '515170');
+assertEq(fundAfter.updatedAt, origTime, 'IMPORT-LWW-05: 基金模板更新后 updatedAt 保持不变');
+assertEq(fundAfter.shares, 2000, 'IMPORT-LWW-05: 基金用户修改的 shares 不被覆盖');
+assertEq(fundAfter.name, '新名', 'IMPORT-LWW-05: 基金模板字段 name 被更新');
+
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');
 console.log('通过：' + passed + ' 个');

@@ -1019,7 +1019,11 @@ const App = {
             if (stockData.currentPrice && (!exist.currentPrice || exist.currentPrice === 0)) {
               templateUpdates.currentPrice = stockData.currentPrice;
             }
-            Storage.update(Storage.keys.stocks, h.code, templateUpdates);
+            // v199: 模板字段更新使用 skipUpdatedAt，防止 updatedAt 膨胀导致 LWW 误判
+            // 根因：每次 importStockData 对已有股票更新模板字段时 updatedAt 被刷新为当前时间，
+            // 同步 LWW 时 updatedAt 更新的设备胜出 → 该设备的模板默认 shares 覆盖用户修改的 shares
+            // 修复：模板字段同源（STOCK_HOLDINGS），各设备独立更新即可，无需参与 LWW
+            Storage.update(Storage.keys.stocks, h.code, templateUpdates, { skipUpdatedAt: true });
             merged++;
             console.log('[App] 合并模板字段:', h.code, h.name, '| 保护用户数据 shares/cost/broker');
           }
@@ -1187,7 +1191,8 @@ const App = {
           if (rsuData.currentPrice && (!exist.currentPrice || exist.currentPrice === 0)) {
             templateUpdates.currentPrice = rsuData.currentPrice;
           }
-          Storage.update(Storage.keys.rsu, g.code, templateUpdates);
+          // v199: 模板字段更新使用 skipUpdatedAt，防止 updatedAt 膨胀导致 LWW 误判
+          Storage.update(Storage.keys.rsu, g.code, templateUpdates, { skipUpdatedAt: true });
           console.log('[App] 合并模板字段:', g.code, g.name, '| 已解禁:', vested, '锁定:', locked, '| 保护用户数据 currentPrice/totalShares/grantPrice');
         } else {
           Storage.add(Storage.keys.rsu, rsuData);
@@ -1539,7 +1544,8 @@ const App = {
               templateUpdates.holdValue = h.holdValue || 0;
               templateUpdates.costValue = h.costValue || 0;
             }
-            Storage.update(Storage.keys.funds, h.code, templateUpdates);
+            // v199: 模板字段更新使用 skipUpdatedAt，防止 updatedAt 膨胀导致 LWW 误判
+            Storage.update(Storage.keys.funds, h.code, templateUpdates, { skipUpdatedAt: true });
             merged++;
             console.log('[App] 合并模板字段:', h.code, h.name, '| 保护用户数据 holdValue/costValue/nav/shares');
           }
