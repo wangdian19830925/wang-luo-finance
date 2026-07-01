@@ -486,7 +486,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v203',
+      clientVersion: 'v204',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -757,7 +757,10 @@ const Storage = {
   _getStableBusinessKey(item, key) {
     if (!item) return null;
     if (key === 'insurance') return item.contractNo || null;
-    if (key === 'stocks' || key === 'funds' || key === 'rsu' || key === 'annuities') return item.code || null;
+    if (key === 'stocks' || key === 'rsu' || key === 'annuities') return item.code || null;
+    // v204: 基金不再以 code 为业务键（同一代码允许多条记录，不同买入时机）
+    // 仅靠 id 做 LWW 去重，多条同 code 记录在同步时各自独立
+    if (key === 'funds') return null;
     if (key === 'loans') return item.contractNo || item.accountNo || null;
     return null;
   },

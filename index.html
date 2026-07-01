@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-07-01-v203 -->
+  <!-- version: 2026-07-01-v204 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=203">
+  <link rel="stylesheet" href="./css/style.css?v=204">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -437,20 +437,20 @@
               <input type="text" id="fundName" required placeholder="如：华夏食品饮料ETF发起联接C">
             </div>
             <div class="form-group">
-              <label>投入本金 (¥)</label>
-              <input type="number" id="fundCostValue" step="0.01" required placeholder="0.00">
+              <label>持有份额 <span style="color:#e74c3c">*</span></label>
+              <input type="number" id="fundShares" step="0.01" required placeholder="买入后份额不变，是追踪市值的基础">
             </div>
             <div class="form-group">
-              <label>当前持仓金额 (¥)</label>
-              <input type="number" id="fundHoldValue" step="0.01" required placeholder="0.00">
+              <label>投入本金 (¥)</label>
+              <input type="number" id="fundCostValue" step="0.01" required placeholder="0.00">
             </div>
             <div class="form-group">
               <label>当前净值 (¥)</label>
               <input type="number" id="fundNav" step="0.0001" placeholder="留空则自动查询">
             </div>
             <div class="form-group">
-              <label>持有份额</label>
-              <input type="number" id="fundShares" step="0.01" placeholder="留空则根据金额/净值自动计算">
+              <label>当前持仓金额 (¥) <span style="color:#999;font-size:12px">（可自动计算）</span></label>
+              <input type="number" id="fundHoldValue" step="0.01" placeholder="留空则=份额×净值自动计算">
             </div>
             <div class="form-actions">
               <button type="button" class="btn btn-cancel" id="cancelFundBtn">取消</button>
@@ -475,17 +475,6 @@
       </div>
       <div class="records-list" id="fundList">
         <div class="empty-tip">暂无基金记录</div>
-      </div>
-
-
-      <!-- 基金市值曲线 -->
-      <div class="asset-trend-section" id="fundTrendSection" style="margin-top:16px;">
-        <div class="section-header">
-          <div class="asset-trend-change" id="fundTrendRange"></div>
-        </div>
-        <div class="asset-trend-chart" id="fundTrendChart">
-          <div class="empty-tip">加载中...</div>
-        </div>
       </div>
     </section>
 
@@ -1352,7 +1341,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=203"></script>
+  <script src="./js/storage.js?v=204"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1362,6 +1351,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=203"></script>
+  <script src="./js/app.js?v=204"></script>
 </body>
 </html>

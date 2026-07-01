@@ -1556,59 +1556,46 @@ const App = {
     var holdings = (typeof FUND_HOLDINGS !== 'undefined') ? FUND_HOLDINGS : [];
     if (holdings.length === 0) return;
     try {
-      var existing = Storage.get(Storage.keys.funds, true); // 包含已删除，便于修复旧 ID
-      var existingCodes = new Set();
-      var existingMap = {};
-      existing.forEach(function(f) { if (f && f.code) { existingCodes.add(f.code); existingMap[f.code] = f; } });
-      var added = 0, merged = 0, idFixed = 0;
+      var existing = Storage.get(Storage.keys.funds, true); // 包含已删除
+      // v204: 同一代码可有多条记录，不再用 code 做 ID 或业务键
+      // 对于每个模板 code，更新所有匹配记录的 name/currency/market，并填充 nav（如果本地 nav=0）
+      var added = 0, merged = 0;
 
       holdings.forEach(function(h) {
-        if (existingCodes.has(h.code)) {
-          var idx = existing.findIndex(function(f) { return f.code === h.code; });
-          if (idx >= 0) {
-            var exist = existing[idx];
-            // 修复旧 ID 为稳定键（基金代码）
-            if (exist.id !== h.code) {
-              var all = Storage.get(Storage.keys.funds, true);
-              var aidx = all.findIndex(function(x) { return x.id === exist.id; });
-              if (aidx !== -1) {
-                all[aidx].id = h.code;
-                all[aidx].updatedAt = new Date().toISOString();
-                Storage.set(Storage.keys.funds, all);
-                idFixed++;
-                console.log('[App] 修复基金 ID:', exist.id, '→', h.code);
-              }
-              exist.id = h.code;
-            }
-            // v188: 只更新模板字段，保护用户修改的持仓数据
-            // 与 v187 股票修复同理：用户在 app 内修改 holdValue/costValue/nav/shares 后，
-            // 旧逻辑 importFundData 全量覆盖 → updatedAt 膨胀 → sync LWW 本地胜出 → 云端被永久覆盖
-            // 现改为：模板字段可更新(name/currency/market)，用户字段保护(holdValue/costValue/nav/shares)
+        // 查找所有匹配该 code 的记录
+        var matching = existing.filter(function(f) { return f && f.code === h.code && !f.deleted; });
+        if (matching.length > 0) {
+          // 更新所有匹配记录的模板字段
+          matching.forEach(function(exist) {
             var templateUpdates = {
               name: h.name,
               currency: h.currency || "CNY",
               market: h.market || "CN"
             };
-            // 如果源数据有有效 nav 且本地 nav 为空/0，才填充
+            // 如果源数据有有效 nav 且本地 nav 为空/0，才填充 nav
             if ((h.nav && h.nav > 0) && (!exist.nav || exist.nav === 0)) {
               templateUpdates.nav = h.nav;
-              templateUpdates.shares = h.shares || 0;
-              templateUpdates.holdValue = h.holdValue || 0;
-              templateUpdates.costValue = h.costValue || 0;
               templateUpdates.navDerived = false;
+              if (exist.shares && exist.shares > 0) {
+                templateUpdates.holdValue = parseFloat((exist.shares * h.nav).toFixed(2));
+              }
             }
-            // v199: 模板字段更新使用 skipUpdatedAt，防止 updatedAt 膨胀导致 LWW 误判
-            Storage.update(Storage.keys.funds, h.code, templateUpdates, { skipUpdatedAt: true });
-            merged++;
-            console.log('[App] 合并模板字段:', h.code, h.name, '| 保护用户数据 holdValue/costValue/nav/shares');
-          }
+            Storage.update(Storage.keys.funds, exist.id, templateUpdates, { skipUpdatedAt: true });
+          });
+          merged += matching.length;
+          console.log('[App] 合并模板字段:', h.code, h.name, '| 更新了 ' + matching.length + ' 条记录');
         } else {
-          // 新增：首次导入可使用默认值
+          // 新增：首次导入，以 shares 和 nav 为基础计算 holdValue
+          var hShares = h.shares || 0;
+          var hNav = h.nav || 0;
+          var hHoldValue = h.holdValue || 0;
+          if (hShares > 0 && hNav > 0) {
+            hHoldValue = parseFloat((hShares * hNav).toFixed(2));
+          }
           var fundData = {
-            id: h.code,
             code: h.code, name: h.name,
-            holdValue: h.holdValue || 0, costValue: h.costValue || 0,
-            nav: h.nav || 0, shares: h.shares || 0,
+            holdValue: hHoldValue, costValue: h.costValue || 0,
+            nav: hNav, shares: hShares,
             navDerived: false,
             market: h.market || "CN", currency: h.currency || "CNY"
           };
@@ -1644,35 +1631,75 @@ const App = {
         return;
       }
 
+      // 按代码分组：相同代码的多条记录放在一起
+      var groups = {};
+      var groupOrder = [];
+      list.forEach(function(f) {
+        if (!groups[f.code]) {
+          groups[f.code] = [];
+          groupOrder.push(f.code);
+        }
+        groups[f.code].push(f);
+      });
+
       var totalHold = 0, totalCost = 0;
       var self = this;
       var html = "";
 
-      list.forEach(function(f) {
-        var holdValue = parseFloat(f.holdValue) || 0;
-        var costValue = parseFloat(f.costValue) || 0;
-        var profit = holdValue - costValue;
-        var nav = parseFloat(f.nav) || 0;
-        var shares = parseFloat(f.shares) || 0;
-        totalHold += holdValue;
-        totalCost += costValue;
-        var profitClass = profit >= 0 ? "income" : "expense";
+      groupOrder.forEach(function(code) {
+        var items = groups[code];
+        var groupHold = 0, groupCost = 0;
+        // 组标题
+        var groupName = items[0].name || code;
+        html += '<div class="fund-group">';
+        html += '<div class="fund-group-header">' + groupName + '（' + code + '）</div>';
 
-        html += '<div class="record-item">' +
-          '<div class="record-info">' +
-            '<div class="record-title">' + f.name + '（' + f.code + '）</div>' +
-            '<div class="record-detail">持仓 ¥' + self._formatNum(holdValue) + ' · 本金 ¥' + self._formatNum(costValue) + '</div>' +
-            (nav > 0
-              ? '<div class="record-detail" style="font-size:12px;color:#94a3b8;">净值 ¥' + nav.toFixed(4) + ' · 份额 ' + self._formatNum(shares) + ' 份</div>'
-              : '<div class="record-detail" style="font-size:12px;color:#f59e0b;">⚠ 净值待查询</div>') +
-          '</div>' +
-          '<div class="record-amount ' + profitClass + '">' + self.formatMoney(holdValue) +
-            '<div style="font-size:12px;">' + (profit >= 0 ? "+" : "") + self.formatMoney(profit) + '</div>' +
-          '</div>' +
-          '<div class="record-actions">' +
-            '<button onclick="App.deleteFund(\'' + f.id + '\')">' + self.icon('delete') + '</button>' +
-          '</div>' +
+        items.forEach(function(f) {
+          var holdValue = parseFloat(f.holdValue) || 0;
+          var costValue = parseFloat(f.costValue) || 0;
+          var profit = holdValue - costValue;
+          var nav = parseFloat(f.nav) || 0;
+          var shares = parseFloat(f.shares) || 0;
+          totalHold += holdValue;
+          totalCost += costValue;
+          groupHold += holdValue;
+          groupCost += costValue;
+          var profitClass = profit >= 0 ? "income" : "expense";
+
+          html += '<div class="record-item">' +
+            '<div class="record-info">' +
+              '<div class="record-detail">持仓 ¥' + self._formatNum(holdValue) + ' · 本金 ¥' + self._formatNum(costValue) + '</div>' +
+              (nav > 0
+                ? '<div class="record-detail" style="font-size:12px;color:#94a3b8;">净值 ¥' + nav.toFixed(4) + ' · 份额 ' + self._formatNum(shares) + ' 份</div>'
+                : '<div class="record-detail" style="font-size:12px;color:#f59e0b;">⚠ 净值待查询</div>') +
+            '</div>' +
+            '<div class="record-amount ' + profitClass + '">' + self.formatMoney(holdValue) +
+              '<div style="font-size:12px;">' + (profit >= 0 ? "+" : "") + self.formatMoney(profit) + '</div>' +
+            '</div>' +
+            '<div class="record-actions">' +
+              '<button onclick="App.deleteFund(\'' + f.id + '\')">' + self.icon('delete') + '</button>' +
+            '</div>' +
+          '</div>';
+        });
+
+        // 组合计
+        var groupProfit = groupHold - groupCost;
+        var groupProfitClass = groupProfit >= 0 ? "income" : "expense";
+        html += '<div class="fund-group-summary">' +
+          '<span>合计持仓 ¥' + self._formatNum(groupHold) + '</span>' +
+          '<span class="' + groupProfitClass + '">' + (groupProfit >= 0 ? "+" : "") + self.formatMoney(groupProfit) + '</span>' +
         '</div>';
+
+        // 组趋势图占位（动态渲染）
+        html += '<div class="asset-trend-section fund-group-trend" data-code="' + code + '">';
+        html += '<div class="section-header">' +
+          '<div class="asset-trend-title">' + self.icon('trend') + ' 市值曲线</div>' +
+          '<div class="asset-trend-change" id="fundTrendRange_' + code + '"></div>' +
+        '</div>';
+        html += '<div class="asset-trend-chart" id="fundTrendChart_' + code + '"><div class="empty-tip">加载中...</div></div>';
+        html += '</div>'; // .fund-group-trend
+
+        html += '</div>'; // .fund-group
       });
 
       if (container) container.innerHTML = html;
@@ -1684,7 +1711,7 @@ const App = {
         profitLossEl.style.color = totalProfit >= 0 ? "#22c55e" : "#ef4444";
       }
 
-      // 渲染 6 个月基金市值曲线
+      // 渲染每组基金的趋势图
       self.renderFundTrend();
     } catch(e) {
       console.error('[App] loadFundList 异常:', e);
@@ -1696,40 +1723,42 @@ const App = {
   saveFund() {
     var self = this;
     this.requirePassword(function() {
-      var holdValue = parseFloat(document.getElementById("fundHoldValue").value) || 0;
+      var shares = parseFloat(document.getElementById("fundShares").value) || 0;
+      if (shares <= 0) {
+        self.showToast("持有份额必须大于0");
+        return;
+      }
       var costValue = parseFloat(document.getElementById("fundCostValue").value) || 0;
       var navInput = document.getElementById("fundNav").value;
       var nav = navInput ? parseFloat(navInput) : 0;
-      var sharesInput = document.getElementById("fundShares").value;
-      var shares = sharesInput ? parseFloat(sharesInput) : 0;
-      var navDerived = false;
-      // v202: 以当前持仓金额为优先，确保 holdValue 不被后续净值刷新覆盖
-      // 用户输入持仓金额 + 净值 → 用持仓金额推算份额（忽略可能误填的份额）
-      // 用户输入持仓金额 + 份额（无净值） → 用持仓金额/份额推导净值，并标记 navDerived
-      // 用户只输入持仓金额（无净值无份额） → 标记 navDerived，等净值刷新后从 holdValue 反算 shares
-      if (holdValue > 0) {
-        if (nav > 0) {
-          shares = holdValue / nav;
-          navDerived = false;
-        } else if (shares > 0) {
-          nav = holdValue / shares;
-          navDerived = true;
+      var holdValueInput = document.getElementById("fundHoldValue").value;
+      var holdValue = holdValueInput ? parseFloat(holdValueInput) : 0;
+      // v203: 份额为锚定字段，holdValue = shares × nav 为衍生计算
+      // 1) 有净值 + 有份额 → holdValue = shares × nav（最可靠）
+      // 2) 有净值 + 有持仓金额 → 校验：|holdValue - shares×nav| > 5% 则提示偏差，以 shares×nav 为准
+      // 3) 无净值 → holdValue 由用户填入或为0，等 NAV 刷新后 holdValue = shares × newNav
+      if (nav > 0) {
+        var calcHoldValue = shares * nav;
+        if (holdValue > 0) {
+          // 校验偏差：用户填的持仓金额 vs 计算值
+          if (Math.abs(calcHoldValue - holdValue) > holdValue * 0.05) {
+            console.log('[基金] 持仓金额偏差: 用户填=' + holdValue + ', 计算=份额×净值=' + calcHoldValue.toFixed(2) + ', 以计算值为准');
+          }
+          holdValue = parseFloat(calcHoldValue.toFixed(2)); // 份额×净值 为权威
         } else {
-          // holdValue > 0 但 nav=0 shares=0：标记 navDerived，holdValue 为权威值
-          navDerived = true;
+          holdValue = parseFloat(calcHoldValue.toFixed(2));
         }
-      } else if (nav > 0 && shares > 0) {
-        holdValue = nav * shares;
       }
+      // nav=0 时 holdValue 保留用户填入值（可能为0），等净值刷新后自动计算
+      // v204: 同一代码允许多条录入（不同买入时机），ID 自动生成而非等于 code
       Storage.add(Storage.keys.funds, {
-        id: document.getElementById("fundCode").value,
         code: document.getElementById("fundCode").value,
         name: document.getElementById("fundName").value,
         holdValue: holdValue,
         costValue: costValue,
         nav: nav,
-        shares: parseFloat(shares.toFixed(2)),
-        navDerived: navDerived,
+        shares: shares,
+        navDerived: false, // 份额为用户输入的真实值，navDerived 永远为 false
         market: "CN",
         currency: "CNY"
       });
@@ -1759,26 +1788,18 @@ const App = {
       var newNav = prompt("修改 " + fund.name + " 基金净值 (¥)", fund.nav);
       if (newNav !== null && !isNaN(parseFloat(newNav)) && parseFloat(newNav) > 0) {
         var nav = parseFloat(newNav);
-        var oldNav = parseFloat(fund.nav) || 0;
         var shares = parseFloat(fund.shares) || 0;
         var holdValue = parseFloat(fund.holdValue) || 0;
-        // v202: holdValue-priority 逻辑，与 _applyPriceData 保持一致
-        if (shares > 0 && oldNav > 0 && !fund.navDerived) {
-          var impliedHoldValue = shares * oldNav;
-          if (holdValue > 0 && Math.abs(impliedHoldValue - holdValue) <= holdValue * 0.05) {
-            holdValue = shares * nav; // NAV 驱动更新 holdValue
-          } else {
-            shares = holdValue / nav; // holdValue 为权威，重算 shares
-          }
+        // v203: 份额为锚定，holdValue = shares × nav
+        if (shares > 0) {
+          holdValue = parseFloat((shares * nav).toFixed(2));
         } else if (holdValue > 0) {
-          shares = holdValue / nav; // navDerived 或无可靠 oldNav → holdValue 优先
-        } else if (shares > 0) {
-          holdValue = shares * nav;
+          shares = parseFloat((holdValue / nav).toFixed(2));
         }
         Storage.update(Storage.keys.funds, id, {
           nav: nav,
-          shares: parseFloat(shares.toFixed(2)),
-          holdValue: parseFloat(holdValue.toFixed(2)),
+          shares: shares,
+          holdValue: holdValue,
           navDerived: false
         });
         self.loadFundList();
@@ -1959,6 +1980,7 @@ const App = {
   },
 
   // 仅获取基金净值（逐个获取，避免 jsonpgz 回调冲突）
+  // v204: 同一 code 可有多条记录，按 code 去重后逐个获取
   _fetchLiveFundPricesOnly(fundList, results) {
     var self = this;
     results.funds = {};
@@ -1968,15 +1990,25 @@ const App = {
       return;
     }
 
+    // 按 code 去重：同一 code 只获取一次净值
+    var uniqueCodes = [];
+    var seenCodes = {};
+    fundList.forEach(function(f) {
+      if (!seenCodes[f.code]) {
+        seenCodes[f.code] = true;
+        uniqueCodes.push(f);
+      }
+    });
+
     var index = 0;
 
     function fetchNext() {
-      if (index >= fundList.length) {
+      if (index >= uniqueCodes.length) {
         self._applyLiveResults(results);
         return;
       }
 
-      var f = fundList[index];
+      var f = uniqueCodes[index];
       index++;
 
       // 天天基金 API 固定使用 jsonpgz 作为回调名
@@ -2091,41 +2123,25 @@ const App = {
       var info = data.funds && data.funds[f.code];
       if (info && info.nav && parseFloat(info.nav) !== parseFloat(f.nav)) {
         var newNav = parseFloat(info.nav);
-        var oldNav = parseFloat(f.nav) || 0;
         var shares = parseFloat(f.shares) || 0;
-        var holdValue = parseFloat(f.holdValue) || 0;
+        // v203: 份额为锚定字段，holdValue = shares × newNav
+        // 如果 shares > 0，直接用 shares × newNav 计算 holdValue
+        // 如果 shares = 0（旧数据兼容），用 holdValue / newNav 反算 shares
         var updates = { nav: newNav };
-        // v202: 以 holdValue 为优先，防止用户输入的持仓金额被错误覆盖
-        // 仅当 oldNav 是真实值（非推导）且 shares 与 holdValue 一致时，才安全更新 holdValue
-        if (shares > 0 && oldNav > 0 && !f.navDerived) {
-          var impliedHoldValue = shares * oldNav;
-          var diff = Math.abs(impliedHoldValue - holdValue);
-          if (holdValue > 0 && diff <= holdValue * 0.05) {
-            var newHoldValue = shares * newNav;
-            updates.holdValue = parseFloat(newHoldValue.toFixed(2));
-            // shares 保持不变
-          } else {
-            // shares 与 holdValue 不一致，根据 holdValue 重新计算 shares
-            var newShares = holdValue / newNav;
-            updates.shares = parseFloat(newShares.toFixed(2));
-          }
+        if (shares > 0) {
+          updates.holdValue = parseFloat((shares * newNav).toFixed(2));
         } else {
-          // 推导 nav 或没有可靠 oldNav，以 holdValue 为优先
+          // 旧数据兼容：shares=0 时从 holdValue 反算
+          var holdValue = parseFloat(f.holdValue) || 0;
           if (holdValue > 0) {
-            var newShares = holdValue / newNav;
-            updates.shares = parseFloat(newShares.toFixed(2));
-          } else if (shares > 0) {
-            // 没有 holdValue，使用 shares 计算
-            var newHoldValue = shares * newNav;
-            updates.holdValue = parseFloat(newHoldValue.toFixed(2));
-            updates.shares = parseFloat(shares.toFixed(2));
+            updates.shares = parseFloat((holdValue / newNav).toFixed(2));
           }
         }
-        // v186: 基金净值刷新使用 skipUpdatedAt
         updates.navDerived = false;
+        // v186: 基金净值刷新使用 skipUpdatedAt
         Storage.update(Storage.keys.funds, f.id, updates, { skipUpdatedAt: true });
         updated++;
-        console.log('[基金净值] ' + f.name + ': ' + f.nav + ' → ' + newNav);
+        console.log('[基金净值] ' + f.name + ': ' + f.nav + ' → ' + newNav + ', holdValue=' + (updates.holdValue || f.holdValue));
       }
     });
 
@@ -3867,17 +3883,8 @@ const App = {
   //   - 渲染: 复用 _drawAssetTrendChart 风格的 SVG
   renderFundTrend() {
     var self = this;
-    var section = document.getElementById("fundTrendSection");
-    var chartEl = document.getElementById("fundTrendChart");
-    var rangeEl = document.getElementById("fundTrendRange");
-    if (!section || !chartEl) return;
-
     var funds = Storage.get(Storage.keys.funds) || [];
-    if (funds.length === 0) {
-      chartEl.innerHTML = '<div class="empty-tip">暂无基金记录</div>';
-      if (rangeEl) rangeEl.textContent = "";
-      return;
-    }
+    if (funds.length === 0) return;
 
     // 联接基金 → 母基金映射
     var parentMap = {
@@ -3885,16 +3892,25 @@ const App = {
       "001513": "510500",
     };
 
-    // 检查每只基金是否需要历史价, 收集需要的母基金 codes
-    var neededCodes = [];
+    // 按代码分组
+    var groups = {};
+    var groupOrder = [];
     funds.forEach(function(f) {
-      var priceCode = f.parentCode || parentMap[f.code] || f.code;
+      if (!groups[f.code]) {
+        groups[f.code] = [];
+        groupOrder.push(f.code);
+      }
+      groups[f.code].push(f);
+    });
+
+    // 收集需要的母基金 codes
+    var neededCodes = [];
+    groupOrder.forEach(function(code) {
+      var priceCode = parentMap[code] || code;
       if (neededCodes.indexOf(priceCode) < 0) neededCodes.push(priceCode);
     });
-    console.log('[基金曲线] 持仓: ' + funds.length + ' 只, 需要的母基金 codes: ' + JSON.stringify(neededCodes));
-    console.log('[基金曲线] 持仓详情: ' + JSON.stringify(funds.map(function(f){return {code:f.code,name:f.name,nav:f.nav,shares:f.shares,holdValue:f.holdValue,parentCode:f.parentCode};})));
 
-    // 6 个月窗口 (使用本地时区的日期字符串, 避免 toISOString 的 UTC 偏移问题)
+    // 6 个月窗口
     var today = new Date();
     var todayDateStr = today.getFullYear() + '-' +
       String(today.getMonth() + 1).padStart(2, '0') + '-' +
@@ -3905,53 +3921,57 @@ const App = {
       String(sixMonthsAgo.getMonth() + 1).padStart(2, '0') + '-' +
       String(sixMonthsAgo.getDate()).padStart(2, '0');
 
-    // 加载历史价 (复用 _loadAllHistoryData 的逻辑, 但允许指定 codes)
     this._loadFundHistoryData(neededCodes, function(historyData) {
-      // 每周五 + 今天 (用本地时区构造 Date 字符串, 不依赖 toISOString)
       var pointDates = self._collectFridayDateStrings(sixMonthsAgo, today);
       if (pointDates.indexOf(todayDateStr) < 0) pointDates.push(todayDateStr);
 
-      // 计算每个点的总基金市值
-      var data = pointDates.map(function(dateStr) {
-        var totalValue = 0;
-        funds.forEach(function(f) {
-          var priceCode = f.parentCode || parentMap[f.code] || f.code;
-          var currentNav = parseFloat(f.nav) || 0;
-          var shares = parseFloat(f.shares) || 0;
-          if (shares <= 0 || currentNav <= 0) {
-            totalValue += parseFloat(f.holdValue) || 0;
-            return;
-          }
-          var histArr = historyData[priceCode];
-          if (histArr && histArr.length > 0) {
-            var currentEtf = histArr[histArr.length - 1].close;
-            var histEtf = self._findClosestCloseByDate(histArr, dateStr) || currentEtf;
-            if (currentEtf > 0) {
-              var estNav = currentNav * (histEtf / currentEtf);
-              totalValue += shares * estNav;
+      // 为每个代码组绘制趋势图
+      groupOrder.forEach(function(code) {
+        var chartEl = document.getElementById('fundTrendChart_' + code);
+        var rangeEl = document.getElementById('fundTrendRange_' + code);
+        if (!chartEl) return;
+
+        var items = groups[code];
+        var priceCode = parentMap[code] || code;
+
+        // 计算每个点的该组总市值
+        var data = pointDates.map(function(dateStr) {
+          var totalValue = 0;
+          items.forEach(function(f) {
+            var currentNav = parseFloat(f.nav) || 0;
+            var shares = parseFloat(f.shares) || 0;
+            if (shares <= 0 || currentNav <= 0) {
+              totalValue += parseFloat(f.holdValue) || 0;
+              return;
+            }
+            var histArr = historyData[priceCode];
+            if (histArr && histArr.length > 0) {
+              var currentEtf = histArr[histArr.length - 1].close;
+              var histEtf = self._findClosestCloseByDate(histArr, dateStr) || currentEtf;
+              if (currentEtf > 0) {
+                var estNav = currentNav * (histEtf / currentEtf);
+                totalValue += shares * estNav;
+              } else {
+                totalValue += parseFloat(f.holdValue) || 0;
+              }
             } else {
               totalValue += parseFloat(f.holdValue) || 0;
             }
-          } else {
-            totalValue += parseFloat(f.holdValue) || 0;
-          }
+          });
+          return { dateStr: dateStr, value: totalValue };
         });
-        return { dateStr: dateStr, value: totalValue };
-      });
 
-      // 今日真实值 (锚定) - 用 sum(f.holdValue) 当常量的今天值
-      var todayRealValue = 0;
-      funds.forEach(function(f) { todayRealValue += parseFloat(f.holdValue) || 0; });
-      // 把今天那一点的 value 覆盖为 todayRealValue, 确保与卡片显示一致
-      for (var i = 0; i < data.length; i++) {
-        if (data[i].dateStr === todayDateStr) {
-          data[i].value = todayRealValue;
+        // 今日真实值（锚定）
+        var todayRealValue = 0;
+        items.forEach(function(f) { todayRealValue += parseFloat(f.holdValue) || 0; });
+        for (var i = 0; i < data.length; i++) {
+          if (data[i].dateStr === todayDateStr) {
+            data[i].value = todayRealValue;
+          }
         }
-      }
 
-      console.log('[基金曲线] 共 ' + data.length + ' 个点, 范围 ' + data[0].dateStr + ' ~ ' + data[data.length-1].dateStr +
-        ', 首值=' + data[0].value.toFixed(0) + ', 末值=' + data[data.length-1].value.toFixed(0));
-      self._drawFundTrendChart(chartEl, rangeEl, data, todayRealValue);
+        self._drawFundTrendChart(chartEl, rangeEl, data, todayRealValue);
+      });
     });
   },
 
