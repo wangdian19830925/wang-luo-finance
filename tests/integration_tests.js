@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v197', 'PENSION-SYNC-03: clientVersion 为 v197');
+assertEq(pkg.clientVersion, 'v198', 'PENSION-SYNC-03: clientVersion 为 v198');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -647,6 +647,54 @@ var totalAt920 = Storage.calcTotalAssets(); // 8600 + 42000 + 170000 + 10000 + 5
 ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.2, HKDCNY: 0.90 }));
 var totalAt900 = Storage.calcTotalAssets(); // 9000 + 42000 + 170000 + 10000 + 50000 = 281000
 assertApprox(totalAt920 - totalAt900, 1000 * 10 * (0.92 - 0.90), 0.1, 'FX-ASSET-09: HKD汇率变化0.02对应总资产变化1000×10×0.02=200');
+
+// v198: 密码配置纳入 Storage.keys（fm_auth_config）测试
+console.log('\n【测试 14】AUTH-SYNC: 密码配置纳入 fm_auth_config 体系');
+resetData();
+
+// AUTH-SYNC-01: fm_auth_config 在 Storage.keys 中
+assert(Storage.keys.authConfig === 'fm_auth_config', 'AUTH-SYNC-01: Storage.keys.authConfig = fm_auth_config');
+
+// AUTH-SYNC-02: 保存密码到 fm_auth_config + 独立 key
+ctx.localStorage.setItem('finance_password_hash', 'habc123');
+ctx.localStorage.setItem('finance_password_enabled', 'true');
+var pkg = Storage._getLocalDataPackage();
+assert(pkg.data.authConfig && pkg.data.authConfig.length === 1, 'AUTH-SYNC-02: _getLocalDataPackage 包含 authConfig');
+assertEq(pkg.data.authConfig[0].hash, 'habc123', 'AUTH-SYNC-02: authConfig hash = habc123');
+assertEq(pkg.data.authConfig[0].enabled, true, 'AUTH-SYNC-02: authConfig enabled = true');
+assertEq(pkg.data._authHash, 'habc123', 'AUTH-SYNC-02: _authHash = habc123（兼容旧字段）');
+assertEq(pkg.data._authEnabled, true, 'AUTH-SYNC-02: _authEnabled = true（兼容旧字段）');
+
+// AUTH-SYNC-03: 清空独立 key 后 fm_auth_config 仍能恢复密码
+ctx.localStorage.removeItem('finance_password_hash');
+ctx.localStorage.removeItem('finance_password_enabled');
+Storage.set(Storage.keys.authConfig, [{ id: 'auth', hash: 'hxyz789', enabled: true }]);
+pkg = Storage._getLocalDataPackage();
+assertEq(pkg.data.authConfig[0].hash, 'hxyz789', 'AUTH-SYNC-03: fm_auth_config 独立存储时密码 hash 不丢失');
+assertEq(pkg.passwordHash, 'hxyz789', 'AUTH-SYNC-03: passwordHash 从 fm_auth_config 读取');
+
+// AUTH-SYNC-04: fm_auth_config 为空时从独立 key 兜底读取
+Storage.set(Storage.keys.authConfig, []);
+ctx.localStorage.setItem('finance_password_hash', 'hdef456');
+ctx.localStorage.setItem('finance_password_enabled', 'true');
+pkg = Storage._getLocalDataPackage();
+assertEq(pkg.data.authConfig[0].hash, 'hdef456', 'AUTH-SYNC-04: fm_auth_config 为空时从独立 key 兜底');
+assertEq(pkg.data._authHash, 'hdef456', 'AUTH-SYNC-04: _authHash 兜底读取');
+
+// AUTH-SYNC-05: _applyDataPackage 恢复密码（本地无密码 + 云端有密码）
+ctx.localStorage.clear();
+var cloudPkg = { data: { authConfig: [{ id: 'auth', hash: 'hrestore999', enabled: true }], _authHash: 'hrestore999', _authEnabled: true, income: [], expense: [] }, updatedAt: '2026-07-01T00:00:00Z', clientVersion: 'v198' };
+Storage._applyDataPackage(cloudPkg);
+assertEq(ctx.localStorage.getItem('finance_password_hash'), 'hrestore999', 'AUTH-SYNC-05: _applyDataPackage 恢复密码 hash');
+assertEq(ctx.localStorage.getItem('finance_password_enabled'), 'true', 'AUTH-SYNC-05: _applyDataPackage 恢复密码 enabled');
+
+// AUTH-SYNC-06: fm_auth_config 在 _mergeDataPackages 中被合并
+ctx.localStorage.clear();
+var localPkg = { data: { authConfig: [{ id: 'auth', hash: 'hlocal', enabled: true }], _authHash: 'hlocal', _authEnabled: true, income: [] }, updatedAt: '2026-06-30T00:00:00Z', clientVersion: 'v198' };
+var cloudPkg2 = { data: { authConfig: [{ id: 'auth', hash: 'hcloud', enabled: true }], _authHash: 'hcloud', _authEnabled: true, income: [] }, updatedAt: '2026-07-01T00:00:00Z', clientVersion: 'v198' };
+var merged = Storage._mergeDataPackages(localPkg, cloudPkg2);
+assertEq(merged.data._authHash, 'hcloud', 'AUTH-SYNC-06: 云端较新时密码使用云端 hash');
+assertEq(merged.data.authConfig[0].hash, 'hcloud', 'AUTH-SYNC-06: authConfig hash 使用云端较新值');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');

@@ -8781,17 +8781,38 @@ const App = {
   // 密码配置迁移：旧版 family_finance_password -> 新版 finance_password_hash/enabled
   _migratePasswordConfig() {
     try {
-      var oldRaw = localStorage.getItem("family_finance_password");
-      if (!oldRaw) return;
-      var oldCfg = JSON.parse(oldRaw);
-      if (oldCfg && oldCfg.hash) {
-        localStorage.setItem("finance_password_hash", oldCfg.hash);
-        localStorage.setItem("finance_password_enabled", oldCfg.enabled ? 'true' : 'false');
-        console.log('[App] 已迁移旧版密码配置, hash存在:', true, 'enabled:', oldCfg.enabled);
-      } else {
-        console.log('[App] 旧版密码配置无有效hash，跳过迁移');
+      // v198+: 优先从 fm_auth_config（Storage.keys）读取密码
+      // 如果 fm_auth_config 有值但独立 key 为空，从 fm_auth_config 迁移到独立 key
+      var authConfig = Storage.get(Storage.keys.authConfig);
+      if (Array.isArray(authConfig) && authConfig.length > 0 && authConfig[0]) {
+        var cfg = authConfig[0];
+        if (cfg.hash && !localStorage.getItem('finance_password_hash')) {
+          localStorage.setItem('finance_password_hash', cfg.hash);
+          localStorage.setItem('finance_password_enabled', cfg.enabled ? 'true' : 'false');
+          console.log('[App] 从 fm_auth_config 迁移密码到独立 key, hash存在:', !!cfg.hash, 'enabled:', cfg.enabled);
+        }
       }
-      localStorage.removeItem("family_finance_password");
+      // 兼容旧版本：从独立 localStorage key 迁移到 fm_auth_config
+      var oldHash = localStorage.getItem('finance_password_hash');
+      var oldEnabled = localStorage.getItem('finance_password_enabled') === 'true';
+      if (oldHash && (!Array.isArray(authConfig) || authConfig.length === 0)) {
+        Storage.set(Storage.keys.authConfig, [{ id: 'auth', hash: oldHash, enabled: oldEnabled }]);
+        console.log('[App] 从独立 key 迁移密码到 fm_auth_config, hash存在:', !!oldHash, 'enabled:', oldEnabled);
+      }
+      // 最旧的迁移：family_finance_password
+      var oldRaw = localStorage.getItem("family_finance_password");
+      if (oldRaw) {
+        var oldCfg = JSON.parse(oldRaw);
+        if (oldCfg && oldCfg.hash) {
+          localStorage.setItem("finance_password_hash", oldCfg.hash);
+          localStorage.setItem("finance_password_enabled", oldCfg.enabled ? 'true' : 'false');
+          Storage.set(Storage.keys.authConfig, [{ id: 'auth', hash: oldCfg.hash, enabled: oldCfg.enabled }]);
+          console.log('[App] 已迁移旧版密码配置, hash存在:', true, 'enabled:', oldCfg.enabled);
+        } else {
+          console.log('[App] 旧版密码配置无有效hash，跳过迁移');
+        }
+        localStorage.removeItem("family_finance_password");
+      }
     } catch(e) {
       console.error('[App] 密码配置迁移失败:', e);
     }
@@ -8813,8 +8834,10 @@ const App = {
 
   _savePasswordConfig(cfg) {
     // v153: 不再写内存缓存，只写 localStorage
+    // v198+: 同时写入 fm_auth_config（Storage.keys），密码随业务数据同步
     localStorage.setItem("finance_password_hash", cfg.hash || '');
     localStorage.setItem("finance_password_enabled", cfg.enabled ? 'true' : 'false');
+    Storage.set(Storage.keys.authConfig, [{ id: 'auth', hash: cfg.hash || null, enabled: cfg.enabled || false }]);
     console.log('[App] 密码配置已保存, hash存在:', !!cfg.hash, 'enabled:', cfg.enabled);
   },
 

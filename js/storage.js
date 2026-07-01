@@ -11,7 +11,8 @@ const Storage = {
     funds: 'fm_funds',
     loans: 'fm_loans',
     annuities: 'fm_annuities',
-    notifications: 'fm_notifications'
+    notifications: 'fm_notifications',
+    authConfig: 'fm_auth_config'    // v198+: 密码配置纳入 Storage.keys 体系，随业务数据同步
   },
 
   // CloudBase 相关配置与状态
@@ -116,7 +117,13 @@ const Storage = {
         console.log('[CloudBase] 上次为邮箱登录，但会话已过期，等待用户手动登录');
         return { success: false, reason: 'needs-login' };
       }
-      return { success: false, reason: 'no-session' };
+      // v198+: fm_cloud_login_mode 为空时（如清空 localStorage 后），自动匿名登录
+      // 原因：清空 localStorage 后 fm_cloud_login_mode 也丢了，但 CloudBase SDK
+      //       可能在 IndexedDB 中仍保留旧匿名会话；即使没有，自动匿名登录也能
+      //       建立新会话并同步本地数据到云端（保险等数据由 checkImportStatus 已导入）
+      console.log('[CloudBase] fm_cloud_login_mode 为空，自动匿名登录（可能是清空 localStorage 后首次打开）');
+      const ok = await this.loginAnonymously();
+      return { success: ok, source: 'auto-anonymous' };
     } catch (e) {
       console.error('[CloudBase] 恢复会话失败:', e);
       return { success: false, reason: e.message || String(e) };
@@ -443,25 +450,41 @@ const Storage = {
     Object.keys(this.keys).forEach(k => {
       data[k] = this.get(this.keys[k], true); // true = 包含已删除
     });
-    let pwdHash = localStorage.getItem('finance_password_hash') || null;
-    const pwdEnabled = localStorage.getItem('finance_password_enabled') === 'true';
-    // 清理被污染的hash，避免把假值同步到云端；如果本地被污染，直接清空 localStorage
+    // v198+: 密码配置已纳入 fm_auth_config（Storage.keys 体系），不再从独立 localStorage key 读取
+    // 向后兼容：如果 fm_auth_config 为空但旧 key 有值，先迁移
+    var authConfig = data.authConfig || [];
+    var pwdHash = null;
+    var pwdEnabled = false;
+    if (Array.isArray(authConfig) && authConfig.length > 0 && authConfig[0]) {
+      pwdHash = authConfig[0].hash || null;
+      pwdEnabled = authConfig[0].enabled || false;
+    } else {
+      // 兼容旧版本：从独立 localStorage key 读取（如果 fm_auth_config 为空）
+      pwdHash = localStorage.getItem('finance_password_hash') || null;
+      pwdEnabled = localStorage.getItem('finance_password_enabled') === 'true';
+    }
+    // 清理被污染的hash，避免把假值同步到云端
     if (pwdHash && !this._isValidPasswordHash(pwdHash)) {
       console.warn('[CloudBase] 检测到本地密码hash被污染，已清空本地密码:', String(pwdHash).slice(0, 30));
-      try { localStorage.removeItem('finance_password_hash'); } catch (e) {}
-      try { localStorage.removeItem('finance_password_enabled'); } catch (e) {}
       pwdHash = null;
+      pwdEnabled = false;
     }
-    // v152+: 将密码信息嵌入业务数据内部，避免 CloudBase 对独立敏感字段的过滤/替换
+    // 更新 authConfig 数据
+    if (pwdHash || pwdEnabled) {
+      data.authConfig = [{ id: 'auth', hash: pwdHash, enabled: pwdEnabled }];
+    } else {
+      data.authConfig = [];
+    }
+    // v152+: 将密码信息嵌入业务数据内部
     data._authHash = pwdHash;
     data._authEnabled = pwdEnabled;
-    // v181+: 将养老金参数嵌入数据包，支持多端同步
+    // v181+: 将养老金参数嵌入数据包
     data._pensionParams = this._extractPensionParams();
     console.log('[CloudBase] 构建本地数据包, 密码hash存在:', !!pwdHash, 'enabled:', pwdEnabled, 'pensionParams:', !!data._pensionParams);
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v197',
+      clientVersion: 'v198',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -526,6 +549,8 @@ const Storage = {
         this.set(this.keys[k], merged);
       });
       // 应用密码设置：只有传入有效密码时才覆盖本地；否则保留本地已有密码
+      // v198+: 密码配置已纳入 fm_auth_config（Storage.keys 体系），同步后写回 fm_auth_config
+      //         同时也写回独立 localStorage key（向后兼容，让 app.js getPasswordConfig 可读）
       let localHash = localStorage.getItem('finance_password_hash');
       const localEnabled = localStorage.getItem('finance_password_enabled') === 'true';
       // 先清理本地污染值
@@ -684,7 +709,7 @@ const Storage = {
 
   // 合并两个数据包（按 id 去重，LWW：updatedAt/updated/createdAt 较新的优先；支持软删除）
   _mergeDataPackages(localPkg, cloudPkg) {
-    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v185' };
+    const merged = { data: {}, updatedAt: new Date().toISOString(), clientVersion: 'v198' };
     Object.keys(this.keys).forEach(k => {
       const localArr = (localPkg && localPkg.data && Array.isArray(localPkg.data[k])) ? localPkg.data[k] : [];
       const cloudArr = (cloudPkg && cloudPkg.data && Array.isArray(cloudPkg.data[k])) ? cloudPkg.data[k] : [];
@@ -807,6 +832,8 @@ const Storage = {
       merged.data._authEnabled = !!mergedEnabled;
       merged.passwordHash = mergedHash;
       merged.passwordEnabled = !!mergedEnabled;
+      // v198+: 同步更新 authConfig 数组（密码配置纳入 Storage.keys）
+      merged.data.authConfig = [{ id: 'auth', hash: mergedHash, enabled: !!mergedEnabled }];
     }
 
     // v181+: 合并养老金参数（LWW，按 updatedAt 比较）
