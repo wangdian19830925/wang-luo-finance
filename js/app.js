@@ -4385,8 +4385,8 @@ const App = {
       var list = Storage.get(Storage.keys.insurance);
       console.log('[App] loadInsuranceList: 保单数量=' + list.length);
       var container = document.getElementById("insuranceList");
-      // 提醒区：始终显示最先到期的 3 条（不限30天窗口），同日全部显示
-      var reminders = Storage.getInsuranceReminders(365);
+      // 提醒区
+      var reminders = Storage.getInsuranceReminders();
       var rc = document.getElementById("insuranceReminders");
       if (rc) {
         if (reminders.length > 0) {
@@ -4414,7 +4414,7 @@ const App = {
           });
           rc.innerHTML = rhtml;
         } else {
-          rc.innerHTML = "<div style=\"color:#94a3b8;font-size:14px;padding:8px 0;\">暂无保单缴费记录</div>";
+          rc.innerHTML = "<div style=\"color:#94a3b8;font-size:14px;padding:8px 0;\">暂无即将到期的缴费提醒</div>";
         }
       }
       // 保单列表
