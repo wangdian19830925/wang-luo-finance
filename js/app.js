@@ -1360,15 +1360,25 @@ const App = {
       label = item.name + ' 已解禁股数';
       var totalShares = parseInt(item.totalShares) || 0;
       maxVal = totalShares;
+    } else if (type === 'provident-fund-balance' || type === 'provident-fund-monthly') {
+      var params = Storage.getProvidentFundParams();
+      label = type === 'provident-fund-balance' ? '公积金余额' : '每月增加额';
+      minVal = 0;
+      maxVal = Infinity;
+      // 当前值去掉 ¥ 和逗号
+      currentValue = currentValue.replace(/[¥,]/g, '').trim();
     }
 
     // 构建编辑态 DOM
     var wrap = document.createElement('span');
     wrap.className = 'inline-edit-active';
     wrap.dataset.origHtml = origHTML;
+    var isFloat = (type === 'provident-fund-balance' || type === 'provident-fund-monthly');
+    var suffix = isFloat ? '¥' : '股';
+    var step = isFloat ? '0.01' : '1';
     wrap.innerHTML =
-      '<input type="number" class="inline-edit-input" value="' + currentValue + '" min="' + minVal + '" max="' + (maxVal === Infinity ? '' : maxVal) + '" step="1" />' +
-      '<span class="inline-edit-suffix">股</span>' +
+      '<input type="number" class="inline-edit-input" value="' + currentValue + '" min="' + minVal + '" max="' + (maxVal === Infinity ? '' : maxVal) + '" step="' + step + '" />' +
+      '<span class="inline-edit-suffix">' + suffix + '</span>' +
       '<span class="inline-edit-actions">' +
         '<button type="button" class="inline-edit-btn btn-save" title="保存">' + self.icon('check') + '</button>' +
         '<button type="button" class="inline-edit-btn btn-cancel" title="取消">' + self.icon('close') + '</button>' +
@@ -1389,21 +1399,22 @@ const App = {
     // 保存处理
     function doSave() {
       var raw = inputEl.value.trim();
-      var newVal = parseInt(raw, 10);
+      var newVal = isFloat ? parseFloat(raw) : parseInt(raw, 10);
       if (isNaN(newVal) || newVal < minVal) {
         inputEl.classList.add('invalid');
-        self.showToast('请输入 ≥ ' + minVal + ' 的整数', 'error');
+        self.showToast('请输入 ≥ ' + minVal + ' 的有效数字', 'error');
         inputEl.focus();
         return;
       }
       if (newVal > maxVal) {
         inputEl.classList.add('invalid');
-        self.showToast(label + ' 不能超过 ' + maxVal + ' 股', 'error');
+        self.showToast(label + ' 不能超过 ' + maxVal, 'error');
         inputEl.focus();
         return;
       }
       // 数据已无变化
-      if (newVal === parseInt(currentValue, 10)) {
+      var currentNum = isFloat ? parseFloat(currentValue) : parseInt(currentValue, 10);
+      if (newVal === currentNum) {
         doCancel();
         return;
       }
@@ -1467,6 +1478,44 @@ const App = {
         self.loadRsuList();
         self.loadDashboard();
         self.showToast(rsu.name + ' 已解禁: ' + oldVested + ' → ' + newVal + ' 股 (锁定 ' + newLocked + ')', 'success');
+      } else if (type === 'provident-fund-balance' || type === 'provident-fund-monthly') {
+        // 获取当前参数
+        var params = Storage.getProvidentFundParams();
+        var updates = {};
+        if (type === 'provident-fund-balance') {
+          updates.balance = newVal;
+        } else {
+          updates.monthly = newVal;
+        }
+        Storage.saveProvidentFundBalance(updates);
+        self.loadProvidentFundBalance();
+        self.loadDashboard(); // 刷新总资产显示
+        var label = type === 'provident-fund-balance' ? '公积金余额' : '每月增加额';
+        self.showToast(label + ' 已更新: ¥' + newVal.toFixed(2), 'success');
+        // 手动替换编辑框为更新后的显示
+        if (wrapEl && wrapEl.parentNode) {
+          var displayId = type === 'provident-fund-balance' ? 'providentFundBalance' : 'providentFundMonthly';
+          var displayEl = document.getElementById(displayId);
+          if (displayEl) {
+            var formattedValue = '¥' + newVal.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            var newSpan = document.createElement('span');
+            newSpan.className = 'inline-editable';
+            newSpan.setAttribute('data-type', type);
+            newSpan.setAttribute('data-id', id);
+            newSpan.textContent = formattedValue;
+            newSpan.style.cursor = 'pointer';
+            if (type === 'provident-fund-balance') {
+              newSpan.style.fontSize = '24px';
+              newSpan.style.fontWeight = '700';
+              newSpan.style.color = '#f1f5f9';
+            } else {
+              newSpan.style.fontSize = '24px';
+              newSpan.style.fontWeight = '700';
+              newSpan.style.color = '#4ade80';
+            }
+            wrapEl.parentNode.replaceChild(newSpan, wrapEl);
+          }
+        }
       }
     });
   },
@@ -2916,10 +2965,6 @@ const App = {
       el = document.getElementById("addLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.add("show"));
       el = document.getElementById("cancelLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.remove("show"));
       el = document.getElementById("loanForm"); if (el) el.addEventListener("submit", e => { e.preventDefault(); this.saveLoan(); });
-      // v200+: 公积金余额编辑
-      el = document.getElementById("editProvidentFundBtn"); if (el) el.addEventListener("click", () => this.showProvidentFundModal());
-      el = document.getElementById("cancelProvidentFundBtn"); if (el) el.addEventListener("click", () => document.getElementById("providentFundModal").classList.remove("show"));
-      el = document.getElementById("providentFundForm"); if (el) el.addEventListener("submit", e => { e.preventDefault(); this.saveProvidentFundBalance(); });
       // 年金管理
       console.log('[App] setupForms 完成');
     } catch(e) {
@@ -5465,57 +5510,6 @@ const App = {
     document.getElementById("loanFormModal").classList.remove("show");
     this.loadLoanList();
     this.showToast("房贷记录已保存");
-  },
-
-  // v200+: 显示公积金余额编辑模态框
-  showProvidentFundModal() {
-    var params = Storage.getProvidentFundParams();
-    document.getElementById("providentFundBalanceInput").value = params.balance || '';
-    document.getElementById("providentFundMonthlyInput").value = params.monthly || '';
-    document.getElementById("providentFundPasswordInput").value = '';
-    document.getElementById("providentFundModal").classList.add("show");
-  },
-
-  // v200+: 保存公积金余额（需密码验证）
-  saveProvidentFundBalance() {
-    var password = document.getElementById("providentFundPasswordInput").value;
-    var config = this.getPasswordConfig();
-    
-    if (!config || !config.enabled) {
-      // 未设置密码，直接保存
-      this._doSaveProvidentFund();
-      return;
-    }
-    
-    if (!password) {
-      this.showToast('请输入密码', 'error');
-      return;
-    }
-    
-    // 验证密码
-    var hash = this._hashPassword(password);
-    if (hash === config.hash) {
-      this._doSaveProvidentFund();
-    } else {
-      this.showToast('密码错误', 'error');
-    }
-  },
-
-  // v200+: 实际保存公积金余额
-  _doSaveProvidentFund() {
-    var balance = document.getElementById("providentFundBalanceInput").value;
-    var monthly = document.getElementById("providentFundMonthlyInput").value;
-    
-    if (!balance || isNaN(parseFloat(balance))) {
-      this.showToast('请输入有效的余额', 'error');
-      return;
-    }
-    
-    Storage.saveProvidentFundBalance(balance, monthly);
-    document.getElementById("providentFundModal").classList.remove("show");
-    this.loadProvidentFundBalance();
-    this.loadDashboard(); // 刷新总资产
-    this.showToast("公积金余额已保存");
   },
 
   // v200+: 加载并显示公积金余额

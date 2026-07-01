@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>家庭资产管理</title>
-  <!-- version: 2026-07-01-v200 -->
+  <!-- version: 2026-07-01-v201 -->
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./css/style.css?v=200">
+  <link rel="stylesheet" href="./css/style.css?v=201">
   <!-- CloudBase SDK v2（全量引入，含 Auth + Database） -->
   <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.29.0/cloudbase.full.js"></script>
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
@@ -559,31 +559,6 @@
           </form>
         </div>
       </div>
-      <!-- v200+: 公积金余额编辑模态框 -->
-      <div class="form-modal" id="providentFundModal" style="display:none;">
-        <div class="form-container">
-          <h3>编辑公积金余额</h3>
-          <form id="providentFundForm">
-            <div class="form-group">
-              <label>当前余额 (¥)</label>
-              <input type="number" id="providentFundBalanceInput" step="0.01" required placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label>每月增加额 (¥)</label>
-              <input type="number" id="providentFundMonthlyInput" step="0.01" required placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label>密码验证</label>
-              <input type="password" id="providentFundPasswordInput" placeholder="请输入密码">
-              <p class="form-hint">编辑公积金余额需要密码验证</p>
-            </div>
-            <div class="form-actions">
-              <button type="button" class="btn btn-cancel" id="cancelProvidentFundBtn">取消</button>
-              <button type="submit" class="btn btn-primary">保存</button>
-            </div>
-          </form>
-        </div>
-      </div>
       <div class="loan-chart-section">
         <h3>剩余还款趋势</h3>
         <div id="loanRepaymentChart" class="empty-tip">加载中...</div>
@@ -592,24 +567,21 @@
         <h3>还款进度</h3>
         <div id="loanProgressList"></div>
       </div>
-      <!-- v200+: 公积金余额卡片 -->
-      <div class="loan-provident-section" style="margin-top: 24px; padding: 20px; background: #f8fafc; border-radius: 12px;">
-        <h3 style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          公积金余额
-          <button class="btn btn-primary" id="editProvidentFundBtn" style="font-size: 12px; padding: 6px 12px;">编辑</button>
-        </h3>
+      <!-- v200+: 公积金余额卡片（深色风格，点击数字编辑） -->
+      <div class="loan-provident-section" style="margin-top: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px;">
+        <h3 style="margin-bottom: 16px; color: #f1f5f9;">公积金余额</h3>
         <div id="providentFundDisplay">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
-              <p style="font-size: 12px; color: #64748b; margin-bottom: 4px;">当前余额</p>
-              <p style="font-size: 24px; font-weight: 700; color: #1e293b;" id="providentFundBalance">¥0.00</p>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">当前余额</p>
+              <p style="font-size: 24px; font-weight: 700; color: #f1f5f9; cursor: pointer;" id="providentFundBalance" class="inline-editable" data-type="provident-fund-balance" data-id="main">¥0.00</p>
             </div>
             <div>
-              <p style="font-size: 12px; color: #64748b; margin-bottom: 4px;">每月增加</p>
-              <p style="font-size: 24px; font-weight: 700; color: #059669;" id="providentFundMonthly">¥0.00</p>
+              <p style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">每月增加</p>
+              <p style="font-size: 24px; font-weight: 700; color: #4ade80; cursor: pointer;" id="providentFundMonthly" class="inline-editable" data-type="provident-fund-monthly" data-id="main">¥0.00</p>
             </div>
           </div>
-          <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;" id="providentFundUpdateInfo">最后更新：未设置</p>
+          <p style="font-size: 11px; color: #64748b; margin-top: 8px;" id="providentFundUpdateInfo">最后更新：未设置</p>
         </div>
       </div>
     </section>
@@ -1380,7 +1352,7 @@
     </symbol>
   </svg>
 
-  <script src="./js/storage.js?v=200"></script>
+  <script src="./js/storage.js?v=201"></script>
   <script src="./js/parser.js"></script>
   <script src="./js/insurance-data.js"></script>
   <script src="./js/stock-data.js"></script>
@@ -1390,6 +1362,6 @@
   <script src="./js/annuity-data.js"></script>
   <!-- 所有股票/基金的历史数据(由 scripts/update_history.py 每日更新) -->
   <script src="./js/history-data.js?v=20260624"></script>
-  <script src="./js/app.js?v=200"></script>
+  <script src="./js/app.js?v=201"></script>
 </body>
 </html>
