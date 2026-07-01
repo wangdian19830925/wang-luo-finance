@@ -5746,6 +5746,10 @@ const App = {
   },
 
   _bindExtraTransactionButtons() {
+    // 防止重复绑定
+    if (this._extraButtonsBound) return;
+    this._extraButtonsBound = true;
+
     var self = this;
     var modal = document.getElementById('extraTransactionModal');
     var btnOpen = document.getElementById('btnAddExtraTransaction');
@@ -5818,10 +5822,12 @@ const App = {
     if (btnConfirm) {
       btnConfirm.addEventListener('click', function() {
         var type = document.querySelector('input[name="extraType"]:checked').value;
-        var year = parseInt(document.getElementById('extraYear').value);
-        var amount = parseFloat(document.getElementById('extraAmount').value);
+        var yearStr = (document.getElementById('extraYear').value || '').trim();
+        var amountStr = (document.getElementById('extraAmount').value || '').trim();
+        var year = Number(yearStr);
+        var amount = Number(amountStr);
         var note = document.getElementById('extraNote').value.trim();
-        if (isNaN(year) || isNaN(amount) || amount <= 0) {
+        if (!yearStr || !amountStr || isNaN(year) || isNaN(amount) || amount <= 0 || year < 1900 || year > 2100) {
           alert('请填写正确的年份和金额');
           return;
         }
