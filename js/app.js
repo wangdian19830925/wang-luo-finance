@@ -1682,13 +1682,15 @@ const App = {
           '</div>';
         });
 
-        // 组合计
-        var groupProfit = groupHold - groupCost;
-        var groupProfitClass = groupProfit >= 0 ? "income" : "expense";
-        html += '<div class="fund-group-summary">' +
-          '<span>合计持仓 ¥' + self._formatNum(groupHold) + '</span>' +
-          '<span class="' + groupProfitClass + '">' + (groupProfit >= 0 ? "+" : "") + self.formatMoney(groupProfit) + '</span>' +
-        '</div>';
+        // 组合计（仅当组内有多条记录时才显示）
+        if (items.length > 1) {
+          var groupProfit = groupHold - groupCost;
+          var groupProfitClass = groupProfit >= 0 ? "income" : "expense";
+          html += '<div class="fund-group-summary">' +
+            '<span>合计持仓 ¥' + self._formatNum(groupHold) + '</span>' +
+            '<span class="' + groupProfitClass + '">' + (groupProfit >= 0 ? "+" : "") + self.formatMoney(groupProfit) + '</span>' +
+          '</div>';
+        }
 
         // 组趋势图占位（动态渲染）
         html += '<div class="asset-trend-section fund-group-trend" data-code="' + code + '">';
@@ -1720,6 +1722,59 @@ const App = {
     }
   },
 
+  // 通过东方财富 pingzhongdata API 获取基金数据（最新净值 + 历史净值）
+  // 该 API 返回 JS 文件（设置全局变量），包含当天官方净值和完整历史净值
+  // 优于 fundgz API: fundgz 的 dwjz 是上一交易日净值，pingzhongdata 含当天官方净值
+  _fetchFundPingzhongData(code, callback) {
+    var scriptId = "fund_pingzhong_" + code;
+    var oldScript = document.getElementById(scriptId);
+    if (oldScript) oldScript.remove();
+
+    var script = document.createElement("script");
+    script.id = scriptId;
+    script.onload = function() {
+      var navHistory = [];
+      var latestNav = 0;
+      var fundName = code;
+
+      try {
+        if (typeof Data_netWorthTrend !== 'undefined' && Data_netWorthTrend) {
+          navHistory = Data_netWorthTrend.map(function(item) {
+            var d = new Date(item.x);
+            var dateStr = d.getFullYear() + '-' +
+              String(d.getMonth() + 1).padStart(2, '0') + '-' +
+              String(d.getDate()).padStart(2, '0');
+            return { date: dateStr, nav: parseFloat(item.y) || 0 };
+          });
+          if (navHistory.length > 0) {
+            latestNav = navHistory[navHistory.length - 1].nav;
+          }
+        }
+        if (typeof fS_name !== 'undefined' && fS_name) {
+          fundName = fS_name;
+        }
+      } catch(e) {
+        console.warn('[基金pingzhong] 解析异常 ' + code + ':', e);
+      }
+
+      // 清理全局变量
+      try { delete window.Data_netWorthTrend; } catch(e) { window.Data_netWorthTrend = undefined; }
+      try { delete window.fS_name; } catch(e) { window.fS_name = undefined; }
+      try { delete window.fS_code; } catch(e) { window.fS_code = undefined; }
+      try { delete window.ishb; } catch(e) { window.ishb = undefined; }
+
+      script.remove();
+      callback({ nav: latestNav, name: fundName, history: navHistory });
+    };
+    script.onerror = function() {
+      console.warn('[基金pingzhong] 加载失败: ' + code);
+      script.remove();
+      callback({ nav: 0, name: '', history: [] });
+    };
+    script.src = "https://fund.eastmoney.com/pingzhongdata/" + code + ".js";
+    document.head.appendChild(script);
+  },
+
   saveFund() {
     var self = this;
     this.requirePassword(function() {
@@ -1735,16 +1790,10 @@ const App = {
       var submitBtn = document.getElementById("fundSubmitBtn");
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "查询中..."; }
 
-      // 清理可能存在的自动查询脚本
-      var oldNameScript = document.getElementById("fund_name_script");
-      if (oldNameScript) oldNameScript.remove();
-
-      // 通过天天基金 JSONP API 查询基金名称 + 最新净值
-      var script = document.createElement("script");
-      script.id = "fund_save_script";
-      window.jsonpgz = function(data) {
-        var apiName = data.name || existingName || code;
-        var nav = parseFloat(data.dwjz) || 0;
+      // 通过东方财富 pingzhongdata API 查询基金名称 + 最新净值（含当天官方净值）
+      self._fetchFundPingzhongData(code, function(result) {
+        var apiName = result.name || existingName || code;
+        var nav = result.nav || 0;
         var shares = 0;
         var finalHoldValue = holdValue;
 
@@ -1764,38 +1813,14 @@ const App = {
         document.getElementById("fundForm").reset();
         document.getElementById("fundFormModal").classList.remove("show");
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "查询并保存"; }
-        delete window.jsonpgz;
-        script.remove();
         self.loadFundList();
         self.loadDashboard();
         if (nav > 0) {
           self.showToast("基金已添加: " + apiName + " (净值¥" + nav.toFixed(4) + ", 份额" + shares + ")");
         } else {
-          self.showToast("基金已添加: " + apiName + " (净值待查询)");
+          self.showToast("基金已添加: " + apiName + " (净值查询失败，请稍后刷新)");
         }
-      };
-
-      script.src = "https://fundgz.1234567.com.cn/js/" + code + ".js";
-      script.onerror = function() {
-        // API 查询失败，仍保存用户输入的数据（净值=0，份额=0）
-        var name = existingName || code;
-        Storage.add(Storage.keys.funds, {
-          code: code, name: name,
-          holdValue: holdValue, costValue: costValue,
-          nav: 0, shares: 0, navDerived: false,
-          market: "CN", currency: "CNY"
-        });
-
-        document.getElementById("fundForm").reset();
-        document.getElementById("fundFormModal").classList.remove("show");
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "查询并保存"; }
-        script.remove();
-        delete window.jsonpgz;
-        self.loadFundList();
-        self.loadDashboard();
-        self.showToast("基金已添加 (净值查询失败，请稍后刷新净值)");
-      };
-      document.head.appendChild(script);
+      });
     });
   },
 
@@ -1808,30 +1833,16 @@ const App = {
     nameInput.value = "查询中...";
     nameInput.style.color = "#94a3b8";
 
-    // 清理已有脚本
-    var oldScript = document.getElementById("fund_name_script");
-    if (oldScript) oldScript.remove();
-    var oldSaveScript = document.getElementById("fund_save_script");
-    if (oldSaveScript) oldSaveScript.remove();
-    delete window.jsonpgz;
-
-    var script = document.createElement("script");
-    script.id = "fund_name_script";
-    window.jsonpgz = function(data) {
-      nameInput.value = data.name || "";
-      nameInput.style.color = "";
-      delete window.jsonpgz;
-      script.remove();
-    };
-    script.src = "https://fundgz.1234567.com.cn/js/" + code + ".js";
-    script.onerror = function() {
-      nameInput.value = "";
-      nameInput.placeholder = "查询失败，可手动输入";
-      nameInput.style.color = "";
-      delete window.jsonpgz;
-      script.remove();
-    };
-    document.head.appendChild(script);
+    this._fetchFundPingzhongData(code, function(result) {
+      if (result.name) {
+        nameInput.value = result.name;
+        nameInput.style.color = "";
+      } else {
+        nameInput.value = "";
+        nameInput.placeholder = "查询失败，可手动输入";
+        nameInput.style.color = "";
+      }
+    });
   },
 
   deleteFund(id) {
@@ -2077,28 +2088,15 @@ const App = {
       var f = uniqueCodes[index];
       index++;
 
-      // 天天基金 API 固定使用 jsonpgz 作为回调名
-      window.jsonpgz = function(data) {
-        var nav = parseFloat(data.dwjz) || 0;
-        if (nav > 0) {
-          results.funds[f.code] = { nav: nav, source: "tiantian-live" };
-          console.log('[基金] ' + f.code + ' 在线净值: ' + nav);
+      self._fetchFundPingzhongData(f.code, function(result) {
+        if (result.nav > 0) {
+          results.funds[f.code] = { nav: result.nav, source: "eastmoney-pingzhong" };
+          console.log('[基金] ' + f.code + ' 在线净值(pingzhongdata): ' + result.nav + ' (最新官方净值)');
+        } else {
+          console.warn('[基金] ' + f.code + ' pingzhongdata 查询失败');
         }
-        delete window.jsonpgz;
-        var script = document.getElementById("fund_script_" + f.code);
-        if (script) script.remove();
-        fetchNext(); // 继续下一个
-      };
-
-      var script = document.createElement("script");
-      script.id = "fund_script_" + f.code;
-      script.src = "https://fundgz.1234567.com.cn/js/" + f.code + ".js";
-      script.onerror = function() {
-        console.warn("[基金] script 加载失败: " + f.code);
-        delete window.jsonpgz;
         fetchNext();
-      };
-      document.head.appendChild(script);
+      });
     }
 
     fetchNext();
@@ -3951,12 +3949,6 @@ const App = {
     var funds = Storage.get(Storage.keys.funds) || [];
     if (funds.length === 0) return;
 
-    // 联接基金 → 母基金映射
-    var parentMap = {
-      "013126": "515170",
-      "001513": "510500",
-    };
-
     // 按代码分组
     var groups = {};
     var groupOrder = [];
@@ -3966,13 +3958,6 @@ const App = {
         groupOrder.push(f.code);
       }
       groups[f.code].push(f);
-    });
-
-    // 收集需要的母基金 codes
-    var neededCodes = [];
-    groupOrder.forEach(function(code) {
-      var priceCode = parentMap[code] || code;
-      if (neededCodes.indexOf(priceCode) < 0) neededCodes.push(priceCode);
     });
 
     // 6 个月窗口
@@ -3986,58 +3971,111 @@ const App = {
       String(sixMonthsAgo.getMonth() + 1).padStart(2, '0') + '-' +
       String(sixMonthsAgo.getDate()).padStart(2, '0');
 
-    this._loadFundHistoryData(neededCodes, function(historyData) {
-      var pointDates = self._collectFridayDateStrings(sixMonthsAgo, today);
+    // 通过 pingzhongdata API 逐个获取基金净值历史，绘制趋势图
+    var fundNavHistory = {}; // code -> [{date, nav}, ...]
+    var codeIndex = 0;
+
+    function fetchNextCode() {
+      if (codeIndex >= groupOrder.length) {
+        // 所有 code 的历史数据已获取，开始绘制
+        self._drawAllFundTrends(groups, groupOrder, fundNavHistory, sixMonthsAgoStr, todayDateStr);
+        return;
+      }
+
+      var code = groupOrder[codeIndex];
+      codeIndex++;
+
+      self._fetchFundPingzhongData(code, function(result) {
+        if (result.history && result.history.length > 0) {
+          fundNavHistory[code] = result.history;
+          console.log('[基金曲线] ' + code + ' 获取到 ' + result.history.length + ' 条净值历史, 最新: ' +
+            result.history[result.history.length - 1].date + ' NAV=' + result.history[result.history.length - 1].nav);
+        } else {
+          console.warn('[基金曲线] ' + code + ' 无净值历史数据');
+        }
+        fetchNextCode();
+      });
+    }
+
+    fetchNextCode();
+  },
+
+  // 绘制所有基金组趋势图
+  _drawAllFundTrends(groups, groupOrder, fundNavHistory, sixMonthsAgoStr, todayDateStr) {
+    var self = this;
+
+    groupOrder.forEach(function(code) {
+      var chartEl = document.getElementById('fundTrendChart_' + code);
+      var rangeEl = document.getElementById('fundTrendRange_' + code);
+      if (!chartEl) return;
+
+      var items = groups[code];
+      var navHistory = fundNavHistory[code];
+
+      if (!navHistory || navHistory.length === 0) {
+        chartEl.innerHTML = '<div class="empty-tip">暂无净值数据</div>';
+        if (rangeEl) rangeEl.textContent = "";
+        return;
+      }
+
+      // 过滤6个月窗口内的数据
+      var windowHistory = navHistory.filter(function(item) {
+        return item.date >= sixMonthsAgoStr;
+      });
+
+      if (windowHistory.length === 0) {
+        chartEl.innerHTML = '<div class="empty-tip">6个月内暂无数据</div>';
+        if (rangeEl) rangeEl.textContent = "";
+        return;
+      }
+
+      // 收集每周五的数据点 + 今天
+      var pointDates = self._collectFridayDateStrings(
+        new Date(sixMonthsAgoStr + 'T00:00:00'), new Date());
       if (pointDates.indexOf(todayDateStr) < 0) pointDates.push(todayDateStr);
 
-      // 为每个代码组绘制趋势图
-      groupOrder.forEach(function(code) {
-        var chartEl = document.getElementById('fundTrendChart_' + code);
-        var rangeEl = document.getElementById('fundTrendRange_' + code);
-        if (!chartEl) return;
-
-        var items = groups[code];
-        var priceCode = parentMap[code] || code;
-
-        // 计算每个点的该组总市值
-        var data = pointDates.map(function(dateStr) {
-          var totalValue = 0;
-          items.forEach(function(f) {
-            var currentNav = parseFloat(f.nav) || 0;
-            var shares = parseFloat(f.shares) || 0;
-            if (shares <= 0 || currentNav <= 0) {
-              totalValue += parseFloat(f.holdValue) || 0;
-              return;
-            }
-            var histArr = historyData[priceCode];
-            if (histArr && histArr.length > 0) {
-              var currentEtf = histArr[histArr.length - 1].close;
-              var histEtf = self._findClosestCloseByDate(histArr, dateStr) || currentEtf;
-              if (currentEtf > 0) {
-                var estNav = currentNav * (histEtf / currentEtf);
-                totalValue += shares * estNav;
-              } else {
-                totalValue += parseFloat(f.holdValue) || 0;
-              }
-            } else {
-              totalValue += parseFloat(f.holdValue) || 0;
-            }
-          });
-          return { dateStr: dateStr, value: totalValue };
-        });
-
-        // 今日真实值（锚定）
-        var todayRealValue = 0;
-        items.forEach(function(f) { todayRealValue += parseFloat(f.holdValue) || 0; });
-        for (var i = 0; i < data.length; i++) {
-          if (data[i].dateStr === todayDateStr) {
-            data[i].value = todayRealValue;
+      // 为每个点计算该组总市值
+      var data = pointDates.map(function(dateStr) {
+        var totalValue = 0;
+        items.forEach(function(f) {
+          var currentNav = parseFloat(f.nav) || 0;
+          var shares = parseFloat(f.shares) || 0;
+          if (shares <= 0 || currentNav <= 0) {
+            totalValue += parseFloat(f.holdValue) || 0;
+            return;
           }
-        }
-
-        self._drawFundTrendChart(chartEl, rangeEl, data, todayRealValue);
+          // 查找该日期最近的净值
+          var histNav = self._findClosestNavByDate(windowHistory, dateStr);
+          if (histNav && histNav > 0) {
+            totalValue += shares * histNav;
+          } else {
+            totalValue += parseFloat(f.holdValue) || 0;
+          }
+        });
+        return { dateStr: dateStr, value: totalValue };
       });
+
+      // 今日真实值（锚定）
+      var todayRealValue = 0;
+      items.forEach(function(f) { todayRealValue += parseFloat(f.holdValue) || 0; });
+      for (var i = 0; i < data.length; i++) {
+        if (data[i].dateStr === todayDateStr) {
+          data[i].value = todayRealValue;
+        }
+      }
+
+      self._drawFundTrendChart(chartEl, rangeEl, data, todayRealValue);
     });
+  },
+
+  // 按日期字符串在净值历史中找最近的净值
+  _findClosestNavByDate(navHistory, dateStr) {
+    var last = null;
+    for (var i = 0; i < navHistory.length; i++) {
+      if (navHistory[i].date <= dateStr) last = navHistory[i].nav;
+      else break;
+    }
+    return last;
   },
 
   // 收集每周五的本地日期字符串 (YYYY-MM-DD)
