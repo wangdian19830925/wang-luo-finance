@@ -1723,49 +1723,115 @@ const App = {
   saveFund() {
     var self = this;
     this.requirePassword(function() {
-      var shares = parseFloat(document.getElementById("fundShares").value) || 0;
-      if (shares <= 0) {
-        self.showToast("持有份额必须大于0");
-        return;
-      }
+      var code = document.getElementById("fundCode").value.trim();
       var costValue = parseFloat(document.getElementById("fundCostValue").value) || 0;
-      var navInput = document.getElementById("fundNav").value;
-      var nav = navInput ? parseFloat(navInput) : 0;
-      var holdValueInput = document.getElementById("fundHoldValue").value;
-      var holdValue = holdValueInput ? parseFloat(holdValueInput) : 0;
-      // v203: 份额为锚定字段，holdValue = shares × nav 为衍生计算
-      // 1) 有净值 + 有份额 → holdValue = shares × nav（最可靠）
-      // 2) 有净值 + 有持仓金额 → 校验：|holdValue - shares×nav| > 5% 则提示偏差，以 shares×nav 为准
-      // 3) 无净值 → holdValue 由用户填入或为0，等 NAV 刷新后 holdValue = shares × newNav
-      if (nav > 0) {
-        var calcHoldValue = shares * nav;
-        if (holdValue > 0) {
-          // 校验偏差：用户填的持仓金额 vs 计算值
-          if (Math.abs(calcHoldValue - holdValue) > holdValue * 0.05) {
-            console.log('[基金] 持仓金额偏差: 用户填=' + holdValue + ', 计算=份额×净值=' + calcHoldValue.toFixed(2) + ', 以计算值为准');
-          }
-          holdValue = parseFloat(calcHoldValue.toFixed(2)); // 份额×净值 为权威
-        } else {
-          holdValue = parseFloat(calcHoldValue.toFixed(2));
+      var holdValue = parseFloat(document.getElementById("fundHoldValue").value) || 0;
+      var existingName = document.getElementById("fundName").value.trim();
+
+      if (!code) { self.showToast("请填写基金代码"); return; }
+      if (holdValue <= 0) { self.showToast("当前持仓金额必须大于0"); return; }
+
+      // 禁用提交按钮防止重复点击
+      var submitBtn = document.getElementById("fundSubmitBtn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "查询中..."; }
+
+      // 清理可能存在的自动查询脚本
+      var oldNameScript = document.getElementById("fund_name_script");
+      if (oldNameScript) oldNameScript.remove();
+
+      // 通过天天基金 JSONP API 查询基金名称 + 最新净值
+      var script = document.createElement("script");
+      script.id = "fund_save_script";
+      window.jsonpgz = function(data) {
+        var apiName = data.name || existingName || code;
+        var nav = parseFloat(data.dwjz) || 0;
+        var shares = 0;
+        var finalHoldValue = holdValue;
+
+        if (nav > 0) {
+          // v205: 份额 = 持仓金额 / 净值（用户输入持仓金额为权威值）
+          shares = parseFloat((holdValue / nav).toFixed(2));
+          finalHoldValue = parseFloat((shares * nav).toFixed(2)); // 确保一致性
         }
-      }
-      // nav=0 时 holdValue 保留用户填入值（可能为0），等净值刷新后自动计算
-      // v204: 同一代码允许多条录入（不同买入时机），ID 自动生成而非等于 code
-      Storage.add(Storage.keys.funds, {
-        code: document.getElementById("fundCode").value,
-        name: document.getElementById("fundName").value,
-        holdValue: holdValue,
-        costValue: costValue,
-        nav: nav,
-        shares: shares,
-        navDerived: false, // 份额为用户输入的真实值，navDerived 永远为 false
-        market: "CN",
-        currency: "CNY"
-      });
-      document.getElementById("fundForm").reset();
-      document.getElementById("fundFormModal").classList.remove("show");
-      self.loadFundList(); self.showToast("基金已添加");
+
+        Storage.add(Storage.keys.funds, {
+          code: code, name: apiName,
+          holdValue: finalHoldValue, costValue: costValue,
+          nav: nav, shares: shares, navDerived: false,
+          market: "CN", currency: "CNY"
+        });
+
+        document.getElementById("fundForm").reset();
+        document.getElementById("fundFormModal").classList.remove("show");
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "查询并保存"; }
+        delete window.jsonpgz;
+        script.remove();
+        self.loadFundList();
+        self.loadDashboard();
+        if (nav > 0) {
+          self.showToast("基金已添加: " + apiName + " (净值¥" + nav.toFixed(4) + ", 份额" + shares + ")");
+        } else {
+          self.showToast("基金已添加: " + apiName + " (净值待查询)");
+        }
+      };
+
+      script.src = "https://fundgz.1234567.com.cn/js/" + code + ".js";
+      script.onerror = function() {
+        // API 查询失败，仍保存用户输入的数据（净值=0，份额=0）
+        var name = existingName || code;
+        Storage.add(Storage.keys.funds, {
+          code: code, name: name,
+          holdValue: holdValue, costValue: costValue,
+          nav: 0, shares: 0, navDerived: false,
+          market: "CN", currency: "CNY"
+        });
+
+        document.getElementById("fundForm").reset();
+        document.getElementById("fundFormModal").classList.remove("show");
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "查询并保存"; }
+        script.remove();
+        delete window.jsonpgz;
+        self.loadFundList();
+        self.loadDashboard();
+        self.showToast("基金已添加 (净值查询失败，请稍后刷新净值)");
+      };
+      document.head.appendChild(script);
     });
+  },
+
+  // 基金代码输入后自动查询名称
+  _autoFillFundName(code) {
+    var nameInput = document.getElementById("fundName");
+    if (!nameInput) return;
+    if (!code || code.length < 4) { nameInput.value = ""; nameInput.style.color = ""; return; }
+
+    nameInput.value = "查询中...";
+    nameInput.style.color = "#94a3b8";
+
+    // 清理已有脚本
+    var oldScript = document.getElementById("fund_name_script");
+    if (oldScript) oldScript.remove();
+    var oldSaveScript = document.getElementById("fund_save_script");
+    if (oldSaveScript) oldSaveScript.remove();
+    delete window.jsonpgz;
+
+    var script = document.createElement("script");
+    script.id = "fund_name_script";
+    window.jsonpgz = function(data) {
+      nameInput.value = data.name || "";
+      nameInput.style.color = "";
+      delete window.jsonpgz;
+      script.remove();
+    };
+    script.src = "https://fundgz.1234567.com.cn/js/" + code + ".js";
+    script.onerror = function() {
+      nameInput.value = "";
+      nameInput.placeholder = "查询失败，可手动输入";
+      nameInput.style.color = "";
+      delete window.jsonpgz;
+      script.remove();
+    };
+    document.head.appendChild(script);
   },
 
   deleteFund(id) {
@@ -1790,7 +1856,7 @@ const App = {
         var nav = parseFloat(newNav);
         var shares = parseFloat(fund.shares) || 0;
         var holdValue = parseFloat(fund.holdValue) || 0;
-        // v203: 份额为锚定，holdValue = shares × nav
+        // v205: 份额为锚定，holdValue = shares × nav
         if (shares > 0) {
           holdValue = parseFloat((shares * nav).toFixed(2));
         } else if (holdValue > 0) {
@@ -2124,14 +2190,12 @@ const App = {
       if (info && info.nav && parseFloat(info.nav) !== parseFloat(f.nav)) {
         var newNav = parseFloat(info.nav);
         var shares = parseFloat(f.shares) || 0;
-        // v203: 份额为锚定字段，holdValue = shares × newNav
-        // 如果 shares > 0，直接用 shares × newNav 计算 holdValue
-        // 如果 shares = 0（旧数据兼容），用 holdValue / newNav 反算 shares
+        // v205: 添加基金时份额=持仓金额/净值，NAV刷新时 holdValue = shares × newNav
         var updates = { nav: newNav };
         if (shares > 0) {
           updates.holdValue = parseFloat((shares * newNav).toFixed(2));
         } else {
-          // 旧数据兼容：shares=0 时从 holdValue 反算
+          // 旧数据兼容：shares=0 时从 holdValue 反算份额
           var holdValue = parseFloat(f.holdValue) || 0;
           if (holdValue > 0) {
             updates.shares = parseFloat((holdValue / newNav).toFixed(2));
@@ -2141,7 +2205,7 @@ const App = {
         // v186: 基金净值刷新使用 skipUpdatedAt
         Storage.update(Storage.keys.funds, f.id, updates, { skipUpdatedAt: true });
         updated++;
-        console.log('[基金净值] ' + f.name + ': ' + f.nav + ' → ' + newNav + ', holdValue=' + (updates.holdValue || f.holdValue));
+        console.log('[基金净值] ' + f.name + ': nav ' + f.nav + ' → ' + newNav + ', holdValue=' + (updates.holdValue || f.holdValue));
       }
     });
 
@@ -3038,6 +3102,7 @@ const App = {
       el = document.getElementById("addFundBtn"); if (el) el.addEventListener("click", () => document.getElementById("fundFormModal").classList.add("show"));
       el = document.getElementById("cancelFundBtn"); if (el) el.addEventListener("click", () => document.getElementById("fundFormModal").classList.remove("show"));
       el = document.getElementById("fundForm"); if (el) el.addEventListener("submit", e => { e.preventDefault(); this.saveFund(); });
+      el = document.getElementById("fundCode"); if (el) el.addEventListener("blur", function() { this._autoFillFundName(el.value.trim()); }.bind(this));
       el = document.getElementById("refreshFundPriceBtn"); if (el) el.addEventListener("click", () => this.refreshStockPrices());
       el = document.getElementById("addLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.add("show"));
       el = document.getElementById("cancelLoanBtn"); if (el) el.addEventListener("click", () => document.getElementById("loanFormModal").classList.remove("show"));

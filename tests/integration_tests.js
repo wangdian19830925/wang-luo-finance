@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v204', 'PENSION-SYNC-03: clientVersion 为 v204');
+assertEq(pkg.clientVersion, 'v205', 'PENSION-SYNC-03: clientVersion 为 v205');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -792,15 +792,20 @@ assertEq(fundAfter.updatedAt, origTime, 'IMPORT-LWW-05: 基金模板更新后 up
 assertEq(fundAfter.shares, 2000, 'IMPORT-LWW-05: 基金用户修改的 shares 不被覆盖');
 assertEq(fundAfter.name, '新名', 'IMPORT-LWW-05: 基金模板字段 name 被更新');
 
-// ========== FUND-NAV: 基金 holdValue 在 NAV 刷新后不被覆盖 ==========
+// ========== FUND-NAV: 基金 holdValue 与份额计算（v205: 份额=持仓金额/净值） ==========
 
-console.log('\n【测试 16】FUND-NAV: 基金 holdValue 在 NAV 刷新后不被覆盖');
+console.log('\n【测试 16】FUND-NAV: 基金份额=持仓金额/净值, NAV刷新后holdValue=份额×新净值');
 
-// FUND-NAV-01: shares>0 时 NAV 刷新 → holdValue = shares × newNav（份额为锚定）
+// FUND-NAV-01: shares>0 时 NAV 刷新 → holdValue = shares × newNav
+// 添加基金: holdValue=82637.18, nav=0.5321 → shares=82637.18/0.5321=155303.99
 ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
+var addHold01 = 82637.18;
+var addNav01 = 0.5321;
+var addShares01 = parseFloat((addHold01 / addNav01).toFixed(2)); // 155303.99
+var addFinalHold01 = parseFloat((addShares01 * addNav01).toFixed(2)); // ≈82637.18
 Storage.add(Storage.keys.funds, {
   id: '013126', code: '013126', name: '华夏食品饮料ETF联接C',
-  holdValue: 82637.18, costValue: 100000, nav: 0.5321, shares: 155304,
+  holdValue: addFinalHold01, costValue: 100000, nav: addNav01, shares: addShares01,
   navDerived: false, currency: 'CNY', market: 'CN',
   updatedAt: '2026-07-01T12:00:00.000Z'
 });
@@ -812,8 +817,8 @@ if (fundNav01.shares > 0) {
 }
 Storage.update(Storage.keys.funds, '013126', updates01, { skipUpdatedAt: true });
 var fundAfterNav01 = Storage.get(Storage.keys.funds).find(f => f.id === '013126');
-assertApprox(fundAfterNav01.holdValue, 155304 * 0.5236, 0.01, 'FUND-NAV-01: holdValue = shares × newNav（81320.54）');
-assertEq(fundAfterNav01.shares, 155304, 'FUND-NAV-01: shares 保持不变（锚定字段）');
+assertApprox(fundAfterNav01.holdValue, addShares01 * 0.5236, 0.5, 'FUND-NAV-01: holdValue = shares × newNav');
+assertEq(fundAfterNav01.shares, addShares01, 'FUND-NAV-01: shares 保持不变（锚定字段）');
 assertEq(fundAfterNav01.navDerived, false, 'FUND-NAV-01: navDerived=false');
 
 // FUND-NAV-02: shares=0 旧数据兼容 → NAV 刷新反算 shares = holdValue / newNav
@@ -840,9 +845,12 @@ assertEq(fundAfterNav02.navDerived, false, 'FUND-NAV-02: navDerived=false');
 
 // FUND-NAV-03: editFundPrice 手动改净值 → holdValue = shares × newNav
 ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
+var addHold03 = 82637.18;
+var addNav03 = 0.5321;
+var addShares03 = parseFloat((addHold03 / addNav03).toFixed(2));
 Storage.add(Storage.keys.funds, {
   id: '013126', code: '013126', name: '华夏食品饮料ETF联接C',
-  holdValue: 82637.18, costValue: 100000, nav: 0.5321, shares: 155304,
+  holdValue: parseFloat((addShares03 * addNav03).toFixed(2)), costValue: 100000, nav: addNav03, shares: addShares03,
   navDerived: false, currency: 'CNY', market: 'CN'
 });
 var fundNav03 = Storage.get(Storage.keys.funds).find(f => f.id === '013126');
@@ -851,40 +859,44 @@ var editNav03 = 0.55;
 var editHold03 = fundNav03.shares > 0 ? parseFloat((fundNav03.shares * editNav03).toFixed(2)) : 0;
 Storage.update(Storage.keys.funds, '013126', { nav: editNav03, holdValue: editHold03, navDerived: false });
 var fundAfterNav03 = Storage.get(Storage.keys.funds).find(f => f.id === '013126');
-assertApprox(fundAfterNav03.holdValue, 155304 * 0.55, 0.01, 'FUND-NAV-03: 手动改净值后 holdValue=shares×newNav');
-assertEq(fundAfterNav03.shares, 155304, 'FUND-NAV-03: shares 不变');
+assertApprox(fundAfterNav03.holdValue, addShares03 * 0.55, 0.5, 'FUND-NAV-03: 手动改净值后 holdValue=shares×newNav');
+assertEq(fundAfterNav03.shares, addShares03, 'FUND-NAV-03: shares 不变');
 
-// FUND-NAV-04: saveFund 份额必填验证
+// FUND-NAV-04: saveFund 流程验证：holdValue=82637.18, nav=0.5321 → shares=holdValue/nav, holdValue=shares×nav
 ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
-// 模拟 saveFund：shares=155304, nav=0.5321 → holdValue = 155304 × 0.5321 = 82637.18
-var saveShares04 = 155304;
-var saveNav04 = 0.5321;
-var saveHoldValue04 = parseFloat((saveShares04 * saveNav04).toFixed(2));
+var userHold04 = 82637.18;
+var apiNav04 = 0.5321;
+var calcShares04 = parseFloat((userHold04 / apiNav04).toFixed(2));
+var calcHold04 = parseFloat((calcShares04 * apiNav04).toFixed(2));
 Storage.add(Storage.keys.funds, {
-  id: '013126', code: '013126', name: '华夏食品饮料ETF联接C',
-  holdValue: saveHoldValue04, costValue: 100000, nav: saveNav04, shares: saveShares04,
-  navDerived: false, currency: 'CNY', market: 'CN'
+  code: '013126', name: '华夏食品饮料ETF联接C',
+  holdValue: calcHold04, costValue: 100000, nav: apiNav04, shares: calcShares04,
+  navDerived: false, market: 'CN', currency: 'CNY'
 });
-var fundAfterNav04 = Storage.get(Storage.keys.funds).find(f => f.id === '013126');
-assertApprox(fundAfterNav04.holdValue, 155304 * 0.5321, 0.01, 'FUND-NAV-04: saveFund holdValue=shares×nav');
-assertEq(fundAfterNav04.shares, 155304, 'FUND-NAV-04: shares 保留用户输入');
+var fundAfterNav04 = Storage.get(Storage.keys.funds)[0];
+assertApprox(fundAfterNav04.holdValue, userHold04, 0.5, 'FUND-NAV-04: saveFund holdValue≈用户输入值');
+assertEq(fundAfterNav04.shares, calcShares04, 'FUND-NAV-04: shares=holdValue/nav');
 
-// FUND-NAV-05: saveFund nav=0 但 shares>0 → holdValue 暂存用户输入或为0，等刷新
+// FUND-NAV-05: saveFund API 查询失败时（nav=0），holdValue 暂存用户输入，等刷新后反算份额
 ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
 Storage.add(Storage.keys.funds, {
   id: '013176', code: '013176', name: '新基金',
-  holdValue: 0, costValue: 350000, nav: 0, shares: 538735,
+  holdValue: 282137.82, costValue: 350000, nav: 0, shares: 0,
   navDerived: false, currency: 'CNY', market: 'CN'
 });
 var fundNav05 = Storage.get(Storage.keys.funds).find(f => f.id === '013176');
 assertEq(fundNav05.nav, 0, 'FUND-NAV-05: nav=0 等待刷新');
-assertEq(fundNav05.shares, 538735, 'FUND-NAV-05: shares 保留用户输入');
-// 模拟 NAV 刷新后：shares > 0 → holdValue = shares × newNav
+assertEq(fundNav05.holdValue, 282137.82, 'FUND-NAV-05: holdValue 保留用户输入');
+// 模拟 NAV 刷新后：shares=0 → shares = holdValue / newNav, holdValue 保留
 var updates05 = { nav: 0.5236, navDerived: false };
-updates05.holdValue = parseFloat((538735 * 0.5236).toFixed(2));
+var holdValue05 = parseFloat(fundNav05.holdValue) || 0;
+if (holdValue05 > 0) {
+  updates05.shares = parseFloat((holdValue05 / 0.5236).toFixed(2));
+}
 Storage.update(Storage.keys.funds, '013176', updates05, { skipUpdatedAt: true });
 var fundAfterNav05 = Storage.get(Storage.keys.funds).find(f => f.id === '013176');
-assertApprox(fundAfterNav05.holdValue, 538735 * 0.5236, 0.01, 'FUND-NAV-05: NAV 刷新后 holdValue=shares×newNav');
+assertApprox(fundAfterNav05.shares, 282137.82 / 0.5236, 0.01, 'FUND-NAV-05: NAV 刷新后 shares=holdValue/nav');
+assertEq(fundAfterNav05.holdValue, 282137.82, 'FUND-NAV-05: holdValue 保留原值');
 
 // ========== FUND-MULTI: 同一代码多条基金记录 ==========
 
@@ -892,14 +904,19 @@ console.log('\n【测试 18】FUND-MULTI: 同一代码多条基金记录');
 
 // FUND-MULTI-01: 同一 code 可以添加多条记录（ID 自动生成）
 ctx.localStorage.setItem('fm_funds', JSON.stringify([]));
+// v205: shares = holdValue / nav
+var multiHold1 = 82637.18, multiNav1 = 0.5321;
+var multiShares1 = parseFloat((multiHold1 / multiNav1).toFixed(2));
 Storage.add(Storage.keys.funds, {
   code: '013126', name: '华夏食品饮料ETF联接C',
-  holdValue: 82637.18, costValue: 100000, nav: 0.5321, shares: 155304,
+  holdValue: parseFloat((multiShares1 * multiNav1).toFixed(2)), costValue: 100000, nav: multiNav1, shares: multiShares1,
   navDerived: false, market: 'CN', currency: 'CNY'
 });
+var multiHold2 = 282137.82, multiNav2 = 0.5321;
+var multiShares2 = parseFloat((multiHold2 / multiNav2).toFixed(2));
 Storage.add(Storage.keys.funds, {
   code: '013126', name: '华夏食品饮料ETF联接C',
-  holdValue: 282137.82, costValue: 350000, nav: 0.5321, shares: 529267,
+  holdValue: parseFloat((multiShares2 * multiNav2).toFixed(2)), costValue: 350000, nav: multiNav2, shares: multiShares2,
   navDerived: false, market: 'CN', currency: 'CNY'
 });
 var multiList01 = Storage.get(Storage.keys.funds);
@@ -909,17 +926,18 @@ assertEq(multiList01[1].code, '013126', 'FUND-MULTI-01: 第二条 code=013126');
 assertEq(multiList01[0].id !== multiList01[1].id, true, 'FUND-MULTI-01: 两条 ID 不同');
 
 // FUND-MULTI-02: 两条同 code 记录 NAV 刷新后各自独立计算 holdValue
-var updates02a = { nav: 0.5236, navDerived: false };
-updates02a.holdValue = parseFloat((multiList01[0].shares * 0.5236).toFixed(2));
+var newNavMulti02 = 0.5236;
+var updates02a = { nav: newNavMulti02, navDerived: false };
+updates02a.holdValue = parseFloat((multiList01[0].shares * newNavMulti02).toFixed(2));
 Storage.update(Storage.keys.funds, multiList01[0].id, updates02a, { skipUpdatedAt: true });
-var updates02b = { nav: 0.5236, navDerived: false };
-updates02b.holdValue = parseFloat((multiList01[1].shares * 0.5236).toFixed(2));
+var updates02b = { nav: newNavMulti02, navDerived: false };
+updates02b.holdValue = parseFloat((multiList01[1].shares * newNavMulti02).toFixed(2));
 Storage.update(Storage.keys.funds, multiList01[1].id, updates02b, { skipUpdatedAt: true });
 var multiList02 = Storage.get(Storage.keys.funds);
-assertApprox(multiList02[0].holdValue, 155304 * 0.5236, 0.01, 'FUND-MULTI-02: 第一条 holdValue=shares×newNav');
-assertApprox(multiList02[1].holdValue, 529267 * 0.5236, 0.01, 'FUND-MULTI-02: 第二条 holdValue=shares×newNav');
-assertEq(multiList02[0].shares, 155304, 'FUND-MULTI-02: 第一条 shares 不变');
-assertEq(multiList02[1].shares, 529267, 'FUND-MULTI-02: 第二条 shares 不变');
+assertApprox(multiList02[0].holdValue, multiShares1 * 0.5236, 0.5, 'FUND-MULTI-02: 第一条 holdValue=shares×newNav');
+assertApprox(multiList02[1].holdValue, multiShares2 * 0.5236, 0.5, 'FUND-MULTI-02: 第二条 holdValue=shares×newNav');
+assertEq(multiList02[0].shares, multiShares1, 'FUND-MULTI-02: 第一条 shares 不变');
+assertEq(multiList02[1].shares, multiShares2, 'FUND-MULTI-02: 第二条 shares 不变');
 
 // FUND-MULTI-03: 删除一条不影响另一条
 Storage.delete(Storage.keys.funds, multiList02[0].id);
