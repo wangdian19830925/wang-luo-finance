@@ -7998,18 +7998,18 @@ const App = {
       }
     });
 
-    // 2. 房贷还款（每月同一天）
+    // 2. 房贷还款（每月 payDay 号）
     var loans = Storage.get(Storage.keys.loans);
     loans.forEach(function(l) {
+      var payDay = parseInt(l.payDay) || 17;
       var sdParts = l.startDate.split("-");
-      var sdDay = parseInt(sdParts[2]);
       var endParts = l.endDate.split("-");
       var endDate = new Date(parseInt(endParts[0]), parseInt(endParts[1])-1, parseInt(endParts[2]));
-      // 检查该月还款日是否在贷款期内
-      var checkDate = new Date(year, month, sdDay);
       var startDate = new Date(parseInt(sdParts[0]), parseInt(sdParts[1])-1, parseInt(sdParts[2]));
-      if (checkDate >= startDate && checkDate <= endDate && sdDay <= new Date(year, month+1, 0).getDate()) {
-        var dk = year + "-" + ("0"+(month+1)).slice(-2) + "-" + ("0"+sdDay).slice(-2);
+      // 检查该月还款日是否在贷款期内
+      var checkDate = new Date(year, month, payDay);
+      if (checkDate >= startDate && checkDate <= endDate && payDay <= new Date(year, month+1, 0).getDate()) {
+        var dk = year + "-" + ("0"+(month+1)).slice(-2) + "-" + ("0"+payDay).slice(-2);
         if (!events[dk]) events[dk] = [];
         var pay = self.calcMonthlyPayment(l.total, l.rate, l.months);
         events[dk].push({
@@ -8096,15 +8096,18 @@ const App = {
 
     // 房贷事件
     loans.forEach(function(l) {
-      var sd = l.startDate.replace(/-/g, "");
+      var payDay = parseInt(l.payDay) || 17;
+      // DTSTART 使用 startDate 的年月 + payDay 作为日
+      var sdParts = l.startDate.split("-");
+      var dt = sdParts[0] + sdParts[1] + ("0"+payDay).slice(-2);
       var ed = l.endDate.replace(/-/g, "");
       var pay = self.calcMonthlyPayment(l.total, l.rate, l.months);
       var summary = "🏠 " + l.loanType + "房贷月供";
-      var desc = "银行：" + l.bank + "\\n贷款类型：" + l.loanType + "\\n贷款总额：¥" + parseFloat(l.total).toFixed(0) + "\\n剩余本金：¥" + parseFloat(l.balance).toFixed(2) + "\\n年利率：" + l.rate + "%\\n月供（等额本息）：¥" + pay.toFixed(2);
+      var desc = "银行：" + l.bank + "\\n贷款类型：" + l.loanType + "\\n贷款总额：¥" + parseFloat(l.total).toFixed(0) + "\\n剩余本金：¥" + parseFloat(l.balance).toFixed(2) + "\\n年利率：" + l.rate + "%\\n月供（等额本息）：¥" + pay.toFixed(2) + "\\n每月还款日：" + payDay + "号";
 
       lines.push("BEGIN:VEVENT");
       lines.push("UID:loan-" + (l.contractNo || l.loanType) + "@family-finance");
-      lines.push("DTSTART:" + sd + "T000000");
+      lines.push("DTSTART:" + dt + "T000000");
       lines.push("SUMMARY:" + summary);
       lines.push("DESCRIPTION:" + desc);
       lines.push("RRULE:FREQ=MONTHLY;UNTIL=" + ed + "T235959Z");
