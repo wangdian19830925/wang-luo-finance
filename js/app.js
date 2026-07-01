@@ -4390,9 +4390,21 @@ const App = {
       var rc = document.getElementById("insuranceReminders");
       if (rc) {
         if (reminders.length > 0) {
+          // 截取最先到期的 3 条；若第 3 条之后存在同日期的保单，全部显示
+          var displayReminders = reminders.slice(0, 3);
+          if (reminders.length > 3 && reminders[2].nextPayDate) {
+            var cutoffDate = reminders[2].nextPayDate;
+            for (var i = 3; i < reminders.length; i++) {
+              if (reminders[i].nextPayDate === cutoffDate) {
+                displayReminders.push(reminders[i]);
+              } else {
+                break;
+              }
+            }
+          }
           var rhtml = "";
           var today = new Date(); today.setHours(0,0,0,0);
-          reminders.forEach(function(item) {
+          displayReminders.forEach(function(item) {
             var parts = item.nextPayDate.split('-');
             var nextDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             var daysLeft = Math.ceil((nextDate - today) / 86400000);
