@@ -1592,6 +1592,7 @@ const App = {
               templateUpdates.shares = h.shares || 0;
               templateUpdates.holdValue = h.holdValue || 0;
               templateUpdates.costValue = h.costValue || 0;
+              templateUpdates.navDerived = false;
             }
             // v199: 模板字段更新使用 skipUpdatedAt，防止 updatedAt 膨胀导致 LWW 误判
             Storage.update(Storage.keys.funds, h.code, templateUpdates, { skipUpdatedAt: true });
@@ -1605,6 +1606,7 @@ const App = {
             code: h.code, name: h.name,
             holdValue: h.holdValue || 0, costValue: h.costValue || 0,
             nav: h.nav || 0, shares: h.shares || 0,
+            navDerived: false,
             market: h.market || "CN", currency: h.currency || "CNY"
           };
           Storage.add(Storage.keys.funds, fundData);
@@ -1697,9 +1699,20 @@ const App = {
       var nav = navInput ? parseFloat(navInput) : 0;
       var sharesInput = document.getElementById("fundShares").value;
       var shares = sharesInput ? parseFloat(sharesInput) : 0;
-      // 自动计算：如果有净值和持仓金额，推算份额
-      if (nav > 0 && shares <= 0 && holdValue > 0) {
-        shares = holdValue / nav;
+      var navDerived = false;
+      // v202: 以当前持仓金额为优先，确保 holdValue 不被后续净值刷新覆盖
+      // 用户输入持仓金额 + 净值 → 用持仓金额推算份额（忽略可能误填的份额）
+      // 用户输入持仓金额 + 份额（无净值） → 用持仓金额/份额推导净值，并标记 navDerived
+      if (holdValue > 0) {
+        if (nav > 0) {
+          shares = holdValue / nav;
+          navDerived = false;
+        } else if (shares > 0) {
+          nav = holdValue / shares;
+          navDerived = true;
+        }
+      } else if (nav > 0 && shares > 0) {
+        holdValue = nav * shares;
       }
       Storage.add(Storage.keys.funds, {
         id: document.getElementById("fundCode").value,
@@ -1709,6 +1722,7 @@ const App = {
         costValue: costValue,
         nav: nav,
         shares: parseFloat(shares.toFixed(2)),
+        navDerived: navDerived,
         market: "CN",
         currency: "CNY"
       });
@@ -1743,7 +1757,8 @@ const App = {
         Storage.update(Storage.keys.funds, id, {
           nav: nav,
           shares: parseFloat(shares.toFixed(2)),
-          holdValue: parseFloat(holdValue.toFixed(2))
+          holdValue: parseFloat(holdValue.toFixed(2)),
+          navDerived: false
         });
         self.loadFundList();
         self.showToast(fund.name + " 净值已更新");
@@ -2055,14 +2070,39 @@ const App = {
       var info = data.funds && data.funds[f.code];
       if (info && info.nav && parseFloat(info.nav) !== parseFloat(f.nav)) {
         var newNav = parseFloat(info.nav);
-        var newShares = (parseFloat(f.shares) > 0) ? parseFloat(f.shares) : (parseFloat(f.holdValue) / newNav);
-        var newHoldValue = newShares * newNav;
+        var oldNav = parseFloat(f.nav) || 0;
+        var shares = parseFloat(f.shares) || 0;
+        var holdValue = parseFloat(f.holdValue) || 0;
+        var updates = { nav: newNav };
+        // v202: 以 holdValue 为优先，防止用户输入的持仓金额被错误覆盖
+        // 仅当 oldNav 是真实值（非推导）且 shares 与 holdValue 一致时，才安全更新 holdValue
+        if (shares > 0 && oldNav > 0 && !f.navDerived) {
+          var impliedHoldValue = shares * oldNav;
+          var diff = Math.abs(impliedHoldValue - holdValue);
+          if (holdValue > 0 && diff <= holdValue * 0.05) {
+            var newHoldValue = shares * newNav;
+            updates.holdValue = parseFloat(newHoldValue.toFixed(2));
+            // shares 保持不变
+          } else {
+            // shares 与 holdValue 不一致，根据 holdValue 重新计算 shares
+            var newShares = holdValue / newNav;
+            updates.shares = parseFloat(newShares.toFixed(2));
+          }
+        } else {
+          // 推导 nav 或没有可靠 oldNav，以 holdValue 为优先
+          if (holdValue > 0) {
+            var newShares = holdValue / newNav;
+            updates.shares = parseFloat(newShares.toFixed(2));
+          } else if (shares > 0) {
+            // 没有 holdValue，使用 shares 计算
+            var newHoldValue = shares * newNav;
+            updates.holdValue = parseFloat(newHoldValue.toFixed(2));
+            updates.shares = parseFloat(shares.toFixed(2));
+          }
+        }
         // v186: 基金净值刷新使用 skipUpdatedAt
-        Storage.update(Storage.keys.funds, f.id, {
-          nav: newNav,
-          shares: parseFloat(newShares.toFixed(2)),
-          holdValue: parseFloat(newHoldValue.toFixed(2))
-        }, { skipUpdatedAt: true });
+        updates.navDerived = false;
+        Storage.update(Storage.keys.funds, f.id, updates, { skipUpdatedAt: true });
         updated++;
         console.log('[基金净值] ' + f.name + ': ' + f.nav + ' → ' + newNav);
       }
