@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v195', 'PENSION-SYNC-03: clientVersion 为 v195');
+assertEq(pkg.clientVersion, 'v196', 'PENSION-SYNC-03: clientVersion 为 v196');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -577,6 +577,76 @@ var addedFund = Storage.get(Storage.keys.funds).find(function(f) { return f.code
 assertEq(addedFund !== null, true, 'IMPORT-GUARD-08: 新增基金正常添加');
 assertEq(addedFund.holdValue, 82637.18, 'IMPORT-GUARD-08: 新增基金 holdValue 使用默认值 82637.18');
 assertEq(addedFund.costValue, 100000.00, 'IMPORT-GUARD-08: 新增基金 costValue 使用默认值 100000.00');
+
+// ===================== 汇率影响资产计算测试 =====================
+console.log('\n【测试 10】汇率作为系数纳入股票资产与总资产计算');
+
+// FX-ASSET-01: HKD 股票资产 = shares * price * HKDCNY
+resetData();
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.2, HKDCNY: 0.92 }));
+Storage.set(Storage.keys.stocks, [
+  { id: 'hk1', code: '00992', name: '联想', shares: 1000, cost: 4, currentPrice: 10, currency: 'HKD' }
+]);
+// 1000股 × 10 HKD × 0.92 = 9200 CNY
+assertApprox(Storage.calcTotalAssets(), 9200, 0.1, 'FX-ASSET-01: HKD股票按汇率换算后纳入总资产');
+
+// FX-ASSET-02: USD 股票资产 = shares * price * USDCNY
+Storage.set(Storage.keys.stocks, [
+  { id: 'us1', code: 'NIO', name: '蔚来', shares: 1000, cost: 5, currentPrice: 6, currency: 'USD' }
+]);
+// 1000股 × 6 USD × 7.2 = 43200 CNY
+assertApprox(Storage.calcTotalAssets(), 43200, 0.1, 'FX-ASSET-02: USD股票按汇率换算后纳入总资产');
+
+// FX-ASSET-03: CNY 股票资产不受汇率影响
+Storage.set(Storage.keys.stocks, [
+  { id: 'cn1', code: '600519', name: '茅台', shares: 100, cost: 1500, currentPrice: 1700, currency: 'CNY' }
+]);
+// 100股 × 1700 CNY × 1 = 170000 CNY
+assertApprox(Storage.calcTotalAssets(), 170000, 0.1, 'FX-ASSET-03: CNY股票不受汇率影响');
+
+// FX-ASSET-04: 汇率变化后总资产随之变化（HKD 0.92 → 0.86）
+Storage.set(Storage.keys.stocks, [
+  { id: 'hk1', code: '00992', name: '联想', shares: 1000, cost: 4, currentPrice: 10, currency: 'HKD' }
+]);
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.2, HKDCNY: 0.86 }));
+// 1000 × 10 × 0.86 = 8600
+assertApprox(Storage.calcTotalAssets(), 8600, 0.1, 'FX-ASSET-04: HKD汇率从0.92→0.86后总资产减少');
+
+// FX-ASSET-05: USD 汇率变化
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.0, HKDCNY: 0.92 }));
+Storage.set(Storage.keys.stocks, [
+  { id: 'us1', code: 'NIO', name: '蔚来', shares: 1000, cost: 5, currentPrice: 6, currency: 'USD' }
+]);
+// 1000 × 6 × 7.0 = 42000
+assertApprox(Storage.calcTotalAssets(), 42000, 0.1, 'FX-ASSET-05: USD汇率从7.2→7.0后总资产减少');
+
+// FX-ASSET-06: 混合货币股票 + 现金 + 基金，综合汇率计算
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.0, HKDCNY: 0.86 }));
+Storage.set(Storage.keys.cashAccounts, [{ id: 'cmb', name: '招行', balance: 10000, updated: '2026-07-01' }]);
+Storage.set(Storage.keys.funds, [{ id: 'f1', code: '013126', holdValue: 50000, currency: 'CNY' }]);
+Storage.set(Storage.keys.stocks, [
+  { id: 'hk1', code: '00992', name: '联想', shares: 1000, cost: 4, currentPrice: 10, currency: 'HKD' },
+  { id: 'us1', code: 'NIO', name: '蔚来', shares: 1000, cost: 5, currentPrice: 6, currency: 'USD' },
+  { id: 'cn1', code: '600519', name: '茅台', shares: 100, cost: 1500, currentPrice: 1700, currency: 'CNY' }
+]);
+// 1000×10×0.86 + 1000×6×7.0 + 100×1700 + 10000 + 50000 = 8600 + 42000 + 170000 + 10000 + 50000 = 280600
+assertApprox(Storage.calcTotalAssets(), 280600, 1, 'FX-ASSET-06: 混合货币股票+现金+基金综合汇率计算');
+
+// FX-ASSET-07: Storage._getFxRates 与 getFxRate 行为一致（Storage 侧接口）
+var storageRates = Storage._getFxRates();
+assertApprox(storageRates.HKDCNY, 0.86, 0.001, 'FX-ASSET-07: Storage._getFxRates 读取最新 HKD');
+assertApprox(storageRates.USDCNY, 7.0, 0.001, 'FX-ASSET-07: Storage._getFxRates 读取最新 USD');
+
+// FX-ASSET-08: _toCNY 内部汇率与 _getFxRates 保持同步
+assertApprox(Storage._toCNY(100, 'HKD'), 86, 0.1, 'FX-ASSET-08: _toCNY(100, HKD) 使用最新汇率');
+assertApprox(Storage._toCNY(100, 'USD'), 700, 0.1, 'FX-ASSET-08: _toCNY(100, USD) 使用最新汇率');
+
+// FX-ASSET-09: 汇率刷新前后总资产差额 = (新汇率 - 旧汇率) × 持仓 × 价格
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.2, HKDCNY: 0.92 }));
+var totalAt920 = Storage.calcTotalAssets(); // 8600 + 42000 + 170000 + 10000 + 50000 = 280600
+ctx.localStorage.setItem('fm_exchange_rates', JSON.stringify({ USDCNY: 7.2, HKDCNY: 0.90 }));
+var totalAt900 = Storage.calcTotalAssets(); // 9000 + 42000 + 170000 + 10000 + 50000 = 281000
+assertApprox(totalAt920 - totalAt900, 1000 * 10 * (0.92 - 0.90), 0.1, 'FX-ASSET-09: HKD汇率变化0.02对应总资产变化1000×10×0.02=200');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');

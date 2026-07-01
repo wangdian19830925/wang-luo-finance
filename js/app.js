@@ -2240,17 +2240,12 @@ const App = {
             isFallback = true;
           }
 
-          // 用历史数据最新值更新汇率（更精确）
-          var latestUsd = history.usdCny[history.usdCny.length - 1];
-          var latestHkd = history.hkdCny[history.hkdCny.length - 1];
-          if (latestUsd && latestUsd.rate > 0) {
-            var elU = document.getElementById('fxUsdCny');
-            if (elU) elU.textContent = latestUsd.rate.toFixed(4);
-          }
-          if (latestHkd && latestHkd.rate > 0) {
-            var elH = document.getElementById('fxHkdCny');
-            if (elH) elH.textContent = latestHkd.rate.toFixed(4);
-          }
+          // 走势图数字始终使用本地汇率（与股票估值保持一致）
+          // 历史数据点仅用于绘制曲线，避免与股票列表/估值汇率不一致
+          var stableUsd = self.getFxRate('USD');
+          var stableHkd = self.getFxRate('HKD');
+          if (fxUsdCnyEl && stableUsd > 0) fxUsdCnyEl.textContent = stableUsd.toFixed(4);
+          if (fxHkdCnyEl && stableHkd > 0) fxHkdCnyEl.textContent = stableHkd.toFixed(4);
 
           // 显示并绘制走势图
           var svg1 = document.getElementById('fxTrendUsdCnySvg');
