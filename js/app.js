@@ -6804,34 +6804,25 @@ const App = {
 
   _buildPensionSchedule(startYear, endYear, params) {
     var schedule = {};
-    var details = []; // 新增：存储每月领取数额详情
+    var details = []; // 存储每月领取数额详情
     var members = [
       { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge, avgIndex: params.pensionMember1AvgIndex, contributionYears: params.pensionMember1ContributionYears, birthYear: params.pensionMember1BirthYear || 1983, name: '王典' },
       { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge, avgIndex: params.pensionMember2AvgIndex, contributionYears: params.pensionMember2ContributionYears, birthYear: params.pensionMember2BirthYear || 1990, name: 'Rowen' }
     ];
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
-    // 2025年上海计发基数（社平工资）
-    var baseAvgSalary2025 = 12434;
-    // 社平工资年增长率（预估）
-    var avgSalaryGrowthRate = 0.05;
+    // 上年社平工资（上海2025年核定值）
+    var lastYearAvgSalary = 12434;
 
     members.forEach(function(p) {
       var retireYear = p.birthYear + p.retireAge;
-      // 如果今天退休：后续不再工作，养老金账户只按 2% 复利增长，不再追加缴费
-      var balance = p.balance;
-      for (var y = startYear; y < retireYear; y++) {
-        balance = balance * 1.02;
-      }
       // 计发月数（只是计算除数，不是领取期限；养老金终身发放）
       var pm = pmMap[p.retireAge] || 117;
-      var personalMonthly = balance / pm;
-      // 基础养老金
-      // 公式：月领 = 退休时计发基数 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
-      // 平均缴费指数和缴费年限由用户直接设定（停缴模式下年限冻结，不再随退休年份增长）
-      var avgSalaryAtRetirement = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear - 2025);
+      // 个人账户养老金 = 个人账户储存总额 / 计发月数
+      var personalMonthly = p.balance / pm;
+      // 基础养老金 = 上年社平工资 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
       var avgContributionIndex = p.avgIndex;
       var contributionYears = p.contributionYears;
-      var baseMonthly = avgSalaryAtRetirement * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
+      var baseMonthly = lastYearAvgSalary * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
       var monthly = personalMonthly + baseMonthly;
       
       // 存储详情
@@ -6839,6 +6830,7 @@ const App = {
         name: p.name,
         retireAge: p.retireAge,
         retireYear: retireYear,
+        pm: pm,
         personalMonthly: personalMonthly,
         baseMonthly: baseMonthly,
         totalMonthly: monthly,
@@ -7012,9 +7004,9 @@ const App = {
         if (resultEl) {
           resultEl.querySelector('.retirement-pension-result-value').textContent = self.formatMoney(d.totalMonthly) + '/月';
           resultEl.querySelector('.retirement-pension-result-detail').innerHTML =
-            '个人账户: ' + self.formatMoney(d.personalMonthly) + '/月<br>' +
-            '基础养老金: ' + self.formatMoney(d.baseMonthly) + '/月<br>' +
-            '退休年份: ' + d.retireYear + ' 年';
+            '个人账户养老金: ' + self.formatMoney(d.personalMonthly) + '/月（余额÷计发月数）<br>' +
+            '基础养老金: ' + self.formatMoney(d.baseMonthly) + '/月（社平×(1+指数)/2×年限×1%）<br>' +
+            '退休年份: ' + d.retireYear + '年（' + d.retireAge + '岁退休，计发月数' + d.pm + '个月）';
         }
       });
     }

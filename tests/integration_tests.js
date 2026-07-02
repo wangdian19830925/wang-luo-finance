@@ -197,7 +197,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v214', 'PENSION-SYNC-03: clientVersion 为 v214');
+assertEq(pkg.clientVersion, 'v215', 'PENSION-SYNC-03: clientVersion 为 v215');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -282,62 +282,54 @@ var merged8 = Storage._mergeDataPackages(localPkg8, cloudPkg8);
 assert(merged8.data._pensionParams, 'PENSION-SYNC-08: 云端无养老金参数时保留本地');
 assertEq(merged8.data._pensionParams.pensionMember1Balance, 700000, 'PENSION-SYNC-08: 本地养老金余额保留');
 
-// ===== PENSION-CALC: v211 基础养老金公式验证（纯数学） =====
-console.log('\n--- PENSION-CALC: v211 基础养老金公式 ---');
+// ===== PENSION-CALC: v215 退休养老金公式验证 =====
+console.log('\n--- PENSION-CALC: v215 退休养老金公式 ---');
 
-// 上海基础养老金公式：月领 = 退休时计发基数 × (1 + avgIndex) ÷ 2 × contributionYears × 1%
-// 计发基数(社平工资)按年增长率 5% 从 2025 基数 12434 增长到退休年份
-// 个人账户养老金 = 余额 × 1.02^(退休年份-起始年份) ÷ 计发月数
+// 上海养老金公式（v215 修正）：
+// 基础养老金 = 上年社平工资 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
+// 个人账户养老金 = 个人账户储存总额 ÷ 计发月数
+// 月养老金合计 = 基础养老金 + 个人账户养老金
 
-var baseAvgSalary2025 = 12434;
-var avgSalaryGrowthRate = 0.05;
+var lastYearAvgSalary = 12434; // 上海上年社平工资
 var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
-var birthYear = 1983;
 
-// PENSION-CALC-01: avgIndex=1.5, contributionYears=16.42, 63岁退休(2046年)
-// 旧版硬编码 avgIndex=3.0 → 现改为参数化 1.5
-var retireYear1 = birthYear + 63; // 2046
-var avgSalary1 = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear1 - 2025);
-var baseMonthly1 = avgSalary1 * (1 + 1.5) / 2 * 16.42 * 0.01;
-var personalMonthly1 = 460000 * Math.pow(1.02, retireYear1 - 2025) / pmMap[63];
+// PENSION-CALC-01: 用用户实际数据验证公式
+// 63岁退休, 117个月计发月数, 16.42年缴费年限, avgIndex=1.5, 社平=12434, 余额=464115.6
+var baseMonthly1 = lastYearAvgSalary * (1 + 1.5) / 2 * 16.42 * 0.01;
+var personalMonthly1 = 464115.6 / pmMap[63];
 var totalMonthly1 = personalMonthly1 + baseMonthly1;
-var totalAnnual1 = totalMonthly1 * 12;
-console.log('PENSION-CALC-01: avgIndex=1.5, years=16.42, retire=63');
-console.log('  社平2046=' + avgSalary1.toFixed(2) + ', 基础月=' + baseMonthly1.toFixed(2) + ', 个人月=' + personalMonthly1.toFixed(2));
-console.log('  年总额=' + totalAnnual1.toFixed(2));
-assert(baseMonthly1 > 0, 'PENSION-CALC-01: 基础养老金 > 0');
-assert(personalMonthly1 > 0, 'PENSION-CALC-01: 个人账户养老金 > 0');
-// 基础养老金 = 34792.93 × 1.25 × 16.42 × 0.01 ≈ 7160.95
-assert(Math.abs(baseMonthly1 - avgSalary1 * 1.25 * 16.42 * 0.01) < 1, 'PENSION-CALC-01: 基础养老金公式精确');
+console.log('PENSION-CALC-01: avgIndex=1.5, years=16.42, retire=63, pm=117');
+console.log('  基础养老金=12434×1.25×16.42×0.01=' + baseMonthly1.toFixed(2));
+console.log('  个人账户养老金=464115.6/117=' + personalMonthly1.toFixed(2));
+console.log('  月养老金合计=' + totalMonthly1.toFixed(2));
+assertApprox(baseMonthly1, 2552, 5, 'PENSION-CALC-01: 基础养老金≈2552元');
+assertApprox(personalMonthly1, 3966.8, 5, 'PENSION-CALC-01: 个人账户养老金≈3966.8元');
+assertApprox(totalMonthly1, 6518.8, 10, 'PENSION-CALC-01: 月养老金合计≈6518.8元');
+// 精确验证公式
+assert(Math.abs(baseMonthly1 - 12434 * 1.25 * 16.42 * 0.01) < 1, 'PENSION-CALC-01: 基础养老金公式精确');
 
-// PENSION-CALC-02: 对比 avgIndex=1.5 vs avgIndex=3.0（旧硬编码值）
+// PENSION-CALC-02: 对比 avgIndex=1.5 vs avgIndex=3.0
 // avgIndex=1.5 → (1+1.5)/2 = 1.25
 // avgIndex=3.0 → (1+3.0)/2 = 2.0
 // 基础养老金比例 = 1.25 / 2.0 = 0.625
-var baseMonthly2_old = avgSalary1 * (1 + 3.0) / 2 * 16.42 * 0.01;
-var baseMonthly2_new = avgSalary1 * (1 + 1.5) / 2 * 16.42 * 0.01;
+var baseMonthly2_old = lastYearAvgSalary * (1 + 3.0) / 2 * 16.42 * 0.01;
+var baseMonthly2_new = lastYearAvgSalary * (1 + 1.5) / 2 * 16.42 * 0.01;
 assertEq(baseMonthly2_new / baseMonthly2_old, 1.25 / 2.0, 'PENSION-CALC-02: avgIndex=1.5基础养老金是3.0的62.5%');
 
-// PENSION-CALC-03: contributionYears冻结（停缴模式）——不再随退休年份增长
-// 如果63岁退休(2046), 缴费年限=16.42；如果65岁退休(2048), 缴费年限仍=16.42
-var retireYear3 = birthYear + 65; // 2048
-var avgSalary3 = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear3 - 2025);
-var baseMonthly3 = avgSalary3 * (1 + 1.5) / 2 * 16.42 * 0.01;
-// 验证：即使退休更晚，缴费年限不变（停缴冻结）
-assertEq(baseMonthly3, avgSalary3 * 1.25 * 16.42 * 0.01, 'PENSION-CALC-03: 停缴模式下缴费年限冻结为16.42');
-// 旧版动态计算：contributionYears = min(startYear, retireYear) - 2008 = min(2025,2048)-2008 = 17
-// 旧版65岁退休会有17年（而非16.42），确认新版不再动态增长
-var oldContributionYears = Math.max(0, Math.min(2025, retireYear3) - 2008);
-assert(oldContributionYears === 17, 'PENSION-CALC-03: 旧版动态计算缴费年限=17年，新版冻结=16.42年');
+// PENSION-CALC-03: contributionYears冻结（停缴模式）——缴费年限参数不随退休年份变化
+// 63岁退休或65岁退休，缴费年限都=16.42（冻结参数）
+var baseMonthly3_63 = lastYearAvgSalary * (1 + 1.5) / 2 * 16.42 * 0.01;
+var baseMonthly3_65 = lastYearAvgSalary * (1 + 1.5) / 2 * 16.42 * 0.01;
+assertEq(baseMonthly3_63, baseMonthly3_65, 'PENSION-CALC-03: 停缴模式下不同退休年龄缴费年限同为16.42');
 
-// PENSION-CALC-04: Member2 也使用参数化（avgIndex=0.8, years=10, retire=58）
-var retireYear4m2 = birthYear + 58; // 2041
-var avgSalary4m2 = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear4m2 - 2025);
-var baseMonthly4m2 = avgSalary4m2 * (1 + 0.8) / 2 * 10 * 0.01;
+// PENSION-CALC-04: Member2（avgIndex=0.8, years=10, retire=58, pm=152, balance=200000）
+var baseMonthly4m2 = lastYearAvgSalary * (1 + 0.8) / 2 * 10 * 0.01;
 // (1+0.8)/2 = 0.9, × 10 × 1% = 0.09
-assertEq(baseMonthly4m2, avgSalary4m2 * 0.9 * 10 * 0.01, 'PENSION-CALC-04: Member2 avgIndex=0.8基础养老金公式正确');
-var personalMonthly4m2 = 200000 * Math.pow(1.02, retireYear4m2 - 2025) / pmMap[58];
+assertEq(baseMonthly4m2, lastYearAvgSalary * 0.9 * 10 * 0.01, 'PENSION-CALC-04: Member2 avgIndex=0.8基础养老金公式正确');
+var personalMonthly4m2 = 200000 / pmMap[58];
 assert(personalMonthly4m2 > 0, 'PENSION-CALC-04: Member2 个人账户养老金 > 0');
+// 个人账户养老金 = 余额 / 计发月数（不再做1.02复利）
+assertApprox(personalMonthly4m2, 200000 / 152, 0.5, 'PENSION-CALC-04: Member2 个人账户养老金=余额÷计发月数');
 
 // WRITE-GUARD-01: _applyDataPackage 逐项 updatedAt 保护——本地较新记录不被合并结果覆盖
 resetData();
@@ -1062,7 +1054,7 @@ Storage.fetchCloudMarketData(['prices']).then(function(r) {
 // CLOUD-DATA-03: clientVersion 为 v210
 Storage.cloudSyncEnabled = true; // 恢复以便后续测试
 var pkg210 = Storage._getLocalDataPackage();
-assertEq(pkg210.clientVersion, 'v214', 'CLOUD-DATA-03: clientVersion 为 v214');
+assertEq(pkg210.clientVersion, 'v215', 'CLOUD-DATA-03: clientVersion 为 v215');
 
 // CLOUD-DATA-04: storage.js 中存在 fetchCloudMarketData 方法签名
 var storageSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'storage.js'), 'utf8');
