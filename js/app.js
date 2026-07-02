@@ -6278,8 +6278,8 @@ const App = {
       annualExpense: 20, annualEducation: 10, educationEndYear: 2035, extraTransactions: [],
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       inflationCurve: {}, investmentReturnCurve: {},
-      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63,
-      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58
+      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63, pensionMember1AvgIndex: 1.5, pensionMember1ContributionYears: 16.42,
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58, pensionMember2AvgIndex: 1.5, pensionMember2ContributionYears: 16.42
     };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
@@ -6433,9 +6433,13 @@ const App = {
       pensionMember1Balance: 'retirementParamPensionMember1Balance',
       pensionMember1Monthly: 'retirementParamPensionMember1Monthly',
       pensionMember1RetireAge: 'retirementParamPensionMember1RetireAge',
+      pensionMember1AvgIndex: 'retirementParamPensionMember1AvgIndex',
+      pensionMember1ContributionYears: 'retirementParamPensionMember1ContributionYears',
       pensionMember2Balance: 'retirementParamPensionMember2Balance',
       pensionMember2Monthly: 'retirementParamPensionMember2Monthly',
-      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge'
+      pensionMember2RetireAge: 'retirementParamPensionMember2RetireAge',
+      pensionMember2AvgIndex: 'retirementParamPensionMember2AvgIndex',
+      pensionMember2ContributionYears: 'retirementParamPensionMember2ContributionYears'
     };
 
     function updateLabel(key, value) {
@@ -6448,6 +6452,8 @@ const App = {
       else if (key.indexOf('Balance') >= 0) text = (value / 10000).toFixed(1) + ' 万';
       else if (key.indexOf('Monthly') >= 0) text = value + ' 元';
       else if (key.indexOf('RetireAge') >= 0) text = value + ' 岁';
+      else if (key.indexOf('AvgIndex') >= 0) text = value.toFixed(1);
+      else if (key.indexOf('ContributionYears') >= 0) text = value + ' 年';
       el.textContent = text;
     }
 
@@ -6797,23 +6803,18 @@ const App = {
     var schedule = {};
     var birthYear = 1983;
     var members = [
-      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge },
-      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge }
+      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge, avgIndex: params.pensionMember1AvgIndex, contributionYears: params.pensionMember1ContributionYears },
+      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge, avgIndex: params.pensionMember2AvgIndex, contributionYears: params.pensionMember2ContributionYears }
     ];
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
-    // 缴费起始年（2008年）
-    var contributionStartYear = 2008;
     // 2025年上海计发基数（社平工资）
     var baseAvgSalary2025 = 12434;
     // 社平工资年增长率（预估）
     var avgSalaryGrowthRate = 0.05;
-    // 平均缴费指数（按3倍上限缴）
-    var avgContributionIndex = 3.0;
 
     members.forEach(function(p) {
       var retireYear = birthYear + p.retireAge;
       // 如果今天退休：后续不再工作，养老金账户只按 2% 复利增长，不再追加缴费
-      // 缴费年限也只计算到当前年份（或退休当年，取较早者）
       var balance = p.balance;
       for (var y = startYear; y < retireYear; y++) {
         balance = balance * 1.02;
@@ -6823,8 +6824,10 @@ const App = {
       var personalMonthly = balance / pm;
       // 基础养老金
       // 公式：月领 = 退休时计发基数 × (1 + 平均缴费指数) ÷ 2 × 缴费年限 × 1%
+      // 平均缴费指数和缴费年限由用户直接设定（停缴模式下年限冻结，不再随退休年份增长）
       var avgSalaryAtRetirement = baseAvgSalary2025 * Math.pow(1 + avgSalaryGrowthRate, retireYear - 2025);
-      var contributionYears = Math.max(0, Math.min(startYear, retireYear) - contributionStartYear);
+      var avgContributionIndex = p.avgIndex;
+      var contributionYears = p.contributionYears;
       var baseMonthly = avgSalaryAtRetirement * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
       var monthly = personalMonthly + baseMonthly;
       for (var y = retireYear; y <= endYear; y++) {

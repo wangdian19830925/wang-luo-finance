@@ -516,7 +516,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v210',
+      clientVersion: 'v211',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -627,8 +627,8 @@ const Storage = {
 
   // v181+: 养老金参数字段名
   _pensionFields: [
-    'pensionMember1Balance', 'pensionMember1Monthly', 'pensionMember1RetireAge',
-    'pensionMember2Balance', 'pensionMember2Monthly', 'pensionMember2RetireAge'
+    'pensionMember1Balance', 'pensionMember1Monthly', 'pensionMember1RetireAge', 'pensionMember1AvgIndex', 'pensionMember1ContributionYears',
+    'pensionMember2Balance', 'pensionMember2Monthly', 'pensionMember2RetireAge', 'pensionMember2AvgIndex', 'pensionMember2ContributionYears'
   ],
 
   // 公积金余额字段（云端同步）
