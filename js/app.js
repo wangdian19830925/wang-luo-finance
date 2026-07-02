@@ -6220,7 +6220,7 @@ const App = {
   // 基本养老保险（来自截图：本息总额 460,126.76，个人缴费 2,984.16/月，累计 197 个月；成员2先按相同）
   RETIREMENT_PENSION: {
     member1: { name: '王典', birthYear: 1983, gender: 'male', retireAge: 63, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 },
-    member2: { name: 'Rowen', birthYear: 1983, gender: 'female', retireAge: 58, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 }
+    member2: { name: 'Rowen', birthYear: 1990, gender: 'female', retireAge: 58, accountBalance: 460126.76, monthsPaid: 197, monthlyContribution: 2984.16 }
   },
 
   // 保险年金收入（以 Excel 领取核算为准，单位：元/年）

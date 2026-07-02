@@ -516,7 +516,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v212',
+      clientVersion: 'v213',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -544,7 +544,19 @@ const Storage = {
         current.forEach(item => {
           if (item && item.id) currentMap[item.id] = item;
         });
-        const merged = incoming.map(item => {
+        // v213: 对 incoming 按 id 去重，防止云端重复记录导致本地出现重复
+        const seenIds = new Set();
+        const dedupedIncoming = [];
+        incoming.forEach(item => {
+          if (!item || !item.id) { dedupedIncoming.push(item); return; }
+          if (seenIds.has(item.id)) {
+            console.warn('[CloudBase] 跳过重复记录 ' + k + '/' + item.id);
+            return;
+          }
+          seenIds.add(item.id);
+          dedupedIncoming.push(item);
+        });
+        const merged = dedupedIncoming.map(item => {
           if (!item || !item.id) return item;
           const localItem = currentMap[item.id];
           if (!localItem) return item; // 本地没有此 id，直接使用合并结果

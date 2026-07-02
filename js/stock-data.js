@@ -17,7 +17,7 @@ var STOCK_HOLDINGS = [
   {
     code: "NIO",
     name: "蔚来",
-    shares: 5372,
+    shares: 0,
     cost: 0,
     currentPrice: 5.05,
     currency: "USD",
