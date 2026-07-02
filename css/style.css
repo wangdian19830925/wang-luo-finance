@@ -2122,6 +2122,48 @@ h3 .icon { width: 18px; height: 18px; margin-right: 4px; vertical-align: -3px; }
 }
 
 /* 表单: checkbox 行 */
+/* 公积金余额卡片（与房贷卡片统一风格） */
+.loan-provident-section {
+  margin-top: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--card-padding);
+}
+.loan-provident-section h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+.provident-fund-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.provident-fund-label {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  margin-bottom: 4px;
+}
+.provident-fund-value {
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.provident-fund-balance {
+  color: #4ade80;
+}
+.provident-fund-monthly {
+  color: var(--text-primary, #f1f5f9);
+}
+.provident-fund-update {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+  margin-top: 8px;
+}
+
 .form-group-check {
   background: rgba(74, 222, 128, 0.05);
   padding: 12px 14px;
