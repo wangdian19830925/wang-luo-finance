@@ -154,6 +154,36 @@ const Storage = {
     return null;
   },
 
+  // v210: 从云端获取预计算的市场数据（股价/汇率/基金/宏观/简报）
+  // 通过 callFunction 调用 get-cloud-data 云函数，不依赖 web 端 JSONP/fetch
+  async fetchCloudMarketData(types) {
+    if (!this.cloudSyncEnabled || !this.cloudApp) {
+      console.log('[CloudBase] 未初始化，跳过云端市场数据获取');
+      return null;
+    }
+    try {
+      types = types || ['prices', 'rates', 'navs', 'macro', 'briefing'];
+      console.log('[CloudBase] 调用 get-cloud-data，types:', types.join(','));
+
+      var result = await this.cloudApp.callFunction({
+        name: 'get-cloud-data',
+        data: { types: types, userDocId: this.cloudDocId || 'finance_data' }
+      });
+
+      if (result && result.result) {
+        var data = result.result;
+        var keys = Object.keys(data).filter(function(k) { return k !== '_meta'; });
+        console.log('[CloudBase] 云端市场数据获取成功，类型:', keys.join(','));
+        return data;
+      }
+      console.warn('[CloudBase] 云端市场数据返回为空');
+      return null;
+    } catch (e) {
+      console.warn('[CloudBase] 云端市场数据获取失败:', e.message || e);
+      return null;
+    }
+  },
+
   // 初始化 CloudBase
   async initCloudbase(config) {
     config = config || {};
@@ -486,7 +516,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v209',
+      clientVersion: 'v210',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };

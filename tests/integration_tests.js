@@ -193,7 +193,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v209', 'PENSION-SYNC-03: clientVersion 为 v209');
+assertEq(pkg.clientVersion, 'v210', 'PENSION-SYNC-03: clientVersion 为 v210');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -978,6 +978,71 @@ Storage.saveProvidentFundBalance(150000, 3000);
 var pfParams04 = Storage.getProvidentFundParams();
 assertEq(pfParams04.providentFundBalance, 150000, 'PROVIDENT-FUND-04: 余额保留 150000');
 assertEq(pfParams04.providentFundMonthly, 3000, 'PROVIDENT-FUND-04: 每月增加额更新为 3000');
+
+// ===== CLOUD-DATA: v210 云端市场数据同步 =====
+console.log('\n--- CLOUD-DATA: v210 云端市场数据 ---');
+
+// CLOUD-DATA-01: fetchCloudMarketData 方法存在
+assert(typeof Storage.fetchCloudMarketData === 'function', 'CLOUD-DATA-01: fetchCloudMarketData 方法存在');
+
+// CLOUD-DATA-02: 未初始化时返回 null
+ctx.localStorage.clear();
+Storage.cloudSyncEnabled = false;
+Storage.cloudApp = null;
+var cdResult02 = null;
+// async 方法需要 await，但在 vm 同步环境中模拟
+Storage.fetchCloudMarketData(['prices']).then(function(r) {
+  cdResult02 = r;
+  assert(cdResult02 === null, 'CLOUD-DATA-02: 未初始化时返回 null');
+}).catch(function() {
+  assert(false, 'CLOUD-DATA-02: 不应抛出异常');
+});
+
+// CLOUD-DATA-03: clientVersion 为 v210
+Storage.cloudSyncEnabled = true; // 恢复以便后续测试
+var pkg210 = Storage._getLocalDataPackage();
+assertEq(pkg210.clientVersion, 'v210', 'CLOUD-DATA-03: clientVersion 为 v210');
+
+// CLOUD-DATA-04: storage.js 中存在 fetchCloudMarketData 方法签名
+var storageSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'storage.js'), 'utf8');
+assert(storageSrc.includes('fetchCloudMarketData'), 'CLOUD-DATA-04: storage.js 包含 fetchCloudMarketData');
+
+// CLOUD-DATA-05: storage.js 中存在 callFunction 调用
+assert(storageSrc.includes("callFunction"), 'CLOUD-DATA-05: storage.js 包含 callFunction 调用');
+
+// CLOUD-DATA-06: app.js 中存在 _applyCloudMarketData 方法
+var appSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8');
+assert(appSrc.includes('_applyCloudMarketData'), 'CLOUD-DATA-06: app.js 包含 _applyCloudMarketData');
+
+// CLOUD-DATA-07: app.js fetchStockPrices 优先使用云端数据
+assert(appSrc.includes('fetchCloudMarketData'), 'CLOUD-DATA-07: app.js fetchStockPrices 调用 fetchCloudMarketData');
+
+// CLOUD-DATA-08: app.js _fetchMacroNews 优先使用云端数据
+assert(appSrc.includes('_fetchMacroNewsFromRSS'), 'CLOUD-DATA-08: app.js 包含 _fetchMacroNewsFromRSS fallback');
+
+// CLOUD-DATA-09: 云函数文件存在
+assert(fs.existsSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'fetch-market-data', 'index.js')), 'CLOUD-DATA-09: fetch-market-data 云函数存在');
+assert(fs.existsSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'fetch-macro-data', 'index.js')), 'CLOUD-DATA-09b: fetch-macro-data 云函数存在');
+assert(fs.existsSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'generate-briefing', 'index.js')), 'CLOUD-DATA-09c: generate-briefing 云函数存在');
+assert(fs.existsSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'get-cloud-data', 'index.js')), 'CLOUD-DATA-09d: get-cloud-data 云函数存在');
+
+// CLOUD-DATA-10: 共享常量文件存在且定义了集合名
+var constantsSrc = fs.readFileSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'shared', 'constants.js'), 'utf8');
+assert(constantsSrc.includes('market_prices'), 'CLOUD-DATA-10: constants.js 定义 market_prices 集合');
+assert(constantsSrc.includes('exchange_rates'), 'CLOUD-DATA-10b: constants.js 定义 exchange_rates 集合');
+assert(constantsSrc.includes('fund_navs'), 'CLOUD-DATA-10c: constants.js 定义 fund_navs 集合');
+assert(constantsSrc.includes('daily_briefing'), 'CLOUD-DATA-10d: constants.js 定义 daily_briefing 集合');
+
+// CLOUD-DATA-11: 云函数 config.json 定时触发器配置正确
+var marketConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'fetch-market-data', 'config.json'), 'utf8'));
+assert(marketConfig.triggers && marketConfig.triggers.length > 0, 'CLOUD-DATA-11: fetch-market-data 有定时触发器');
+assert(marketConfig.triggers[0].type === 'timer', 'CLOUD-DATA-11b: 触发器类型为 timer');
+
+// CLOUD-DATA-12: get-cloud-data 云函数读取正确集合
+var getCloudDataSrc = fs.readFileSync(path.join(__dirname, '..', 'cloudbase', 'functions', 'get-cloud-data', 'index.js'), 'utf8');
+assert(getCloudDataSrc.includes('readStockPrices'), 'CLOUD-DATA-12: get-cloud-data 调用 readStockPrices');
+assert(getCloudDataSrc.includes('readExchangeRates'), 'CLOUD-DATA-12b: get-cloud-data 调用 readExchangeRates');
+assert(getCloudDataSrc.includes('readFundNavs'), 'CLOUD-DATA-12c: get-cloud-data 调用 readFundNavs');
 
 console.log('\n========== 集成测试汇总 ==========');
 console.log('总计：' + total + ' 个用例');

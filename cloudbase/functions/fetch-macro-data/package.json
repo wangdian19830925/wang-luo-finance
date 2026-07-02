@@ -1,0 +1,9 @@
+{
+  "name": "fetch-macro-data",
+  "version": "1.0.0",
+  "description": "每日获取财经新闻+汇率历史，写入云端数据库",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.29.0"
+  }
+}

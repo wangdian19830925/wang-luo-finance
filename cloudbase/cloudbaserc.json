@@ -1,0 +1,63 @@
+{
+  "envId": "wang-luo-finance-d6enmg07a198e20",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "fetch-market-data",
+      "timeout": 60,
+      "envVariables": {},
+      "runtime": "Nodejs18.15",
+      "triggers": [
+        {
+          "name": "marketDataTrigger1",
+          "type": "timer",
+          "config": "0 15,30 9 * * MON-FRI *"
+        },
+        {
+          "name": "marketDataTrigger2",
+          "type": "timer",
+          "config": "0 0,30 10 * * MON-FRI *"
+        },
+        {
+          "name": "marketDataTrigger3",
+          "type": "timer",
+          "config": "0 0,30 13-14 * * MON-FRI *"
+        },
+        {
+          "name": "marketDataTrigger4",
+          "type": "timer",
+          "config": "0 0 15 * * MON-FRI *"
+        }
+      ]
+    },
+    {
+      "name": "fetch-macro-data",
+      "timeout": 30,
+      "runtime": "Nodejs18.15",
+      "triggers": [
+        {
+          "name": "macroDataTrigger",
+          "type": "timer",
+          "config": "0 0 8 * * MON-FRI *"
+        }
+      ]
+    },
+    {
+      "name": "generate-briefing",
+      "timeout": 30,
+      "runtime": "Nodejs18.15",
+      "triggers": [
+        {
+          "name": "briefingTrigger",
+          "type": "timer",
+          "config": "0 30 15 * * MON-FRI *"
+        }
+      ]
+    },
+    {
+      "name": "get-cloud-data",
+      "timeout": 10,
+      "runtime": "Nodejs18.15"
+    }
+  ]
+}

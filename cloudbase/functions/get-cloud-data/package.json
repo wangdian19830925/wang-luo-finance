@@ -1,0 +1,9 @@
+{
+  "name": "get-cloud-data",
+  "version": "1.0.0",
+  "description": "PWA客户端获取云端市场数据（股价/汇率/基金/宏观/简报）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.29.0"
+  }
+}

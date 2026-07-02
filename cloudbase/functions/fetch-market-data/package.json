@@ -1,0 +1,9 @@
+{
+  "name": "fetch-market-data",
+  "version": "1.0.0",
+  "description": "定时获取股价+汇率+基金净值，写入云端数据库",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.29.0"
+  }
+}

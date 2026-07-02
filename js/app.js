@@ -1970,14 +1970,163 @@ const App = {
   },
 
   // 从 data/stock-prices.json 获取最新股价和汇率（由 Python 脚本定期更新）
+  // v210: 优先从云端数据库获取（云函数定时刷新），失败时 fallback 到本地 JSON + JSONP
   fetchStockPrices() {
     var self = this;
-    // 优先使用本地 JSON 文件（静态部署最可靠）
-    // 同时尝试在线获取作为补充（不阻塞主流程）
+
+    // 1. 优先尝试从云端获取预计算的市场数据
+    if (Storage.cloudSyncEnabled && Storage.cloudApp) {
+      Storage.fetchCloudMarketData(['prices', 'rates', 'navs']).then(function(cloudData) {
+        if (cloudData) {
+          var applied = self._applyCloudMarketData(cloudData);
+          if (applied) {
+            console.log('[股价] 云端市场数据已应用，跳过 JSONP');
+            return;
+          }
+        }
+        // 云端数据不可用，fallback 到本地 JSON + JSONP
+        console.log('[股价] 云端数据不可用，fallback 到本地 JSON + JSONP');
+        self._loadPricesFromJson(function() {
+          self._tryFetchLivePrices();
+        });
+      }).catch(function(e) {
+        console.warn('[股价] 云端获取异常，fallback:', e.message);
+        self._loadPricesFromJson(function() {
+          self._tryFetchLivePrices();
+        });
+      });
+      return;
+    }
+
+    // 2. 未开启云同步，直接使用本地 JSON + JSONP
     self._loadPricesFromJson(function() {
-      // 本地文件加载成功后，尝试在线获取最新数据
       self._tryFetchLivePrices();
     });
+  },
+
+  // v210: 将云端市场数据应用到本地并刷新 UI
+  // 返回 true 表示成功应用了数据，false 表示数据为空
+  _applyCloudMarketData(cloudData) {
+    var self = this;
+    var updated = 0;
+
+    // 1. 应用汇率
+    if (cloudData.rates) {
+      var rates = {};
+      if (cloudData.rates.USDCNY) rates.USDCNY = cloudData.rates.USDCNY;
+      if (cloudData.rates.HKDCNY) rates.HKDCNY = cloudData.rates.HKDCNY;
+      if (Object.keys(rates).length > 0) {
+        self._saveFxRates(rates);
+        console.log('[汇率] 云端汇率已应用:', JSON.stringify(rates));
+      }
+
+      // v210: 缓存云端汇率历史（供走势图使用，避免重复 fetch frankfurter.app）
+      if (cloudData.rates.fxHistory && cloudData.rates.fxHistory.usdCny) {
+        try {
+          var now = new Date();
+          var endStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+          localStorage.setItem('fm_fx_history', JSON.stringify({
+            endDate: endStr,
+            data: {
+              usdCny: cloudData.rates.fxHistory.usdCny,
+              hkdCny: cloudData.rates.fxHistory.hkdCny || []
+            }
+          }));
+          console.log('[汇率走势] 云端汇率历史已缓存, usd条数=' + cloudData.rates.fxHistory.usdCny.length);
+        } catch(e) {
+          console.warn('[汇率走势] 云端汇率历史缓存失败:', e);
+        }
+      }
+    }
+
+    // 2. 应用股价
+    if (cloudData.prices && typeof cloudData.prices === 'object') {
+      var stocks = Storage.get(Storage.keys.stocks);
+      stocks.forEach(function(stock) {
+        var info = cloudData.prices[stock.code];
+        if (info && info.price && parseFloat(info.price).toFixed(2) !== parseFloat(stock.currentPrice).toFixed(2)) {
+          Storage.update(Storage.keys.stocks, stock.id, { currentPrice: parseFloat(info.price) }, { skipUpdatedAt: true });
+          updated++;
+          console.log('[股价] ' + stock.name + ': ' + stock.currentPrice + ' → ' + info.price + ' (云端)');
+        }
+      });
+
+      // 更新 RSU 股价
+      var rsuList = Storage.get(Storage.keys.rsu);
+      rsuList.forEach(function(r) {
+        var info = cloudData.prices[r.code];
+        if (info && info.price && parseFloat(info.price).toFixed(2) !== parseFloat(r.currentPrice).toFixed(2)) {
+          Storage.update(Storage.keys.rsu, r.id, { currentPrice: parseFloat(info.price) }, { skipUpdatedAt: true });
+          updated++;
+          console.log('[RSU股价] ' + r.name + ': ' + r.currentPrice + ' → ' + info.price + ' (云端)');
+        }
+      });
+    }
+
+    // 3. 应用基金净值
+    if (cloudData.navs && typeof cloudData.navs === 'object') {
+      var fundList = Storage.get(Storage.keys.funds);
+      fundList.forEach(function(f) {
+        var navInfo = cloudData.navs[f.code];
+        if (navInfo && navInfo.nav && parseFloat(navInfo.nav) !== parseFloat(f.nav)) {
+          var newNav = parseFloat(navInfo.nav);
+          var shares = parseFloat(f.shares) || 0;
+          var updates = { nav: newNav };
+          if (shares > 0) {
+            updates.holdValue = parseFloat((shares * newNav).toFixed(2));
+          } else {
+            var holdValue = parseFloat(f.holdValue) || 0;
+            if (holdValue > 0) {
+              updates.shares = parseFloat((holdValue / newNav).toFixed(2));
+            }
+          }
+          updates.navDerived = false;
+          Storage.update(Storage.keys.funds, f.id, updates, { skipUpdatedAt: true });
+          updated++;
+          console.log('[基金净值] ' + f.name + ': nav ' + f.nav + ' → ' + newNav + ' (云端)');
+        }
+      });
+
+      // 缓存基金净值历史到 localStorage（供趋势图使用）
+      try {
+        var navHistoryCache = {};
+        for (var code in cloudData.navs) {
+          if (cloudData.navs[code].history) {
+            navHistoryCache[code] = {
+              nav: cloudData.navs[code].nav,
+              name: cloudData.navs[code].name,
+              history: cloudData.navs[code].history
+            };
+          }
+        }
+        localStorage.setItem('fm_cloud_fund_navs', JSON.stringify({
+          data: navHistoryCache,
+          updatedAt: new Date().toISOString()
+        }));
+        console.log('[基金] 云端净值历史已缓存:', Object.keys(navHistoryCache).length, '只基金');
+      } catch(e) {
+        console.warn('[基金] 云端净值历史缓存失败:', e);
+      }
+    }
+
+    // 4. 刷新 UI
+    localStorage.setItem("fm_stock_price_last_refresh", Date.now().toString());
+    self._clearHistoryCache();
+    self.loadStockList();
+    self.loadRsuList();
+    self.loadFundList();
+    self.loadDashboard();
+
+    if (updated > 0) {
+      self.showToast("已更新 " + updated + " 项价格 (云端数据库)");
+    } else {
+      self.showToast("价格已是最新 (云端数据库)");
+    }
+
+    // 返回是否成功应用了数据
+    var hasData = (cloudData.prices && Object.keys(cloudData.prices).length > 0) ||
+                  (cloudData.navs && Object.keys(cloudData.navs).length > 0);
+    return hasData;
   },
 
   // 尝试从腾讯财经 API 获取最新价格（<script> 标签方式，无需 CORS）
@@ -2234,6 +2383,7 @@ const App = {
   },
 
   // 从免费 API 实时获取汇率（作为本地缓存的补充）
+  // v210: 如果已在 fetchStockPrices 中从云端获取了汇率，则跳过
   _fetchLiveFxRates() {
     var self = this;
     // file: 协议下跳过在线获取（浏览器禁止 fetch）
@@ -2241,6 +2391,17 @@ const App = {
       console.log('[汇率] file: 协议，跳过在线获取');
       return;
     }
+    // v210: 如果最近 5 分钟内已从云端获取过汇率，跳过
+    try {
+      var lastCloudFetch = localStorage.getItem('fm_stock_price_last_refresh');
+      if (lastCloudFetch && (Date.now() - parseInt(lastCloudFetch)) < 300000) {
+        var cachedRates = JSON.parse(localStorage.getItem('fm_exchange_rates') || '{}');
+        if (cachedRates.USDCNY && cachedRates.HKDCNY) {
+          console.log('[汇率] 云端数据刚获取过，跳过在线获取');
+          return;
+        }
+      }
+    } catch(e) {}
     fetch("https://open.er-api.com/v6/latest/USD")
       .then(function(res) { return res.json(); })
       .then(function(data) {
@@ -7360,6 +7521,42 @@ const App = {
   _fetchMacroNews(callback) {
     if (this._macroNewsCache) { callback(this._macroNewsCache); return; }
     var self = this;
+
+    // v210: 优先从云端获取新闻数据
+    if (Storage.cloudSyncEnabled && Storage.cloudApp) {
+      Storage.fetchCloudMarketData(['macro']).then(function(cloudData) {
+        if (cloudData && cloudData.macro && cloudData.macro.dailyNews && cloudData.macro.dailyNews.length > 0) {
+          // 转换为与 CNBC RSS 一致的格式
+          var newsItems = cloudData.macro.dailyNews.map(function(item) {
+            return {
+              title: item.title || '',
+              link: item.link || '',
+              description: item.summary || item.description || '',
+              pubDate: item.pubDate || item.publishedAt || new Date().toISOString(),
+              source: item.source || 'cloud'
+            };
+          });
+          self._macroNewsCache = newsItems;
+          console.log('[宏观新闻] 云端新闻已加载:', newsItems.length, '条');
+          callback(newsItems);
+          return;
+        }
+        // 云端无新闻数据，fallback 到 CNBC RSS
+        self._fetchMacroNewsFromRSS(callback);
+      }).catch(function(e) {
+        console.warn('[宏观新闻] 云端获取失败，fallback RSS:', e.message);
+        self._fetchMacroNewsFromRSS(callback);
+      });
+      return;
+    }
+
+    // 未开启云同步，直接使用 RSS
+    self._fetchMacroNewsFromRSS(callback);
+  },
+
+  // 从 CNBC RSS 获取新闻（fallback）
+  _fetchMacroNewsFromRSS(callback) {
+    var self = this;
     var feedUrl = 'https://www.cnbc.com/id/100003114/device/rss/rss.html';
     var apiUrl = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl);
     fetch(apiUrl)
@@ -7373,7 +7570,7 @@ const App = {
         callback(data.items);
       })
       .catch(function(e) {
-        console.warn('[宏观新闻] 加载失败:', e);
+        console.warn('[宏观新闻] RSS 加载失败:', e);
         callback(null);
       });
   },

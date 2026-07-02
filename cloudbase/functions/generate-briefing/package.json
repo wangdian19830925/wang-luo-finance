@@ -1,0 +1,9 @@
+{
+  "name": "generate-briefing",
+  "version": "1.0.0",
+  "description": "每日收盘后生成净资产简报和新闻摘要",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^2.29.0"
+  }
+}

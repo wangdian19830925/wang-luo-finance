@@ -1,0 +1,9 @@
+{
+  "triggers": [
+    {
+      "name": "briefingTrigger",
+      "type": "timer",
+      "config": "0 30 15 * * MON-FRI *"
+    }
+  ]
+}
