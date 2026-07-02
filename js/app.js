@@ -3894,7 +3894,10 @@ const App = {
     // 最后一个点（今天）高亮
     var lastX = xScale(data.length - 1);
     var lastY = yScale(lastPt.netWorth);
-    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="#22c55e" stroke="#0f172a" stroke-width="2"/>';
+    // 涨跌颜色先算，用于 marker
+    var _assetChange = lastPt.netWorth - data[0].netWorth;
+    var _markerColor = _assetChange >= 0 ? "#ef4444" : "#22c55e";
+    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="' + _markerColor + '" stroke="#0f172a" stroke-width="2"/>';
 
     // 涨跌幅（与起点相比）：正值=涨=红（中国习惯），负值=跌=绿
     var firstV = data[0].netWorth;
@@ -4034,30 +4037,34 @@ const App = {
         new Date(sixMonthsAgoStr + 'T00:00:00'), new Date());
       if (pointDates.indexOf(todayDateStr) < 0) pointDates.push(todayDateStr);
 
-      // 为每个点计算该组总市值
+      // 为每个条目计算有效份额（shares=0 时从 holdValue/nav 反算）
+      var effectiveItems = items.map(function(f) {
+        var shares = parseFloat(f.shares) || 0;
+        var holdValue = parseFloat(f.holdValue) || 0;
+        var nav = parseFloat(f.nav) || 0;
+        if (shares <= 0 && holdValue > 0 && nav > 0) {
+          shares = parseFloat((holdValue / nav).toFixed(4));
+        }
+        return { shares: shares, holdValue: holdValue };
+      });
+
+      // 为每个点计算该组总市值 = Σ(shares × 日期净值)
       var data = pointDates.map(function(dateStr) {
         var totalValue = 0;
-        items.forEach(function(f) {
-          var currentNav = parseFloat(f.nav) || 0;
-          var shares = parseFloat(f.shares) || 0;
-          if (shares <= 0 || currentNav <= 0) {
-            totalValue += parseFloat(f.holdValue) || 0;
-            return;
-          }
-          // 查找该日期最近的净值
-          var histNav = self._findClosestNavByDate(windowHistory, dateStr);
+        effectiveItems.forEach(function(ei) {
+          if (ei.shares <= 0) return; // 无份额则跳过
+          // 在完整净值历史中查找最近净值（而非仅窗口内）
+          var histNav = self._findClosestNavByDate(navHistory, dateStr);
           if (histNav && histNav > 0) {
-            totalValue += shares * histNav;
-          } else {
-            totalValue += parseFloat(f.holdValue) || 0;
+            totalValue += ei.shares * histNav;
           }
         });
         return { dateStr: dateStr, value: totalValue };
       });
 
-      // 今日真实值（锚定）
+      // 今日真实值锚定（确保曲线终点与 UI 显示一致）
       var todayRealValue = 0;
-      items.forEach(function(f) { todayRealValue += parseFloat(f.holdValue) || 0; });
+      effectiveItems.forEach(function(ei) { todayRealValue += ei.holdValue; });
       for (var i = 0; i < data.length; i++) {
         if (data[i].dateStr === todayDateStr) {
           data[i].value = todayRealValue;
@@ -4151,14 +4158,22 @@ const App = {
       return;
     }
 
+    // 去除全零数据点（无有效份额时曲线全为0）
+    data = data.filter(function(d) { return d.value > 0; });
+    if (data.length === 0) {
+      chartEl.innerHTML = '<div class="empty-tip">暂无数据</div>';
+      if (rangeEl) rangeEl.textContent = "";
+      return;
+    }
+
     var firstV = data[0].value;
     var lastPt = data[data.length - 1];
     var change = lastPt.value - firstV;
     var changePct = firstV > 0 ? (change / firstV * 100) : 0;
-    var changeClass = change >= 0 ? "trend-up" : "trend-down";
-    var changeSign = change >= 0 ? "+" : "";
+    var changeClass = change > 0 ? "trend-up" : (change < 0 ? "trend-down" : "");
+    var changeSign = change > 0 ? "+" : (change < 0 ? "" : "");
     var changeText = changeSign + this.formatMoney(change) +
-      ' (' + changeSign + changePct.toFixed(2) + '%)';
+      ' (' + (changePct !== 0 ? (change > 0 ? "+" : "") + changePct.toFixed(2) + '%' : '0.00%') + ')';
     if (rangeEl) {
       rangeEl.textContent = changeText;
       rangeEl.className = 'asset-trend-change ' + changeClass;
@@ -4212,11 +4227,14 @@ const App = {
 
     var lastX = xScale(data.length - 1);
     var lastY = yScale(lastPt.value);
-    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="#22c55e" stroke="#0f172a" stroke-width="2"/>';
+    // 中国习惯: 涨红跌绿
+    var lineColor = change > 0 ? "#ef4444" : (change < 0 ? "#22c55e" : "#94a3b8");
+    var markerColor = lineColor;
+    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="' + markerColor + '" stroke="#0f172a" stroke-width="2"/>';
 
     // 中国习惯: 涨红跌绿
     var lineColor = change >= 0 ? "#ef4444" : "#22c55e";
-    var fillTop = change >= 0 ? "rgba(239,68,68,0.35)" : "rgba(34,197,94,0.35)";
+    var fillTop = change > 0 ? "rgba(239,68,68,0.35)" : (change < 0 ? "rgba(34,197,94,0.35)" : "rgba(148,163,184,0.2)");
 
     var stats = '<div class="asset-trend-stats">' +
       '<div class="stat-item"><span class="stat-label">6个月前</span><span class="stat-value">' + this.formatMoney(firstV) + '</span></div>' +
@@ -4229,8 +4247,8 @@ const App = {
       '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" class="asset-trend-svg">' +
         '<defs>' +
           '<linearGradient id="fundTrendGradient" x1="0" y1="0" x2="0" y2="1">' +
-            '<stop offset="0%" stop-color="' + (change >= 0 ? "#ef4444" : "#22c55e") + '" stop-opacity="0.35"/>' +
-            '<stop offset="100%" stop-color="' + (change >= 0 ? "#ef4444" : "#22c55e") + '" stop-opacity="0"/>' +
+            '<stop offset="0%" stop-color="' + lineColor + '" stop-opacity="0.35"/>' +
+            '<stop offset="100%" stop-color="' + lineColor + '" stop-opacity="0"/>' +
           '</linearGradient>' +
         '</defs>' +
         yLabels +
