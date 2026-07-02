@@ -3399,7 +3399,9 @@ const App = {
   // 返回 { stocks, funds, rsu, annuity, insurance, cash, totalAssets, totalDebts }
   _estimateCategoryValuesAt(targetDate, historyData) {
     var self = this;
-    var result = { stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0, totalAssets: 0, totalDebts: 0 };
+    var result = { stocks: 0, funds: 0, rsu: 0, annuity: 0, insurance: 0, cash: 0, providentFund: 0, totalAssets: 0, totalDebts: 0 };
+    var stockHistory = (historyData && historyData.stocks) || {};
+    var fundHistory = (historyData && historyData.funds) || {};
 
     // 1. 股票
     var stocks = Storage.get(Storage.keys.stocks) || [];
@@ -3408,8 +3410,8 @@ const App = {
       if (shares <= 0) return;
       var currency = s.currency || "CNY";
       var price = 0;
-      if (historyData && historyData[s.code]) {
-        price = self._findClosestClose(historyData[s.code], targetDate);
+      if (stockHistory[s.code]) {
+        price = self._findClosestClose(stockHistory[s.code], targetDate);
       }
       if (!price) price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
       result.stocks += self.toCNY(shares * price, currency);
@@ -3421,33 +3423,30 @@ const App = {
       var vested = parseInt(r.vested) || 0;
       if (vested > 0) {
         var price = 0;
-        if (historyData && historyData[r.code]) {
-          price = self._findClosestClose(historyData[r.code], targetDate);
+        if (stockHistory[r.code]) {
+          price = self._findClosestClose(stockHistory[r.code], targetDate);
         }
         if (!price) price = parseFloat(r.currentPrice) || parseFloat(r.grantPrice) || 0;
         result.rsu += vested * price;
       }
     });
 
-    // 3. 基金（复用母基金映射逻辑）
-    var parentMap = { "013126": "515170", "001513": "510500" };
+    // 3. 基金：用 pingzhongdata 净值历史 × effectiveShares
     var funds = Storage.get(Storage.keys.funds) || [];
     funds.forEach(function(f) {
-      var priceCode = f.parentCode || parentMap[f.code] || f.code;
-      var currentNav = parseFloat(f.nav) || 0;
+      var holdValue = parseFloat(f.holdValue) || 0;
+      var nav = parseFloat(f.nav) || 0;
       var shares = parseFloat(f.shares) || 0;
-      if (historyData && historyData[priceCode] && shares > 0 && currentNav > 0) {
-        var etfArr = historyData[priceCode];
-        var currentEtf = etfArr.length > 0 ? etfArr[etfArr.length - 1].close : 0;
-        var histEtf = self._findClosestClose(etfArr, targetDate) || currentEtf;
-        if (currentEtf > 0) {
-          var estNav = currentNav * (histEtf / currentEtf);
-          result.funds += shares * estNav;
+      var effectiveShares = shares > 0 ? shares : (holdValue > 0 && nav > 0 ? holdValue / nav : 0);
+      if (effectiveShares > 0 && fundHistory[f.code]) {
+        var histNav = self._findClosestFundNav(fundHistory[f.code].history, targetDate);
+        if (histNav > 0) {
+          result.funds += effectiveShares * histNav;
         } else {
-          result.funds += parseFloat(f.holdValue) || 0;
+          result.funds += holdValue;
         }
       } else {
-        result.funds += parseFloat(f.holdValue) || 0;
+        result.funds += holdValue;
       }
     });
 
@@ -3458,14 +3457,31 @@ const App = {
     // 5. 保险沉淀资产
     result.insurance = Storage.calcInsuranceSettledValueAt(targetDate);
 
-    // 6. 现金资产（快照，无历史波动）
+    // 6. 现金资产（6个月来一直存在，常量计入）
     var cashAccounts = Storage.get(Storage.keys.cashAccounts) || [];
     cashAccounts.forEach(function(a) { result.cash += parseFloat(a.balance) || 0; });
 
-    // 7. 总负债
+    // 7. 公积金余额：按每月新增数量倒推
+    var providentParams = Storage.getProvidentFundParams();
+    if (providentParams) {
+      var currentBalance = Storage.getProvidentFundBalance();
+      var monthlyIncrease = parseFloat(providentParams.providentFundMonthly) || 0;
+      if (currentBalance > 0 && monthlyIncrease > 0) {
+        var targetDateObj = targetDate instanceof Date ? targetDate : new Date(targetDate);
+        var now = new Date();
+        var monthsFromTarget = (now.getFullYear() - targetDateObj.getFullYear()) * 12 +
+          (now.getMonth() - targetDateObj.getMonth());
+        var histBalance = currentBalance - monthsFromTarget * monthlyIncrease;
+        result.providentFund += (histBalance > 0 ? histBalance : 0);
+      } else if (currentBalance > 0) {
+        result.providentFund += currentBalance;
+      }
+    }
+
+    // 8. 总负债
     result.totalDebts = self._estimateDebtsAt(targetDate);
 
-    result.totalAssets = result.stocks + result.funds + result.rsu + result.annuity + result.insurance + result.cash;
+    result.totalAssets = result.stocks + result.funds + result.rsu + result.annuity + result.insurance + result.cash + result.providentFund;
     return result;
   },
 
@@ -3614,31 +3630,98 @@ const App = {
     // 同时纳入 RSU 代码
     var rsu = Storage.get(Storage.keys.rsu);
     rsu.forEach(function(r) { if (r.code && codes.indexOf(r.code) < 0) codes.push(r.code); });
-    var historyData = {};
+    var historyData = { stocks: {}, funds: {} };
 
+    // 第一步：加载股票历史 JSON
     fetch("data/stock-history.json")
       .then(function(res) { return res.json(); })
       .then(function(data) {
         codes.forEach(function(code) {
           if (data[code] && data[code].length > 0) {
-            historyData[code] = data[code];
+            historyData.stocks[code] = data[code];
           }
         });
-        // 诊断日志
         codes.forEach(function(code) {
-          var arr = historyData[code];
+          var arr = historyData.stocks[code];
           if (arr && arr.length > 0) {
-            console.log('[资产曲线] ' + code + ' 数据 ' + arr.length + ' 条, 首 ' + arr[0].date + ' 末 ' + arr[arr.length-1].date);
+            console.log('[资产曲线] 股票 ' + code + ' 数据 ' + arr.length + ' 条, 首 ' + arr[0].date + ' 末 ' + arr[arr.length-1].date);
           } else {
-            console.warn('[资产曲线] ' + code + ' 无历史数据');
+            console.warn('[资产曲线] 股票 ' + code + ' 无历史数据');
           }
         });
-        self._appendTodayIfMissing(historyData);
-        callback(historyData);
+        self._appendTodayIfMissing(historyData.stocks);
+
+        // 第二步：加载所有基金的 pingzhongdata 净值历史
+        var funds = Storage.get(Storage.keys.funds) || [];
+        // 按代码去重
+        var fundCodes = [];
+        funds.forEach(function(f) {
+          if (f.code && fundCodes.indexOf(f.code) < 0) fundCodes.push(f.code);
+        });
+
+        if (fundCodes.length === 0) {
+          // 无基金，直接回调
+          callback(historyData);
+          return;
+        }
+
+        // 逐个加载 pingzhongdata（顺序加载，避免并发全局变量冲突）
+        var loadedCount = 0;
+        function loadNextFund(idx) {
+          if (idx >= fundCodes.length) {
+            callback(historyData);
+            return;
+          }
+          var fundCode = fundCodes[idx];
+          self._fetchFundPingzhongData(fundCode, function(result) {
+            if (result.history && result.history.length > 0) {
+              historyData.funds[fundCode] = {
+                nav: result.nav,
+                name: result.name,
+                history: result.history
+              };
+              console.log('[资产曲线] 基金 ' + fundCode + ' 净值历史 ' + result.history.length + ' 条, 最新净值 ' + result.nav);
+            } else {
+              console.warn('[资产曲线] 基金 ' + fundCode + ' pingzhongdata 无净值历史');
+            }
+            loadNextFund(idx + 1);
+          });
+        }
+        loadNextFund(0);
       })
       .catch(function(err) {
-        console.warn('[资产曲线] 加载历史数据失败:', err.message);
-        callback(historyData);
+        console.warn('[资产曲线] 加载股票历史数据失败:', err.message);
+        // 股票失败仍尝试加载基金
+        var funds = Storage.get(Storage.keys.funds) || [];
+        var fundCodes = [];
+        funds.forEach(function(f) {
+          if (f.code && fundCodes.indexOf(f.code) < 0) fundCodes.push(f.code);
+        });
+
+        if (fundCodes.length === 0) {
+          callback(historyData);
+          return;
+        }
+
+        var loadedCount = 0;
+        function loadNextFund(idx) {
+          if (idx >= fundCodes.length) {
+            callback(historyData);
+            return;
+          }
+          var fundCode = fundCodes[idx];
+          self._fetchFundPingzhongData(fundCode, function(result) {
+            if (result.history && result.history.length > 0) {
+              historyData.funds[fundCode] = {
+                nav: result.nav,
+                name: result.name,
+                history: result.history
+              };
+            }
+            loadNextFund(idx + 1);
+          });
+        }
+        loadNextFund(0);
       });
   },
 
@@ -3710,9 +3793,12 @@ const App = {
   },
 
   // 估算某日的总资产（用历史价 + 当前持仓）
+  // historyData 结构: { stocks: { code: [{date,close},...] }, funds: { code: {nav, name, history: [{date,nav},...]} } }
   _estimateAssetsAt(targetDate, historyData) {
     var self = this;
     var total = 0;
+    var stockHistory = historyData.stocks || {};
+    var fundHistory = historyData.funds || {};
 
     // 1. 股票
     var stocks = Storage.get(Storage.keys.stocks) || [];
@@ -3722,8 +3808,8 @@ const App = {
       var currency = s.currency || "CNY";
       var price = 0;
       // 找历史价
-      if (historyData[s.code]) {
-        price = self._findClosestClose(historyData[s.code], targetDate);
+      if (stockHistory[s.code]) {
+        price = self._findClosestClose(stockHistory[s.code], targetDate);
       }
       // 缺历史价 → 用当前价（保持常量）
       if (!price) price = parseFloat(s.currentPrice) || parseFloat(s.cost) || 0;
@@ -3740,32 +3826,26 @@ const App = {
       }
     });
 
-    // 3. 基金
-    // 联接基金 → 母基金映射（用于历史价折算）
-    var parentMap = {
-      "013126": "515170",  // 华夏中证细分食品饮料产业主题ETF联接C → 食品饮料ETF华夏
-      "001513": "510500",  // 示例：南方中证500ETF联接 → 中证500ETF（备用）
-    };
+    // 3. 基金：用 pingzhongdata 净值历史 × effectiveShares
     var funds = Storage.get(Storage.keys.funds) || [];
     funds.forEach(function(f) {
-      // 优先用 parentCode（ETF 联接基金对应的母基金），否则用 code 自己
-      var priceCode = f.parentCode || parentMap[f.code] || f.code;
-      if (historyData[priceCode]) {
-        // 用母基金价格折算联接基金 NAV
-        var etfArr = historyData[priceCode];
-        var currentNav = parseFloat(f.nav) || 0;
-        var currentEtf = etfArr.length > 0 ? etfArr[etfArr.length - 1].close : 0;
-        var histEtf = self._findClosestClose(etfArr, targetDate) || currentEtf;
-        if (currentEtf > 0 && currentNav > 0) {
-          var estNav = currentNav * (histEtf / currentEtf);
-          var shares = parseFloat(f.shares) || 0;
-          total += shares * estNav;
+      var holdValue = parseFloat(f.holdValue) || 0;
+      var nav = parseFloat(f.nav) || 0;
+      var shares = parseFloat(f.shares) || 0;
+      // 计算有效份额（shares=0 时从 holdValue/nav 反算，与 v207 基金趋势图一致）
+      var effectiveShares = shares > 0 ? shares : (holdValue > 0 && nav > 0 ? holdValue / nav : 0);
+
+      if (effectiveShares > 0 && fundHistory[f.code]) {
+        // 查找该日期最近的净值
+        var histNav = self._findClosestFundNav(fundHistory[f.code].history, targetDate);
+        if (histNav > 0) {
+          total += effectiveShares * histNav;
         } else {
-          total += parseFloat(f.holdValue) || 0;
+          total += holdValue;  // 无历史净值时用当前 holdValue
         }
       } else {
-        // 无历史价 → 用当前 holdValue（保持常量）
-        total += parseFloat(f.holdValue) || 0;
+        // 无净值历史 → 用当前 holdValue（保持常量）
+        total += holdValue;
       }
     });
 
@@ -3774,16 +3854,35 @@ const App = {
     annuities.forEach(function(a) { total += parseFloat(a.balance) || 0; });
 
     // 5. 保险沉淀资产（按 targetDate 累计已缴保费, 跟 nextPayDate 对齐）
-    // 例如: nextPayDate=2026-XX, 则 2025 之前的点只累计到 2025 那一年的"已缴年数"
     total += Storage.calcInsuranceSettledValueAt(targetDate);
 
-    // 6. 现金资产：作为稳定基底全额计入所有历史点
-    //    现金余额是手动录入的快照，没有每日价格波动，
-    //    全额计入可避免曲线因"今天才录入"而突然跳升
+    // 6. 现金资产：6个月来一直存在，作为稳定基底全额计入所有历史点
     var cashAccounts = Storage.get(Storage.keys.cashAccounts) || [];
     cashAccounts.forEach(function(a) {
       total += parseFloat(a.balance) || 0;
     });
+
+    // 7. 公积金余额：按每月新增数量倒推近6个月的变化
+    //    当前余额 = userBalance + monthsSinceLastUpdate × monthly
+    //    历史余额 = 当前余额 - monthsFromTarget × monthly
+    var providentParams = Storage.getProvidentFundParams();
+    if (providentParams) {
+      var currentBalance = Storage.getProvidentFundBalance();  // 含自动月度增长
+      var monthlyIncrease = parseFloat(providentParams.providentFundMonthly) || 0;
+      if (currentBalance > 0 && monthlyIncrease > 0) {
+        // 计算从 targetDate 到今天经过的月数
+        var targetDateObj = targetDate instanceof Date ? targetDate : new Date(targetDate);
+        var now = new Date();
+        var monthsFromTarget = (now.getFullYear() - targetDateObj.getFullYear()) * 12 +
+          (now.getMonth() - targetDateObj.getMonth());
+        // 历史余额 = 当前余额 - 过去月数 × 每月增加
+        var histBalance = currentBalance - monthsFromTarget * monthlyIncrease;
+        if (histBalance > 0) total += histBalance;
+        else total += 0;  // 不允许倒推出负值
+      } else if (currentBalance > 0) {
+        total += currentBalance;  // 无月度增长数据时常量计入
+      }
+    }
 
     return total;
   },
@@ -3824,6 +3923,21 @@ const App = {
     return last ? last.close : 0;
   },
 
+  // 在基金净值历史数组中找到 target_date 当天或之前最近一条净值
+  // history 格式: [{date: "YYYY-MM-DD", nav: 1.234}, ...]
+  _findClosestFundNav(history, targetDate) {
+    if (!history || history.length === 0) return 0;
+    var target = (targetDate instanceof Date)
+      ? targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0')
+      : new Date(targetDate).getFullYear() + '-' + String(new Date(targetDate).getMonth()+1).padStart(2,'0') + '-' + String(new Date(targetDate).getDate()).padStart(2,'0');
+    var last = null;
+    for (var i = 0; i < history.length; i++) {
+      if (history[i].date <= target) last = history[i];
+      else break;
+    }
+    return last ? (parseFloat(last.nav) || 0) : 0;
+  },
+
   // 渲染折线图
   _drawAssetTrendChart(chartEl, rangeEl, data, todayNetWorth) {
     if (data.length === 0) {
@@ -3833,11 +3947,15 @@ const App = {
     }
 
     // 涨跌幅（与起点相比）— 现在挪到右上角
-    var firstV = data[0].netWorth;
+    // 先过滤全零数据点，确保起始值 > 0（避免 changePct 为 0）
+    var validData = data.filter(function(d) { return d.netWorth > 0; });
+    var firstV = validData.length > 0 ? validData[0].netWorth : (data.length > 0 ? data[0].netWorth : 0);
     var lastPt = data[data.length - 1];
     var change = lastPt.netWorth - firstV;
     var changePct = firstV > 0 ? (change / firstV * 100) : 0;
-    var changeClass = change >= 0 ? "trend-up" : "trend-down";
+    // 三态：涨红/跌绿/持平灰
+    var lineColor = change > 0 ? "#ef4444" : (change < 0 ? "#22c55e" : "#94a3b8");
+    var changeClass = change > 0 ? "trend-up" : (change < 0 ? "trend-down" : "");
     var changeSign = change >= 0 ? "+" : "";
     var changeText = changeSign + this.formatMoney(change) +
       ' (' + changeSign + changePct.toFixed(2) + '%)';
@@ -3894,10 +4012,8 @@ const App = {
     // 最后一个点（今天）高亮
     var lastX = xScale(data.length - 1);
     var lastY = yScale(lastPt.netWorth);
-    // 涨跌颜色先算，用于 marker
-    var _assetChange = lastPt.netWorth - data[0].netWorth;
-    var _markerColor = _assetChange >= 0 ? "#ef4444" : "#22c55e";
-    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="' + _markerColor + '" stroke="#0f172a" stroke-width="2"/>';
+    // marker 颜色跟随涨跌
+    var marker = '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="4.5" fill="' + lineColor + '" stroke="#0f172a" stroke-width="2"/>';
 
     // 涨跌幅（与起点相比）：正值=涨=红（中国习惯），负值=跌=绿
     var firstV = data[0].netWorth;
@@ -3927,13 +4043,13 @@ const App = {
       '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" class="asset-trend-svg">' +
         '<defs>' +
           '<linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">' +
-            '<stop offset="0%" stop-color="#22c55e" stop-opacity="0.35"/>' +
-            '<stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>' +
+            '<stop offset="0%" stop-color="' + lineColor + '" stop-opacity="0.35"/>' +
+            '<stop offset="100%" stop-color="' + lineColor + '" stop-opacity="0"/>' +
           '</linearGradient>' +
         '</defs>' +
         yLabels +
         '<path d="' + areaD + '" fill="url(#trendGradient)"/>' +
-        '<path d="' + pathD + '" fill="none" stroke="#22c55e" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<path d="' + pathD + '" fill="none" stroke="' + lineColor + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
         marker +
         xLabels +
       '</svg>';
