@@ -6278,8 +6278,8 @@ const App = {
       annualExpense: 20, annualEducation: 10, educationEndYear: 2035, extraTransactions: [],
       inflation: 3, investmentReturn: 2, lifeExpectancy: 90, mortgagePayoffMode: 'lump',
       inflationCurve: {}, investmentReturnCurve: {},
-      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63, pensionMember1AvgIndex: 1.5, pensionMember1ContributionYears: 16.42,
-      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58, pensionMember2AvgIndex: 1.5, pensionMember2ContributionYears: 16.42
+      pensionMember1Balance: 460126.76, pensionMember1Monthly: 2984.16, pensionMember1RetireAge: 63, pensionMember1AvgIndex: 1.5, pensionMember1ContributionYears: 16.42, pensionMember1BirthYear: 1983,
+      pensionMember2Balance: 460126.76, pensionMember2Monthly: 2984.16, pensionMember2RetireAge: 58, pensionMember2AvgIndex: 1.5, pensionMember2ContributionYears: 16.42, pensionMember2BirthYear: 1990
     };
     try {
       var saved = localStorage.getItem('fm_retirement_params');
@@ -6618,7 +6618,9 @@ const App = {
 
     // 3~6. 预计算所有时间表（与 initialCash 无关）
     var premiumSchedule = this._buildPremiumSchedule(currentYear, endYear);
-    var pensionSchedule = this._buildPensionSchedule(currentYear, endYear, params);
+    var pensionResult = this._buildPensionSchedule(currentYear, endYear, params);
+    var pensionSchedule = pensionResult.schedule;
+    var pensionDetails = pensionResult.details;
     var insuranceSchedule = this._buildInsuranceIncomeSchedule(currentYear, endYear);
     var enterpriseAnnuitySchedule = this._buildEnterpriseAnnuitySchedule(currentYear, endYear);
     var universalBalanceAt60 = 695693.05 + 1045781.41;
@@ -6627,6 +6629,7 @@ const App = {
       premiumSchedule: premiumSchedule,
       mortgagePaymentSchedule: mortgagePaymentSchedule,
       pensionSchedule: pensionSchedule,
+      pensionDetails: pensionDetails,
       insuranceSchedule: insuranceSchedule,
       enterpriseAnnuitySchedule: enterpriseAnnuitySchedule,
       universalBalanceAt60: universalBalanceAt60
@@ -6686,7 +6689,7 @@ const App = {
       runOutYear: runOutYear,
       shortfall: shortfall,
       canRetire: canRetire,
-      params: params,
+      params: Object.assign({}, params, { _pensionDetails: pensionDetails }),
       debug: {
         assetBreakdown: debug_assetBreakdown,
         fxRates: this._getFxRates(),
@@ -6801,10 +6804,10 @@ const App = {
 
   _buildPensionSchedule(startYear, endYear, params) {
     var schedule = {};
-    var birthYear = 1983;
+    var details = []; // 新增：存储每月领取数额详情
     var members = [
-      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge, avgIndex: params.pensionMember1AvgIndex, contributionYears: params.pensionMember1ContributionYears },
-      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge, avgIndex: params.pensionMember2AvgIndex, contributionYears: params.pensionMember2ContributionYears }
+      { balance: params.pensionMember1Balance, monthly: params.pensionMember1Monthly, retireAge: params.pensionMember1RetireAge, avgIndex: params.pensionMember1AvgIndex, contributionYears: params.pensionMember1ContributionYears, birthYear: params.pensionMember1BirthYear || 1983, name: '王典' },
+      { balance: params.pensionMember2Balance, monthly: params.pensionMember2Monthly, retireAge: params.pensionMember2RetireAge, avgIndex: params.pensionMember2AvgIndex, contributionYears: params.pensionMember2ContributionYears, birthYear: params.pensionMember2BirthYear || 1990, name: 'Rowen' }
     ];
     var pmMap = { 58: 152, 59: 145, 60: 139, 61: 132, 62: 125, 63: 117, 64: 109, 65: 101 };
     // 2025年上海计发基数（社平工资）
@@ -6813,7 +6816,7 @@ const App = {
     var avgSalaryGrowthRate = 0.05;
 
     members.forEach(function(p) {
-      var retireYear = birthYear + p.retireAge;
+      var retireYear = p.birthYear + p.retireAge;
       // 如果今天退休：后续不再工作，养老金账户只按 2% 复利增长，不再追加缴费
       var balance = p.balance;
       for (var y = startYear; y < retireYear; y++) {
@@ -6830,16 +6833,30 @@ const App = {
       var contributionYears = p.contributionYears;
       var baseMonthly = avgSalaryAtRetirement * (1 + avgContributionIndex) / 2 * contributionYears * 0.01;
       var monthly = personalMonthly + baseMonthly;
+      
+      // 存储详情
+      details.push({
+        name: p.name,
+        retireAge: p.retireAge,
+        retireYear: retireYear,
+        personalMonthly: personalMonthly,
+        baseMonthly: baseMonthly,
+        totalMonthly: monthly,
+        personalAnnual: personalMonthly * 12,
+        baseAnnual: baseMonthly * 12,
+        totalAnnual: monthly * 12
+      });
+      
       for (var y = retireYear; y <= endYear; y++) {
         schedule[y] = (schedule[y] || 0) + (monthly * 12);
       }
     });
     // C186709225（友邦优享年年金）已失效，现金价值约5000元锁定在个人养老金账户，60岁时一次性领取
-    var pensionCashValueYear = birthYear + 60;
+    var pensionCashValueYear = (params.pensionMember1BirthYear || 1983) + 60;
     if (pensionCashValueYear >= startYear && pensionCashValueYear <= endYear) {
       schedule[pensionCashValueYear] = (schedule[pensionCashValueYear] || 0) + 5000;
     }
-    return schedule;
+    return { schedule: schedule, details: details };
   },
 
   _buildInsuranceIncomeSchedule(startYear, endYear) {
@@ -6985,6 +7002,21 @@ const App = {
       grid.innerHTML = items.map(function(it) {
         return '<div class="retirement-summary-item ' + it.cls + '"><div class="retirement-summary-label">' + self.escapeHtml(it.label) + '</div><div class="retirement-summary-value">' + it.value + '</div></div>';
       }).join('') + '<button id="btnRetireDetail" type="button">查看计算详情</button>';
+    }
+
+    // 2.5 显示养老金计算结果
+    if (result.params && result.params._pensionDetails) {
+      var details = result.params._pensionDetails;
+      details.forEach(function(d) {
+        var resultEl = document.getElementById('pensionResult' + (d.name === '王典' ? 'Member1' : 'Member2'));
+        if (resultEl) {
+          resultEl.querySelector('.retirement-pension-result-value').textContent = self.formatMoney(d.totalMonthly) + '/月';
+          resultEl.querySelector('.retirement-pension-result-detail').innerHTML =
+            '个人账户: ' + self.formatMoney(d.personalMonthly) + '/月<br>' +
+            '基础养老金: ' + self.formatMoney(d.baseMonthly) + '/月<br>' +
+            '退休年份: ' + d.retireYear + ' 年';
+        }
+      });
     }
 
     // 3. 计算详情面板（初始隐藏）

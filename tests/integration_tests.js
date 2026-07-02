@@ -197,7 +197,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v211', 'PENSION-SYNC-03: clientVersion 为 v211');
+assertEq(pkg.clientVersion, 'v212', 'PENSION-SYNC-03: clientVersion 为 v212');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -1062,7 +1062,7 @@ Storage.fetchCloudMarketData(['prices']).then(function(r) {
 // CLOUD-DATA-03: clientVersion 为 v210
 Storage.cloudSyncEnabled = true; // 恢复以便后续测试
 var pkg210 = Storage._getLocalDataPackage();
-assertEq(pkg210.clientVersion, 'v211', 'CLOUD-DATA-03: clientVersion 为 v211');
+assertEq(pkg210.clientVersion, 'v212', 'CLOUD-DATA-03: clientVersion 为 v212');
 
 // CLOUD-DATA-04: storage.js 中存在 fetchCloudMarketData 方法签名
 var storageSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'storage.js'), 'utf8');
