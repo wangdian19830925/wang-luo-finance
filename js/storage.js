@@ -516,7 +516,7 @@ const Storage = {
     return {
       data: data,
       updatedAt: new Date().toISOString(),
-      clientVersion: 'v213',
+      clientVersion: 'v214',
       passwordHash: pwdHash,
       passwordEnabled: pwdEnabled
     };
@@ -800,9 +800,10 @@ const Storage = {
     if (!item) return null;
     if (key === 'insurance') return item.contractNo || null;
     if (key === 'stocks' || key === 'rsu' || key === 'annuities') return item.code || null;
-    // v204: 基金不再以 code 为业务键（同一代码允许多条记录，不同买入时机）
-    // 仅靠 id 做 LWW 去重，多条同 code 记录在同步时各自独立
-    if (key === 'funds') return null;
+    // v213: 基金以 code 为业务稳定键，防止跨设备同步产生重复记录
+    // 同一代码多条记录（DCA）场景由 UI 层保证不重复添加同一代码；
+    // 若用户确实需要同代码多条记录，可在添加时生成不同 code 后缀（如 110011-1, 110011-2）
+    if (key === 'funds') return item.code || null;
     if (key === 'loans') return item.contractNo || item.accountNo || null;
     return null;
   },

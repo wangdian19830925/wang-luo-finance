@@ -197,7 +197,7 @@ var pkg = Storage._getLocalDataPackage();
 assert(pkg.data._pensionParams !== null && pkg.data._pensionParams !== undefined, 'PENSION-SYNC-03: 数据包包含 _pensionParams');
 assertEq(pkg.data._pensionParams.pensionMember1Balance, 500000, 'PENSION-SYNC-03: pkg 中 pensionMember1Balance');
 assertEq(pkg.data._pensionParams.pensionMember2RetireAge, 55, 'PENSION-SYNC-03: pkg 中 pensionMember2RetireAge');
-assertEq(pkg.clientVersion, 'v213', 'PENSION-SYNC-03: clientVersion 为 v213');
+assertEq(pkg.clientVersion, 'v214', 'PENSION-SYNC-03: clientVersion 为 v214');
 
 // PENSION-SYNC-04: _applyPensionParams 将云端数据合并到 fm_retirement_params
 resetData();
@@ -1006,9 +1006,9 @@ var multiList03 = Storage.get(Storage.keys.funds);
 assertEq(multiList03.length, 1, 'FUND-MULTI-03: 删除一条后只剩一条');
 assertEq(multiList03[0].code, '013126', 'FUND-MULTI-03: 剩余记录仍为 013126');
 
-// FUND-MULTI-04: 基金业务键为 null（同步时不按 code 去重）
+// FUND-MULTI-04: v214 基金业务键改为 code（同步时按 code 去重防重复）
 var bk04 = Storage._getStableBusinessKey({ id: 'abc', code: '013126', name: 'test' }, 'funds');
-assertEq(bk04, null, 'FUND-MULTI-04: 基金业务键为 null（不按 code 去重）');
+assertEq(bk04, '013126', 'FUND-MULTI-04: 基金业务键为 code（按 code 去重）');
 var bkStock04 = Storage._getStableBusinessKey({ id: 'abc', code: '9866', name: 'NIO' }, 'stocks');
 assertEq(bkStock04, '9866', 'FUND-MULTI-04: 股票业务键仍为 code');
 
@@ -1062,7 +1062,7 @@ Storage.fetchCloudMarketData(['prices']).then(function(r) {
 // CLOUD-DATA-03: clientVersion 为 v210
 Storage.cloudSyncEnabled = true; // 恢复以便后续测试
 var pkg210 = Storage._getLocalDataPackage();
-assertEq(pkg210.clientVersion, 'v213', 'CLOUD-DATA-03: clientVersion 为 v213');
+assertEq(pkg210.clientVersion, 'v214', 'CLOUD-DATA-03: clientVersion 为 v214');
 
 // CLOUD-DATA-04: storage.js 中存在 fetchCloudMarketData 方法签名
 var storageSrc = fs.readFileSync(path.join(__dirname, '..', 'js', 'storage.js'), 'utf8');
